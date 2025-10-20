@@ -1,0 +1,79 @@
+# C:\Users\sfont\unified_backend\dialogflow_app\router.py
+
+from fastapi import APIRouter, Request
+from dialogflow_app.data import get_course_info
+
+router = APIRouter(
+    prefix="/dialogflow",
+    tags=["Dialogflow Webhook"],
+)
+
+@router.post("/webhook")
+async def dialogflow_webhook(request: Request):
+    """
+    Handles the POST request from Dialogflow Fulfillment.
+    """
+    try:
+        req_json = await request.json()
+    except Exception:
+        # Should not happen with Dialogflow, but good practice
+        return {"fulfillmentText": "Internal server error: Invalid request format."}
+
+    # Extract core data
+    query_result = req_json.get("queryResult", {})
+    intent_name = query_result.get("intent", {}).get("displayName")
+    # Note: Dialogflow sends the languageCode in the queryResult object
+    language_code = query_result.get("languageCode", "en").lower()
+    
+    fulfillment_text = ""
+
+    # --- Intent Handling ---
+    
+    if intent_name == "Course_Inquiry":
+        parameters = query_result.get("parameters", {})
+        
+        # *** FIX HERE: Change "course" to "coursename" to match Dialogflow's parameter name ***
+        canonical_course_name = parameters.get("coursename")
+        
+        if not canonical_course_name:
+            if language_code.startswith('zh'):
+                fulfillment_text = "抱歉，我沒有識別出您詢問的課程名稱。"
+            else:
+                fulfillment_text = "I'm sorry, I didn't catch the name of the course you were asking about."
+        else:
+            # Look up the specific course details in the correct language
+            course_details = get_course_info(canonical_course_name, language_code)
+            
+            # Construct the final response using WhatsApp markdown (*)
+            if language_code.startswith('en'):
+                fulfillment_text = f"Details for the *{canonical_course_name}* course: {course_details}"
+            elif language_code == 'zh-hk':
+                fulfillment_text = f"*{canonical_course_name}* 課程詳情: {course_details}"
+            elif language_code == 'zh-cn':
+                fulfillment_text = f"*{canonical_course_name}* 课程详情: {course_details}"
+            else:
+                # Fallback language
+                fulfillment_text = f"Details for the *{canonical_course_name}* course: {course_details}"
+
+
+    elif intent_name == "Course_List":
+        # Although Course_List is currently static, we can handle it dynamically here if needed later.
+        if language_code.startswith('zh'):
+             fulfillment_text = "我們提供幼兒班、英語拼音、語文、數學和中文語文課程。請問您對哪個範疇感興趣？"
+        else:
+             fulfillment_text = "We offer programs in Playgroups, Phonics, Language Arts, Math, and Chinese Language skills. Which area are you interested in?"
+
+    else:
+        # Fallback for unhandled intents
+        if language_code.startswith('zh'):
+            fulfillment_text = "抱歉，我目前無法處理這個請求。"
+        else:
+            fulfillment_text = "I received a request, but I don't have business logic for that intent yet."
+
+    # Construct the final Dialogflow response object
+    dialogflow_response = {
+        "fulfillmentText": fulfillment_text,
+        # Note: Dialogflow automatically handles the WhatsApp formatting from fulfillmentText
+    }
+
+    return dialogflow_response

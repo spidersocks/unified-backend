@@ -1,0 +1,23 @@
+# CRITICAL FIX: Ensure fly.toml is NOT ignored, as it is needed for deployment configuration.
+
+# Ignore the virtual environment directories (most common cause of large context)
+venv/
+.venv/
+
+# Ignore Git files
+.git/
+.gitignore
+
+# Ignore Python cache and compiled files
+__pycache__/
+*.pyc
+
+# Ignore local environment configuration files
+.envrc
+.env
+.DS_Store
+
+# Ignore logs and temporary files
+*.log
+tmp/
+temp/

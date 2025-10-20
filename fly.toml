@@ -1,0 +1,41 @@
+# fly.toml app configuration file for unified-backend
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'unified-backend'
+primary_region = 'nrt'
+
+[build]
+
+[processes]
+  # SECONDARY FIX: Reduced worker count from 4 to 2 to match CPU resources.
+  web = "/app/.venv/bin/gunicorn -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 main:app"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['web']
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+  [[http_service.checks]]
+    interval = "15s"
+    # PRIMARY FIX: Increased timeout to give the sluggish app more time to respond.
+    timeout = "30s"
+    grace_period = "300s"
+    method = "GET"
+    path = "/"
+    protocol = "http"
+    tls_skip_verify = false
+
+[[vm]]
+  memory = '2gb'
+  cpu_kind = 'shared'
+  cpus = 1
