@@ -11,6 +11,21 @@ GOOGLE_SHEET_URL = os.environ.get("COURSE_DATA_SHEET_URL")
 # Global variable to hold the loaded course data dictionary
 COURSE_DETAILS = {}
 
+# --- New: Display Name Mapping ---
+# Maps the canonical name (Dialogflow entity value) to user-friendly names
+DISPLAY_NAMES = {
+    "Playgroups": {"en": "Playgroups", "zh-hk": "幼兒班", "zh-cn": "幼儿班"},
+    "Phonics": {"en": "Phonics", "zh-hk": "英語拼音", "zh-cn": "英语拼音"},
+    "LanguageArts": {"en": "Language Arts", "zh-hk": "英語語文課", "zh-cn": "英语语文课"},
+    "Clevercal": {"en": "Clevercal Math", "zh-hk": "數學班 (Clevercal)", "zh-cn": "数学班 (Clevercal)"},
+    "Alludio": {"en": "Alludio Educational Games", "zh-hk": "教育遊戲 (Alludio)", "zh-cn": "教育游戏 (Alludio)"},
+    "ToddlerCharRecognition": {"en": "Chinese Character Recognition", "zh-hk": "寶寶愛認字", "zh-cn": "宝宝爱认字"},
+    "MandarinPinyin": {"en": "Mandarin Pinyin", "zh-hk": "魔法拼音班", "zh-cn": "魔法拼音班"},
+    "ChineseLanguageArts": {"en": "Chinese Language Arts", "zh-hk": "中文語文課", "zh-cn": "中文语文课"},
+    "PrivateClass": {"en": "Private Class", "zh-hk": "私人課", "zh-cn": "私人课"},
+}
+
+
 def load_course_data():
     """
     Loads course data from the Google Sheet CSV export URL and transforms it 
@@ -28,7 +43,6 @@ def load_course_data():
 
     try:
         # Read the CSV directly from the URL using pandas
-        # This requires the sheet to be published to the web as CSV
         df = pd.read_csv(GOOGLE_SHEET_URL)
         
         # Ensure the canonical_name column exists and is set as the index
@@ -88,3 +102,21 @@ def get_course_info(course_name: str, lang_code: str) -> str:
         
     # 3. Course exists, but no description found for any language
     return f"Details for {course_name} are currently unavailable."
+
+
+def get_display_name(canonical_name: str, lang_code: str) -> str:
+    """
+    Retrieves the user-friendly display name for a course based on the 
+    canonical name and language code.
+    """
+    # Normalize language code for lookup
+    if lang_code.startswith('zh-hk'):
+        code = 'zh-hk'
+    elif lang_code.startswith('zh-cn') or lang_code.startswith('zh'):
+        code = 'zh-cn'
+    else:
+        code = 'en'
+    
+    # Look up the display name, fall back to the canonical name if not found in the map
+    # This prevents the output from breaking if a new course is added without a display name entry
+    return DISPLAY_NAMES.get(canonical_name, {}).get(code, canonical_name)

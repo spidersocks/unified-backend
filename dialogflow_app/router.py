@@ -1,7 +1,8 @@
 # C:\Users\sfont\unified_backend\dialogflow_app\router.py
 
 from fastapi import APIRouter, Request
-from dialogflow_app.data import get_course_info
+# Import the new function get_display_name
+from dialogflow_app.data import get_course_info, get_display_name 
 
 router = APIRouter(
     prefix="/dialogflow",
@@ -32,7 +33,6 @@ async def dialogflow_webhook(request: Request):
     if intent_name == "Course_Inquiry":
         parameters = query_result.get("parameters", {})
         
-        # *** FIX HERE: Change "course" to "coursename" to match Dialogflow's parameter name ***
         canonical_course_name = parameters.get("coursename")
         
         if not canonical_course_name:
@@ -41,19 +41,22 @@ async def dialogflow_webhook(request: Request):
             else:
                 fulfillment_text = "I'm sorry, I didn't catch the name of the course you were asking about."
         else:
+            # Get the user-friendly display name
+            display_course_name = get_display_name(canonical_course_name, language_code)
+            
             # Look up the specific course details in the correct language
             course_details = get_course_info(canonical_course_name, language_code)
             
-            # Construct the final response using WhatsApp markdown (*)
+            # Construct the final response using the user-friendly display name
             if language_code.startswith('en'):
-                fulfillment_text = f"Details for the *{canonical_course_name}* course: {course_details}"
+                fulfillment_text = f"Details for the *{display_course_name}* course: {course_details}"
             elif language_code == 'zh-hk':
-                fulfillment_text = f"*{canonical_course_name}* 課程詳情: {course_details}"
+                fulfillment_text = f"*{display_course_name}* 課程詳情: {course_details}"
             elif language_code == 'zh-cn':
-                fulfillment_text = f"*{canonical_course_name}* 课程详情: {course_details}"
+                fulfillment_text = f"*{display_course_name}* 课程详情: {course_details}"
             else:
                 # Fallback language
-                fulfillment_text = f"Details for the *{canonical_course_name}* course: {course_details}"
+                fulfillment_text = f"Details for the *{display_course_name}* course: {course_details}"
 
 
     elif intent_name == "Course_List":
