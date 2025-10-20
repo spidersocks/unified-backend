@@ -1,0 +1,65 @@
+{
+  "id": "a7e5f4a9-1c2f-4bd0-9b95-2f7b3a5f1111",
+  "name": "Info_Query",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "",
+      "affectedContexts": [],
+      "parameters": [
+        {
+          "id": "c23cc9d4-0f0a-4b4e-9e5e-3f1e2f3a1111",
+          "name": "topic",
+          "required": false,
+          "dataType": "@InfoTopic",
+          "value": "$topic",
+          "defaultValue": "",
+          "isList": false
+        },
+        {
+          "id": "9349ce6a-93f2-4a2b-9f09-0c8deac91111",
+          "name": "coursename",
+          "required": false,
+          "dataType": "@CourseName",
+          "value": "$coursename",
+          "defaultValue": "",
+          "isList": false
+        }
+      ],
+      "messages": [
+        {
+          "type": "0",
+          "lang": "en",
+          "speech": [
+            "Let me look that up for you."
+          ]
+        },
+        {
+          "type": "0",
+          "lang": "zh-cn",
+          "speech": [
+            "我为您查询一下。"
+          ]
+        },
+        {
+          "type": "0",
+          "lang": "zh-hk",
+          "speech": [
+            "我幫您查詢一下。"
+          ]
+        }
+      ],
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": [],
+  "conditionalResponses": [],
+  "condition": "",
+  "conditionalFollowupEvents": []
+}

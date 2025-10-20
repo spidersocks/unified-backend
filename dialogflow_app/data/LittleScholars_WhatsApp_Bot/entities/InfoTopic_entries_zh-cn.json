@@ -1,0 +1,20 @@
+[
+  { "value": "InstitutionIntroduction", "synonyms": ["机构介绍", "你们是谁", "学校介绍", "中心介绍"] },
+  { "value": "ContactInformation", "synonyms": ["联系", "联系资料", "电话", "地址", "电邮", "WhatsApp", "网站", "怎么联系"] },
+  { "value": "SocialMedia", "synonyms": ["社交平台", "facebook", "instagram", "网站", "whatsapp"] },
+  { "value": "EnrollmentProcess", "synonyms": ["报名", "如何报名", "登记", "申请流程"] },
+  { "value": "ClassSize", "synonyms": ["班级人数", "每班多少人", "多少人一班"] },
+  { "value": "TargetStudentAge", "synonyms": ["年龄", "几岁", "年龄要求", "适合几岁"] },
+  { "value": "ClassSchedule", "synonyms": ["时间表", "上课时间", "什么时候上课", "时间"] },
+  { "value": "TuitionAndPayment", "synonyms": ["学费", "收费", "价格", "费用", "付款"] },
+  { "value": "TrialClassPolicy", "synonyms": ["试课", "试听", "可以试课吗"] },
+  { "value": "AbsenceAndMakeupPolicy", "synonyms": ["补课", "请假政策", "缺课", "补堂"] },
+  { "value": "RefundAndClassTransferPolicy", "synonyms": ["退款", "退费", "转班", "转课程"] },
+  { "value": "TeacherNativeSpeaker", "synonyms": ["老师母语", "老师是否母语", "外教"] },
+  { "value": "PublicHolidaySchedule", "synonyms": ["公众假期", "假期安排"] },
+  { "value": "WeatherPolicy", "synonyms": ["天气安排", "台风", "黑雨", "停课"] },
+  { "value": "OtherCenters", "synonyms": ["其他分校", "有没有分店", "分店"] },
+  { "value": "PromotionsAndEvents", "synonyms": ["优惠", "推广", "活动", "早鸟"] },
+  { "value": "SuccessStories", "synonyms": ["成功个案", "成果", "见证"] },
+  { "value": "Tuition", "synonyms": ["学费", "多少钱", "费用"] }
+]

@@ -1,0 +1,35 @@
+[
+  { "id": "q-hk-001", "data": [ { "text": "你們電話係幾多號？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-hk", "updated": 0 },
+  { "id": "q-hk-002", "data": [ { "text": "如何報名？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-hk", "updated": 0 },
+  { "id": "q-hk-003", "data": [ { "text": "有冇試堂？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-hk", "updated": 0 },
+  { "id": "q-hk-004", "data": [ { "text": "補課政策係點？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-hk", "updated": 0 },
+  { "id": "q-hk-005", "data": [ { "text": "退款政策係點？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-hk", "updated": 0 },
+  { "id": "q-hk-006", "data": [ { "text": "老師係咪母語？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-hk", "updated": 0 },
+  { "id": "q-hk-007", "data": [ { "text": "公眾假期開唔開？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-hk", "updated": 0 },
+  { "id": "q-hk-008", "data": [ { "text": "八號風球會唔會上堂？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-hk", "updated": 0 },
+  { "id": "q-hk-009", "data": [ { "text": "有冇優惠？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-hk", "updated": 0 },
+  {
+    "id": "q-hk-010",
+    "data": [
+      { "text": "英語拼音", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": "適合幾多歲？", "userDefined": false }
+    ],
+    "isTemplate": false, "count": 0, "lang": "zh-hk", "updated": 0
+  },
+  {
+    "id": "q-hk-011",
+    "data": [
+      { "text": "中文語文課", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": "幾時上堂？", "userDefined": false }
+    ],
+    "isTemplate": false, "count": 0, "lang": "zh-hk", "updated": 0
+  },
+  {
+    "id": "q-hk-012",
+    "data": [
+      { "text": "數學班", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": "幾錢？", "userDefined": false }
+    ],
+    "isTemplate": false, "count": 0, "lang": "zh-hk", "updated": 0
+  }
+]

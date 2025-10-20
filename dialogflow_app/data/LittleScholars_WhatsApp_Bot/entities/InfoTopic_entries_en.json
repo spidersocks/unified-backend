@@ -1,0 +1,20 @@
+[
+  { "value": "InstitutionIntroduction", "synonyms": ["institution introduction", "about you", "about the center", "who are you", "school info"] },
+  { "value": "ContactInformation", "synonyms": ["contact", "phone number", "email", "address", "how to contact", "contact info", "whatsapp", "website", "social"] },
+  { "value": "SocialMedia", "synonyms": ["social media", "facebook", "instagram", "website", "whatsapp"] },
+  { "value": "EnrollmentProcess", "synonyms": ["enrollment", "register", "sign up", "how to enroll", "application"] },
+  { "value": "ClassSize", "synonyms": ["class size", "how many students", "group size"] },
+  { "value": "TargetStudentAge", "synonyms": ["age", "age requirement", "who is it for", "what age"] },
+  { "value": "ClassSchedule", "synonyms": ["schedule", "class time", "when is the class", "time"] },
+  { "value": "TuitionAndPayment", "synonyms": ["tuition", "fees", "price", "cost", "payment"] },
+  { "value": "TrialClassPolicy", "synonyms": ["trial class", "trial", "try a class"] },
+  { "value": "AbsenceAndMakeupPolicy", "synonyms": ["make-up policy", "absence policy", "missed class", "make up"] },
+  { "value": "RefundAndClassTransferPolicy", "synonyms": ["refund policy", "transfer policy", "cancel class", "withdraw"] },
+  { "value": "TeacherNativeSpeaker", "synonyms": ["native teachers", "teacher native", "are teachers native"] },
+  { "value": "PublicHolidaySchedule", "synonyms": ["public holiday", "holiday schedule", "open on holidays"] },
+  { "value": "WeatherPolicy", "synonyms": ["weather policy", "typhoon", "black rain", "rainstorm"] },
+  { "value": "OtherCenters", "synonyms": ["other centers", "branches", "branch", "other locations"] },
+  { "value": "PromotionsAndEvents", "synonyms": ["promotion", "discount", "events", "early bird"] },
+  { "value": "SuccessStories", "synonyms": ["success stories", "results", "testimonials"] },
+  { "value": "Tuition", "synonyms": ["tuition", "fee", "how much", "how much is it"] }
+]

@@ -1,4 +1,5 @@
 # CRITICAL FIX: Ensure fly.toml is NOT ignored, as it is needed for deployment configuration.
+!fly.toml
 
 # Ignore the virtual environment directories (most common cause of large context)
 venv/
@@ -22,5 +23,7 @@ __pycache__/
 tmp/
 temp/
 
-# NEW RULE: Ignore the specified folder and its contents for deployment
-dialogflow_app/data/
+# NEW RULE: Ignore the data folder contents, but keep the runtime info JSON
+# Use the wildcard form so the negation below can re-include the single file.
+dialogflow_app/data/*
+!dialogflow_app/data/little_scholars_info.json

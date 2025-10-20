@@ -1,0 +1,35 @@
+[
+  { "id": "q-cn-001", "data": [ { "text": "你们的电话是多少？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 },
+  { "id": "q-cn-002", "data": [ { "text": "如何报名？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 },
+  { "id": "q-cn-003", "data": [ { "text": "有试听课吗？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 },
+  { "id": "q-cn-004", "data": [ { "text": "补课政策是什么？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 },
+  { "id": "q-cn-005", "data": [ { "text": "退款政策是什么？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 },
+  { "id": "q-cn-006", "data": [ { "text": "老师是母语老师吗？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 },
+  { "id": "q-cn-007", "data": [ { "text": "公众假期开门吗？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 },
+  { "id": "q-cn-008", "data": [ { "text": "台风、黑雨如何安排？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 },
+  { "id": "q-cn-009", "data": [ { "text": "现在有优惠活动吗？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 },
+  {
+    "id": "q-cn-010",
+    "data": [
+      { "text": "英语拼音", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": "适合几岁？", "userDefined": false }
+    ],
+    "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0
+  },
+  {
+    "id": "q-cn-011",
+    "data": [
+      { "text": "中文语文课", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": "什么时候上课？", "userDefined": false }
+    ],
+    "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0
+  },
+  {
+    "id": "q-cn-012",
+    "data": [
+      { "text": "数学班", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": "多少钱？", "userDefined": false }
+    ],
+    "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0
+  }
+]

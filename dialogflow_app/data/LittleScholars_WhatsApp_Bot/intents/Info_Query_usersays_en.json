@@ -1,0 +1,38 @@
+[
+  { "id": "q-en-001", "data": [ { "text": "What's your phone number?", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "en", "updated": 0 },
+  { "id": "q-en-002", "data": [ { "text": "How do I enroll?", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "en", "updated": 0 },
+  { "id": "q-en-003", "data": [ { "text": "Do you have a trial class?", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "en", "updated": 0 },
+  { "id": "q-en-004", "data": [ { "text": "What's your make-up class policy?", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "en", "updated": 0 },
+  { "id": "q-en-005", "data": [ { "text": "What's your refund policy?", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "en", "updated": 0 },
+  { "id": "q-en-006", "data": [ { "text": "Are your teachers native speakers?", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "en", "updated": 0 },
+  { "id": "q-en-007", "data": [ { "text": "Do you open on public holidays?", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "en", "updated": 0 },
+  { "id": "q-en-008", "data": [ { "text": "Are you open during typhoons?", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "en", "updated": 0 },
+  { "id": "q-en-009", "data": [ { "text": "Any promotions right now?", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "en", "updated": 0 },
+  {
+    "id": "q-en-010",
+    "data": [
+      { "text": "What age is ", "userDefined": false },
+      { "text": "Phonics", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": " for?", "userDefined": false }
+    ],
+    "isTemplate": false, "count": 0, "lang": "en", "updated": 0
+  },
+  {
+    "id": "q-en-011",
+    "data": [
+      { "text": "When is the ", "userDefined": false },
+      { "text": "Language Arts", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": " class?", "userDefined": false }
+    ],
+    "isTemplate": false, "count": 0, "lang": "en", "updated": 0
+  },
+  {
+    "id": "q-en-012",
+    "data": [
+      { "text": "How much is ", "userDefined": false },
+      { "text": "Clevercal", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": "?", "userDefined": false }
+    ],
+    "isTemplate": false, "count": 0, "lang": "en", "updated": 0
+  }
+]
