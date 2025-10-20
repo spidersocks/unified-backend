@@ -21,3 +21,6 @@ __pycache__/
 *.log
 tmp/
 temp/
+
+# NEW RULE: Ignore the specified folder and its contents for deployment
+dialogflow_app/data/

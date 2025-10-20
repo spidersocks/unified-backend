@@ -1,0 +1,54 @@
+[
+  {
+    "id": "df6d602f-ece4-4d92-817c-32351e516f54",
+    "data": [
+      {
+        "text": "Do I get any free make-up classes?",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "en",
+    "updated": 0
+  },
+  {
+    "id": "e25f92e0-1f04-465a-9795-a5f0f8958066",
+    "data": [
+      {
+        "text": "How many make up sessions are included?",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "en",
+    "updated": 0
+  },
+  {
+    "id": "5b4f628a-4faa-4142-8916-0ac59592ca4b",
+    "data": [
+      {
+        "text": "What is the quota for make-up classes?",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "en",
+    "updated": 0
+  },
+  {
+    "id": "2c9613ae-6057-4ba4-8aca-a8fbc6853438",
+    "data": [
+      {
+        "text": "How many free make-up lessons do I get?",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "en",
+    "updated": 0
+  }
+]

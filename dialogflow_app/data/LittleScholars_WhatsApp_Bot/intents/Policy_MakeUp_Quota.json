@@ -1,0 +1,84 @@
+{
+  "id": "bdb0b519-3677-4679-8260-f21d238d250d",
+  "name": "Policy_MakeUp_Quota",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "",
+      "affectedContexts": [],
+      "parameters": [
+        {
+          "id": "2efc0bfe-c8b7-4d24-b78f-3f967ce2e12d",
+          "name": "currency-name",
+          "required": false,
+          "dataType": "@sys.currency-name",
+          "value": "$currency-name",
+          "defaultValue": "",
+          "isList": true,
+          "prompts": [],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        },
+        {
+          "id": "fe9ea4d0-c3ee-450b-8f72-a7f30a6259b6",
+          "name": "person",
+          "required": false,
+          "dataType": "@sys.person",
+          "value": "$person",
+          "defaultValue": "",
+          "isList": false,
+          "prompts": [],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        }
+      ],
+      "messages": [
+        {
+          "type": "0",
+          "title": "",
+          "textToSpeech": "",
+          "lang": "zh-cn",
+          "speech": [
+            "每位学生可享的免费补课额数如下：\\n\\n- 每 *8 堂* 付费课程可享 *2 堂* 免费补课；或\\n- 每 *10 堂* 付费课程可享 *3 堂* 免费补课。"
+          ],
+          "condition": ""
+        },
+        {
+          "type": "0",
+          "title": "",
+          "textToSpeech": "",
+          "lang": "zh-hk",
+          "speech": [
+            "每位學生可享的免費補課額數如下：\\n\\n- 每 *8 堂* 付費課程可享 *2 堂* 免費補課；或\\n- 每 *10 堂* 付費課程可享 *3 堂* 免費補課。"
+          ],
+          "condition": ""
+        },
+        {
+          "type": "0",
+          "title": "",
+          "textToSpeech": "",
+          "lang": "en",
+          "speech": [
+            "Every student is entitled to:\\n\\n- *2 free make-up lessons* for each 8 paid sessions, OR\\n- *3 free make-up lessons* for each 10 paid sessions."
+          ],
+          "condition": ""
+        }
+      ],
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": false,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": [],
+  "conditionalResponses": [],
+  "condition": "",
+  "conditionalFollowupEvents": []
+}

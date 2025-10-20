@@ -1,0 +1,63 @@
+[
+  {
+    "id": "9729ced6-5816-45bb-b2ee-39b160cf63d9",
+    "data": [
+      {
+        "text": "補課有上限嗎？",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "zh-hk",
+    "updated": 0
+  },
+  {
+    "id": "e5a725b6-28fb-43b0-82fa-0cb43c47cc25",
+    "data": [
+      {
+        "text": "免費",
+        "meta": "@sys.currency-name",
+        "alias": "currency-name",
+        "userDefined": false
+      },
+      {
+        "text": "補課額數是多少？",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "zh-hk",
+    "updated": 0
+  },
+  {
+    "id": "01bf9a49-7d78-4b0b-8f24-85a1431e1533",
+    "data": [
+      {
+        "text": "我有幾多",
+        "userDefined": false
+      },
+      {
+        "text": "堂",
+        "meta": "@sys.person",
+        "alias": "person",
+        "userDefined": false
+      },
+      {
+        "text": "免費",
+        "meta": "@sys.currency-name",
+        "alias": "currency-name",
+        "userDefined": false
+      },
+      {
+        "text": "補課？",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "zh-hk",
+    "updated": 0
+  }
+]

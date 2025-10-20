@@ -43,6 +43,7 @@ def load_course_data():
 
     try:
         # Read the CSV directly from the URL using pandas
+        # This requires the sheet to be published to the web as CSV
         df = pd.read_csv(GOOGLE_SHEET_URL)
         
         # Ensure the canonical_name column exists and is set as the index
@@ -120,3 +121,52 @@ def get_display_name(canonical_name: str, lang_code: str) -> str:
     # Look up the display name, fall back to the canonical name if not found in the map
     # This prevents the output from breaking if a new course is added without a display name entry
     return DISPLAY_NAMES.get(canonical_name, {}).get(code, canonical_name)
+
+
+def get_course_list(lang_code: str) -> str:
+    """
+    Generates a dynamic, localized list of available courses.
+    """
+    
+    # 1. Get localized display names
+    course_names = []
+    for canonical_name in COURSE_DETAILS.keys():
+        # Exclude courses that shouldn't be listed in the main curriculum overview
+        if canonical_name in ["PrivateClass"]:
+            continue
+        
+        # Get the localized display name
+        display_name = get_display_name(canonical_name, lang_code)
+        course_names.append(f"*{display_name}*") # Use WhatsApp markdown for emphasis
+
+    # 2. Format the list based on language
+    if lang_code.startswith('en'):
+        course_list_str = ", ".join(course_names)
+        
+        # Replace the last comma with "and" for natural English flow
+        last_comma_index = course_list_str.rfind(',')
+        if last_comma_index > 0:
+            # Handle the Oxford comma case for better readability
+            course_list_str = course_list_str[:last_comma_index] + ", and" + course_list_str[last_comma_index + 1:]
+        elif len(course_names) == 2:
+            # Handle list of two items (e.g., A and B)
+            course_list_str = " and ".join(course_names)
+            
+        response = (
+            f"We currently offer programs in {course_list_str}. "
+            f"Which area are you interested in?"
+        )
+    else: # Chinese (zh-hk, zh-cn)
+        # Use the Chinese comma (、) for listing items
+        course_list_str = "、".join(course_names)
+        
+        if lang_code == 'zh-hk':
+            response = (
+                f"我們提供{course_list_str}課程。請問您對哪個範疇感興趣？"
+            )
+        else: # zh-cn (or default zh)
+            response = (
+                f"我们提供{course_list_str}课程。请问您对哪个范畴感兴趣？"
+            )
+            
+    return response

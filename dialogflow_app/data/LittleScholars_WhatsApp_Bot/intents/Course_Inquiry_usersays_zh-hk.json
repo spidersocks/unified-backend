@@ -1,0 +1,105 @@
+[
+  {
+    "id": "7e0e3958-b4bf-4abf-945d-4ca6bed91340",
+    "data": [
+      {
+        "text": "私人課",
+        "meta": "@CourseName",
+        "alias": "coursename",
+        "userDefined": false
+      },
+      {
+        "text": "多少錢?",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "zh-hk",
+    "updated": 0
+  },
+  {
+    "id": "74e5ccc3-bd9c-4faf-bdb8-8adfab44597d",
+    "data": [
+      {
+        "text": "中文語文課",
+        "meta": "@CourseName",
+        "alias": "coursename",
+        "userDefined": false
+      },
+      {
+        "text": "有開班嗎？",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "zh-hk",
+    "updated": 0
+  },
+  {
+    "id": "1f205eea-f286-416b-b5ac-c7c1448aaa47",
+    "data": [
+      {
+        "text": "我想知道",
+        "userDefined": false
+      },
+      {
+        "text": "英語拼音",
+        "meta": "@CourseName",
+        "alias": "coursename",
+        "userDefined": false
+      },
+      {
+        "text": "的資訊",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "zh-hk",
+    "updated": 0
+  },
+  {
+    "id": "750c2b66-8936-44ad-bfb7-3838ffd1a211",
+    "data": [
+      {
+        "text": "數學班",
+        "meta": "@CourseName",
+        "alias": "coursename",
+        "userDefined": false
+      },
+      {
+        "text": "是什麼？",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "zh-hk",
+    "updated": 0
+  },
+  {
+    "id": "5a11ddfe-75d3-4901-bdfa-bd7e842d8cb7",
+    "data": [
+      {
+        "text": "請問",
+        "userDefined": false
+      },
+      {
+        "text": "雙語 playgroup",
+        "meta": "@CourseName",
+        "alias": "coursename",
+        "userDefined": false
+      },
+      {
+        "text": "的詳情",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "zh-hk",
+    "updated": 0
+  }
+]

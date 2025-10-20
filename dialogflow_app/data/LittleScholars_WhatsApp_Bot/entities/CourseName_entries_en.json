@@ -1,0 +1,113 @@
+[
+  {
+    "value": "Playgroups",
+    "synonyms": [
+      "Playgroups",
+      "Bilingual Playgroup",
+      "Toddler Class",
+      "Baby Group",
+      "Early Learning",
+      "Bilingual Class",
+      "PN class",
+      "pre-nursery class",
+      "English/PTH class",
+      "2-year old class"
+    ]
+  },
+  {
+    "value": "Phonics",
+    "synonyms": [
+      "Phonics",
+      "English Phonics",
+      "Reading readiness",
+      "English sound recognition",
+      "Sound recognition",
+      "English sounds",
+      "K1 English",
+      "K2 Phonics",
+      "Phonics program",
+      "Learn to read",
+      "Early literacy",
+      "Letter sounds"
+    ]
+  },
+  {
+    "value": "LanguageArts",
+    "synonyms": [
+      "Language Arts",
+      "English writing",
+      "English composition",
+      "Grammar class",
+      "Primary English",
+      "English comprehension",
+      "P1 English",
+      "English tutoring",
+      "Reading and writing",
+      "Advanced English"
+    ]
+  },
+  {
+    "value": "Clevercal",
+    "synonyms": [
+      "Clevercal",
+      "Math class",
+      "Calculation training",
+      "Mental math",
+      "primary math",
+      "K1 math",
+      "numeracy",
+      "arithmetic",
+      "quantitative skills",
+      "math tutoring"
+    ]
+  },
+  {
+    "value": "Alludio",
+    "synonyms": [
+      "Alludio",
+      "Educational games",
+      "K1 games",
+      "fun learning",
+      "learning through play",
+      "game class",
+      "activity class",
+      "K2 games",
+      "early skills development"
+    ]
+  },
+  {
+    "value": "ToddlerCharRecognition",
+    "synonyms": [
+      "Chinese Character Recognition",
+      "Toddler Chinese Character Recognition",
+      "Chinese reading class",
+      "Early Chinese",
+      "Character learning",
+      "Baby Chinese class",
+      "Chinese characters"
+    ]
+  },
+  {
+    "value": "MandarinPinyin",
+    "synonyms": [
+      "Chinese Phonics",
+      "Pinyin",
+      "Pinyin class",
+      "Mandarin pronunciation",
+      "Chinese pronunciation",
+      "Mandarin phonics",
+      "Phonetic class"
+    ]
+  },
+  {
+    "value": "ChineseLanguageArts",
+    "synonyms": [
+      "Chinese Language Arts",
+      "Chinese writing",
+      "Chinese composition",
+      "Chinese grammar",
+      "Primary Chinese",
+      "Chinese tutoring"
+    ]
+  }
+]

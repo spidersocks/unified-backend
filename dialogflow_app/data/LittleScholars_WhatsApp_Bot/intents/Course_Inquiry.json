@@ -1,0 +1,70 @@
+{
+  "id": "7b1907fe-61d8-4464-a898-01ec8f67b00e",
+  "name": "Course_Inquiry",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "",
+      "affectedContexts": [],
+      "parameters": [
+        {
+          "id": "8ea424a2-ef76-4b02-b879-95538f482ea9",
+          "name": "coursename",
+          "required": false,
+          "dataType": "@CourseName",
+          "value": "$coursename",
+          "defaultValue": "",
+          "isList": false,
+          "prompts": [],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        }
+      ],
+      "messages": [
+        {
+          "type": "0",
+          "title": "",
+          "textToSpeech": "",
+          "lang": "en",
+          "speech": [
+            "Thank you for asking about the $coursename.original course. I can look up the details for that."
+          ],
+          "condition": ""
+        },
+        {
+          "type": "0",
+          "title": "",
+          "textToSpeech": "",
+          "lang": "zh-cn",
+          "speech": [
+            "感谢您询问**$coursename.original**课程。我可以为您查询详细资料"
+          ],
+          "condition": ""
+        },
+        {
+          "type": "0",
+          "title": "",
+          "textToSpeech": "",
+          "lang": "zh-hk",
+          "speech": [
+            "感謝您詢問**$coursename.original**課程。我可以為您查詢詳細資料。"
+          ],
+          "condition": ""
+        }
+      ],
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": [],
+  "conditionalResponses": [],
+  "condition": "",
+  "conditionalFollowupEvents": []
+}

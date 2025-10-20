@@ -1,0 +1,70 @@
+{
+  "id": "4cdbb2ab-194e-46d1-83bc-ea77ceaef05d",
+  "name": "Course_List",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "",
+      "affectedContexts": [],
+      "parameters": [
+        {
+          "id": "78455f1e-15f2-40cc-930b-ca096f1e7c8a",
+          "name": "coursename",
+          "required": false,
+          "dataType": "@CourseName",
+          "value": "$coursename",
+          "defaultValue": "",
+          "isList": false,
+          "prompts": [],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        }
+      ],
+      "messages": [
+        {
+          "type": "0",
+          "title": "",
+          "textToSpeech": "",
+          "lang": "en",
+          "speech": [
+            "We offer programs in *Playgroups*, *Phonics*, *Language Arts*, *Math* (Clevercal), *Educational Games* (Alludio), and *Chinese Language* skills. Which area are you interested in?"
+          ],
+          "condition": ""
+        },
+        {
+          "type": "0",
+          "title": "",
+          "textToSpeech": "",
+          "lang": "zh-cn",
+          "speech": [
+            "我们提供*幼儿班*、*英语拼音*、*英语语文*、*数学*（Clevercal）、*教育游戏*（Alludio）和*中文语文*课程。请问您对哪个范畴感兴趣？"
+          ],
+          "condition": ""
+        },
+        {
+          "type": "0",
+          "title": "",
+          "textToSpeech": "",
+          "lang": "zh-hk",
+          "speech": [
+            "我們提供*幼兒班*、*英語拼音*、*英語語文*、*數學*（Clevercal）、*教育遊戲*（Alludio）和*中文語文*課程。請問您對哪個範疇感興趣？"
+          ],
+          "condition": ""
+        }
+      ],
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": false,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": [],
+  "conditionalResponses": [],
+  "condition": "",
+  "conditionalFollowupEvents": []
+}

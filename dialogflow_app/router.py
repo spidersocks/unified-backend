@@ -1,8 +1,8 @@
 # C:\Users\sfont\unified_backend\dialogflow_app\router.py
 
 from fastapi import APIRouter, Request
-# Import the new function get_display_name
-from dialogflow_app.data import get_course_info, get_display_name 
+# Import the necessary functions
+from dialogflow_app.data import get_course_info, get_display_name, get_course_list 
 
 router = APIRouter(
     prefix="/dialogflow",
@@ -60,11 +60,26 @@ async def dialogflow_webhook(request: Request):
 
 
     elif intent_name == "Course_List":
-        # Although Course_List is currently static, we can handle it dynamically here if needed later.
-        if language_code.startswith('zh'):
-             fulfillment_text = "我們提供幼兒班、英語拼音、語文、數學和中文語文課程。請問您對哪個範疇感興趣？"
+        # Dynamic fulfillment for Course_List
+        fulfillment_text = get_course_list(language_code)
+
+    
+    elif intent_name == "Policy_MakeUp_Quota":
+        # Define the canonical name used in the Google Sheet for this policy
+        POLICY_CANONICAL_NAME = "Policy_MakeUp_Quota" 
+        
+        # Retrieve the policy text using the existing data lookup function
+        policy_text = get_course_info(POLICY_CANONICAL_NAME, language_code)
+        
+        # Check if the policy was found (get_course_info handles localization and fallback)
+        if policy_text.startswith("Sorry, I could not find details"):
+            # Provide a generic fallback if the data is missing entirely
+            if language_code.startswith('zh'):
+                fulfillment_text = "抱歉，目前找不到補課政策的詳細資訊，請聯繫我們的行政人員。"
+            else:
+                fulfillment_text = "Sorry, the makeup class policy details are currently unavailable. Please contact our administrative staff."
         else:
-             fulfillment_text = "We offer programs in Playgroups, Phonics, Language Arts, Math, and Chinese Language skills. Which area are you interested in?"
+            fulfillment_text = policy_text
 
     else:
         # Fallback for unhandled intents

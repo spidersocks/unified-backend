@@ -1,0 +1,90 @@
+[
+  {
+    "id": "4e1de0a2-34ae-49be-b353-0eec43aa39f8",
+    "data": [
+      {
+        "text": "Can you tell me about your curriculum?",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "en",
+    "updated": 0
+  },
+  {
+    "id": "0a3a7cba-9c03-4337-b604-6d57175f7e72",
+    "data": [
+      {
+        "text": "Do you have any classes?",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "en",
+    "updated": 0
+  },
+  {
+    "id": "77a9d125-eb64-4062-b737-ba1aa593b148",
+    "data": [
+      {
+        "text": "What can my child learn?",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "en",
+    "updated": 0
+  },
+  {
+    "id": "90edc02f-1f55-44b3-a0f9-2a332b44fffb",
+    "data": [
+      {
+        "text": "What ",
+        "userDefined": false
+      },
+      {
+        "text": "programs",
+        "meta": "@CourseName",
+        "alias": "coursename",
+        "userDefined": false
+      },
+      {
+        "text": " are available?",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "en",
+    "updated": 0
+  },
+  {
+    "id": "90eb31fa-774e-4e14-9484-fed1b8558517",
+    "data": [
+      {
+        "text": "List your classes",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "en",
+    "updated": 0
+  },
+  {
+    "id": "eae06d17-7301-485f-bc03-1fc9a10bdcd8",
+    "data": [
+      {
+        "text": "What courses do you offer?",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "en",
+    "updated": 0
+  }
+]
