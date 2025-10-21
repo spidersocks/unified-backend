@@ -2,5 +2,8 @@
   { "id": "9e0f4a1b-2c3d-4456-5678-9abcdef01234", "data": [ { "text": "介紹一下你哋中心", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
 
   { "id": "0123ab45-cdef-4567-8012-3ab45cdef6a3", "data": [ { "text": "你哋係咩機構？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 },
-  { "id": "1234bc56-def0-4678-9123-4bc56def07b4", "data": [ { "text": "可否簡介一下學校？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 }
+  { "id": "1234bc56-def0-4678-9123-4bc56def07b4", "data": [ { "text": "可否簡介一下學校？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 },
+
+  { "id": "89c0d1e2-3f45-4a56-8b9c-0d1e2f3a4b90", "data": [ { "text": "介紹一下 Little Scholars", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 },
+  { "id": "90d1e2f3-4a56-4b67-9c0d-1e2f3a4b5c01", "data": [ { "text": "關於 Little Scholars 教育中心", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 }
 ]
