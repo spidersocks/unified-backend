@@ -87,7 +87,8 @@ async def dialogflow_webhook(request: Request):
         fulfillment_text = get_info("RefundAndClassTransferPolicy", language_code) or get_admin_redirect(language_code)
 
     elif intent_name == "Info_ClassSize":
-        fulfillment_text = get_info("ClassSize", language_code) or get_admin_redirect(language_code)
+        coursename = parameters.get("coursename")
+        fulfillment_text = get_info("ClassSize", language_code, coursename) or get_admin_redirect(language_code)
 
     elif intent_name == "Info_Enrollment":
         fulfillment_text = get_info("EnrollmentProcess", language_code) or get_admin_redirect(language_code)

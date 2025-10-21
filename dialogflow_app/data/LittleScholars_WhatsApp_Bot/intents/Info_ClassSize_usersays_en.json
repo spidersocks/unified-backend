@@ -3,11 +3,8 @@
   { "id": "7b6b2b09-1f71-4d78-9f4c-2c7d9a0b3d02", "data": [ { "text": "How many students per class?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
   { "id": "c0f2b6a1-7d49-4d59-9b30-1e9c2a7b4e03", "data": [ { "text": "How big are the classes?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
   { "id": "1a2f3b4c-5d6e-4708-8f91-a2b3c4d5e604", "data": [ { "text": "What's the max class size?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "2b3c4d5e-6f70-4819-9a0b-1c2d3e4f5a05", "data": [ { "text": "What's the maximum number of students in a class?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "3c4d5e6f-7081-492a-a1b2-c3d4e5f6a706", "data": [ { "text": "How many kids in each class?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "4d5e6f70-8192-4a3b-b2c3-d4e5f6a7b807", "data": [ { "text": "Do you run small group classes?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "5e6f7081-92a3-4b4c-c3d4-e5f6a7b8c908", "data": [ { "text": "Are classes small group?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "6f708192-a3b4-4c5d-d4e5-f6a7b8c9d009", "data": [ { "text": "What's the class capacity?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "708192a3-b4c5-4d6e-e5f6-a7b8c9d0e110", "data": [ { "text": "Average class size?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "8192a3b4-c5d6-4e70-f6a7-b8c9d0e1f211", "data": [ { "text": "How many in a group?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 }
+
+  { "id": "0e8a3f8b-9b1d-4e8a-909d-a6c76d37e3a1", "data": [ { "text": "How many people per class in ", "userDefined": false }, { "text": "Phonics", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": "?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
+  { "id": "1f9b0a12-3c4d-45ea-8f01-23456789abcd", "data": [ { "text": "Class size for ", "userDefined": false }, { "text": "Language Arts", "meta": "@CourseName", "alias": "coursename", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
+  { "id": "2a0b1c2d-3e4f-4560-9012-3456789abcde", "data": [ { "text": "Is ", "userDefined": false }, { "text": "Clevercal", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": " a small-group class?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 }
 ]

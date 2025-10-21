@@ -175,14 +175,28 @@ AGE_SCHEDULE_KEY_MAP = {
 
 TUITION_KEY_MAP = {
     "Playgroups": "Playgroups",
-    "Phonics": "English",            # English-track fees
-    "LanguageArts": "English",       # English-track fees
+    "Phonics": "English",
+    "LanguageArts": "English",
     "Clevercal": "Clevercal (Math)",
     "Alludio": "Alludio (Games)",
     "ToddlerCharRecognition": "中文",
     "MandarinPinyin": "中文",
     "ChineseLanguageArts": "中文",
     "PrivateClass": "Private class 私人課",
+}
+
+# NEW: course -> class size category mapping (based on available keys in INFO_DATA.CourseDetails.ClassSize)
+CLASS_SIZE_COURSE_TO_KEY = {
+    # English-stream literacy vs general C/E/Math grouping
+    "LanguageArts": "English Language Arts",
+    "Phonics": "中英數課程",
+    # Math
+    "Clevercal": "中英數課程",
+    # Chinese stream
+    "ChineseLanguageArts": "中英數課程",
+    "MandarinPinyin": "中英數課程",
+    "ToddlerCharRecognition": "中英數課程",
+    # Others: Playgroups / Alludio / PrivateClass -> fall back to listing
 }
 
 def _course_age(lang: str, coursename: Optional[str]) -> Optional[str]:
@@ -200,7 +214,6 @@ def _course_age(lang: str, coursename: Optional[str]) -> Optional[str]:
     key = AGE_SCHEDULE_KEY_MAP.get(coursename, coursename)
     val = ages.get(key)
     if not val:
-        # Debug-friendly fallback: try direct canonical name (already done) then bail
         print(f"[WARN] _course_age: no age found for coursename={coursename} resolved_key={key}", flush=True)
         return None
     if lang == "zh-hk":
@@ -233,10 +246,25 @@ def _course_schedule(lang: str, coursename: Optional[str]) -> Optional[str]:
     else:
         return f"{key} schedule: {val}"
 
-def _class_size(lang: str) -> Optional[str]:
+def _class_size(lang: str, coursename: Optional[str] = None) -> Optional[str]:
     cs = INFO_DATA.get("CourseDetails", {}).get("ClassSize", {})
     if not cs:
         return None
+
+    # If a course is provided and we can map to a category, answer succinctly
+    if coursename:
+        category = CLASS_SIZE_COURSE_TO_KEY.get(coursename)
+        if category and cs.get(category):
+            val = cs[category]
+            if lang == "zh-hk":
+                return f"{category} 班級人數：{val}"
+            elif lang == "zh-cn":
+                return f"{category} 班级人数：{val}"
+            else:
+                return f"{category} class size: {val}"
+        # If course is unmapped, fall through to the general listing
+
+    # General listing of all class size info
     lines = [f"- {k}: {v}" for k, v in cs.items()]
     title = "班級人數：" if lang == "zh-hk" else ("班级人数：" if lang == "zh-cn" else "Class size:")
     return f"{title}\n" + "\n".join(lines)
@@ -282,7 +310,6 @@ def _absence_makeup_policy(lang: str) -> Optional[str]:
     pol = INFO_DATA.get("PoliciesAndFAQs", {}).get("AbsenceAndMakeupPolicy", {})
     if not pol:
         return None
-    # Join all key points
     order = [
         "NotificationRequirement", "MakeupArrangement", "WrittenNotificationRequirement",
         "MedicalCertificateRequirement", "NoNoticeMissedClasses", "MakeupDeadline",
@@ -313,7 +340,6 @@ def _common_obj(lang: str, key: str, zh_hk_title: str, zh_cn_title: str, en_titl
 def _promotions(lang: str) -> Optional[str]:
     txt = INFO_DATA.get("PoliciesAndFAQs", {}).get("PromotionsAndEvents", {}).get("Description", "")
     if not txt:
-        # fallback to marketing section if populated
         txt = INFO_DATA.get("MarketingAndPromotionInfo", {}).get("PromotionsAndEvents", "")
     if not txt:
         return None
@@ -361,22 +387,18 @@ def _social_media(lang: str) -> Optional[str]:
     return _join_lines([title] + [l for l in lines if l])
 
 TOPIC_HANDLERS = {
-    # Organization and contact
     "InstitutionIntroduction": lambda lang, _: _institution_intro(lang),
     "ContactInformation":      lambda lang, _: _contact_info(lang),
     "SocialMedia":             lambda lang, _: _social_media(lang),
 
-    # Enrollment and logistics
     "EnrollmentProcess":       lambda lang, _: _enrollment_process(lang),
-    "ClassSize":               lambda lang, _: _class_size(lang),
+    "ClassSize":               lambda lang, course: _class_size(lang, course),
 
-    # Course-specific
     "TargetStudentAge":        lambda lang, course: _course_age(lang, course),
     "ClassSchedule":           lambda lang, course: _course_schedule(lang, course),
     "TuitionAndPayment":       lambda lang, course: _tuition(lang, course),
     "Tuition":                 lambda lang, course: _tuition(lang, course),
 
-    # Policies & FAQs
     "TrialClassPolicy":        lambda lang, _: _trial_class(lang),
     "AbsenceAndMakeupPolicy":  lambda lang, _: _absence_makeup_policy(lang),
     "RefundAndClassTransferPolicy": lambda lang, _: _refund_transfer_policy(lang),
@@ -395,7 +417,7 @@ TOPIC_HANDLERS = {
 def get_info(topic: Optional[str], lang_code: str, coursename: Optional[str] = None) -> Optional[str]:
     """
     Returns an info text for a given topic and optional course name.
-    topic: canonical value from @InfoTopic
+    topic: canonical value from @InfoTopic or fixed mapping
     coursename: canonical value from @CourseName (optional)
     """
     if not topic:

@@ -4,11 +4,17 @@
   "auto": true,
   "contexts": [],
   "responses": [
-    { "resetContexts": false, "parameters": [], "messages": [
-      { "type": "0", "lang": "en", "speech": ["I'll fetch class size info."] },
-      { "type": "0", "lang": "zh-hk", "speech": ["我幫您查班級人數。"] },
-      { "type": "0", "lang": "zh-cn", "speech": ["我帮您查班级人数。"] }
-    ] }
+    {
+      "resetContexts": false,
+      "parameters": [
+        { "id": "0c4f7a2a-5a27-44ab-8f43-3fd7e9d0d2e1", "name": "coursename", "required": false, "dataType": "@CourseName", "value": "$coursename", "defaultValue": "", "isList": false }
+      ],
+      "messages": [
+        { "type": "0", "lang": "en", "speech": ["I'll fetch class size info."] },
+        { "type": "0", "lang": "zh-hk", "speech": ["我幫您查班級人數。"] },
+        { "type": "0", "lang": "zh-cn", "speech": ["我帮您查班级人数。"] }
+      ]
+    }
   ],
   "priority": 500000,
   "webhookUsed": true
