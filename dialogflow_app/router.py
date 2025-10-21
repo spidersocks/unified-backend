@@ -50,47 +50,66 @@ async def dialogflow_webhook(request: Request):
         desc_a = get_course_info(course_a, language_code)
         desc_b = get_course_info(course_b, language_code)
 
-        # Other aspects from ContentStore (might return prefixed strings; strip labels)
-        age_a = STORE.age_for_course(course_a, language_code) or ""
-        age_b = STORE.age_for_course(course_b, language_code) or ""
-        sched_a = STORE.schedule_for_course(course_a, language_code) or ""
-        sched_b = STORE.schedule_for_course(course_b, language_code) or ""
-        size_a = STORE.class_size_for_course(course_a, language_code) or ""
-        size_b = STORE.class_size_for_course(course_b, language_code) or ""
-        fee_a = STORE.tuition_for_course(course_a, language_code) or ""
-        fee_b = STORE.tuition_for_course(course_b, language_code) or ""
-
-        age_a, age_b = _after_colon(age_a), _after_colon(age_b)
-        sched_a, sched_b = _after_colon(sched_a), _after_colon(sched_b)
-        size_a, size_b = _after_colon(size_a), _after_colon(size_b)
-        fee_a, fee_b = _after_colon(fee_a), _after_colon(fee_b)
+        # Other aspects from ContentStore (strip leading course name labels)
+        age_a = _after_colon(STORE.age_for_course(course_a, language_code) or "")
+        age_b = _after_colon(STORE.age_for_course(course_b, language_code) or "")
+        sched_a = _after_colon(STORE.schedule_for_course(course_a, language_code) or "")
+        sched_b = _after_colon(STORE.schedule_for_course(course_b, language_code) or "")
+        size_a = _after_colon(STORE.class_size_for_course(course_a, language_code) or "")
+        size_b = _after_colon(STORE.class_size_for_course(course_b, language_code) or "")
+        fee_a = _after_colon(STORE.tuition_for_course(course_a, language_code) or "")
+        fee_b = _after_colon(STORE.tuition_for_course(course_b, language_code) or "")
 
         if language_code.startswith('zh-hk'):
             lines = [
                 f"課程比較：{name_a} vs {name_b}",
-                f"- 簡介：{desc_a} / {desc_b}",
-                f"- 適合年齡：{age_a} / {age_b}" if age_a and age_b else "",
-                f"- 上課時間：{sched_a} / {sched_b}" if sched_a and sched_b else "",
-                f"- 班級人數：{size_a} / {size_b}" if size_a and size_b else "",
-                f"- 收費：{fee_a} / {fee_b}" if fee_a and fee_b else ""
+                f"*{name_a}*",
+                f"- 簡介：{desc_a}" if desc_a else "",
+                f"- 適合年齡：{age_a}" if age_a else "",
+                f"- 上課時間：{sched_a}" if sched_a else "",
+                f"- 班級人數：{size_a}" if size_a else "",
+                f"- 收費：{fee_a}" if fee_a else "",
+                "",
+                f"*{name_b}*",
+                f"- 簡介：{desc_b}" if desc_b else "",
+                f"- 適合年齡：{age_b}" if age_b else "",
+                f"- 上課時間：{sched_b}" if sched_b else "",
+                f"- 班級人數：{size_b}" if size_b else "",
+                f"- 收費：{fee_b}" if fee_b else "",
             ]
         elif language_code.startswith('zh-cn') or language_code == 'zh':
             lines = [
                 f"课程比较：{name_a} vs {name_b}",
-                f"- 简介：{desc_a} / {desc_b}",
-                f"- 适合年龄：{age_a} / {age_b}" if age_a and age_b else "",
-                f"- 上课时间：{sched_a} / {sched_b}" if sched_a and sched_b else "",
-                f"- 班级人数：{size_a} / {size_b}" if size_a and size_b else "",
-                f"- 收费：{fee_a} / {fee_b}" if fee_a and fee_b else ""
+                f"*{name_a}*",
+                f"- 简介：{desc_a}" if desc_a else "",
+                f"- 适合年龄：{age_a}" if age_a else "",
+                f"- 上课时间：{sched_a}" if sched_a else "",
+                f"- 班级人数：{size_a}" if size_a else "",
+                f"- 收费：{fee_a}" if fee_a else "",
+                "",
+                f"*{name_b}*",
+                f"- 简介：{desc_b}" if desc_b else "",
+                f"- 适合年龄：{age_b}" if age_b else "",
+                f"- 上课时间：{sched_b}" if sched_b else "",
+                f"- 班级人数：{size_b}" if size_b else "",
+                f"- 收费：{fee_b}" if fee_b else "",
             ]
         else:
             lines = [
                 f"Comparison: {name_a} vs {name_b}",
-                f"- Overview: {desc_a} / {desc_b}",
-                f"- Target age: {age_a} / {age_b}" if age_a and age_b else "",
-                f"- Schedule: {sched_a} / {sched_b}" if sched_a and sched_b else "",
-                f"- Class size: {size_a} / {size_b}" if size_a and size_b else "",
-                f"- Tuition: {fee_a} / {fee_b}" if fee_a and fee_b else ""
+                f"*{name_a}*",
+                f"- Overview: {desc_a}" if desc_a else "",
+                f"- Target age: {age_a}" if age_a else "",
+                f"- Schedule: {sched_a}" if sched_a else "",
+                f"- Class size: {size_a}" if size_a else "",
+                f"- Tuition: {fee_a}" if fee_a else "",
+                "",
+                f"*{name_b}*",
+                f"- Overview: {desc_b}" if desc_b else "",
+                f"- Target age: {age_b}" if age_b else "",
+                f"- Schedule: {sched_b}" if sched_b else "",
+                f"- Class size: {size_b}" if size_b else "",
+                f"- Tuition: {fee_b}" if fee_b else "",
             ]
         fulfillment_text = "\n".join([l for l in lines if l])
 
