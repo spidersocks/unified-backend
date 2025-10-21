@@ -1,0 +1,5 @@
+[
+  { "id": "1", "data": [ { "text": "", "userDefined": false }, { "text": "英語語文課", "meta": "@CourseName", "alias": "courseA", "userDefined": false }, { "text": " 同 ", "userDefined": false }, { "text": "英語拼音", "meta": "@CourseName", "alias": "courseB", "userDefined": false }, { "text": "有咩分別？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk" },
+  { "id": "2", "data": [ { "text": "比較 ", "userDefined": false }, { "text": "Phonics", "meta": "@CourseName", "alias": "courseA", "userDefined": false }, { "text": " 同 ", "userDefined": false }, { "text": "英語語文課", "meta": "@CourseName", "alias": "courseB", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk" },
+  { "id": "3", "data": [ { "text": "", "userDefined": false }, { "text": "數學班", "meta": "@CourseName", "alias": "courseA", "userDefined": false }, { "text": " 同 ", "userDefined": false }, { "text": "英語拼音", "meta": "@CourseName", "alias": "courseB", "userDefined": false }, { "text": "邊個適合K2？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk" }
+]

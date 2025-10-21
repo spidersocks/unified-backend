@@ -3,12 +3,18 @@
 from fastapi import APIRouter, Request
 from dialogflow_app.info import get_info, get_admin_redirect
 # Migrate to ContentStore accessors (course descriptions and display names)
-from dialogflow_app.content_store import get_course_info, format_course_display
+from dialogflow_app.content_store import get_course_info, format_course_display, STORE
 
 router = APIRouter(
     prefix="/dialogflow",
     tags=["Dialogflow Webhook"],
 )
+
+def _after_colon(s: str) -> str:
+    if not s:
+        return s
+    parts = s.split(":", 1)
+    return parts[1].strip() if len(parts) == 2 else s
 
 @router.post("/webhook")
 async def dialogflow_webhook(request: Request):
@@ -24,12 +30,74 @@ async def dialogflow_webhook(request: Request):
 
     fulfillment_text = ""
 
-    if intent_name == "Course_Inquiry":
+    if intent_name == "Course_Compare":
+        course_a = parameters.get("courseA")
+        course_b = parameters.get("courseB")
+
+        if not course_a or not course_b:
+            # Should be slot-filled by DF, but be defensive.
+            if language_code.startswith("zh-hk"):
+                return {"fulfillmentText": "想比較邊兩個課程？例如：Phonics 同 英語語文課。"}
+            elif language_code.startswith("zh-cn") or language_code == "zh":
+                return {"fulfillmentText": "想比较哪两个课程？例如：Phonics 和 英语语文课。"}
+            else:
+                return {"fulfillmentText": "Which two courses would you like to compare? For example: Phonics and Language Arts."}
+
+        name_a = format_course_display(course_a, language_code)
+        name_b = format_course_display(course_b, language_code)
+
+        # Descriptions
+        desc_a = get_course_info(course_a, language_code)
+        desc_b = get_course_info(course_b, language_code)
+
+        # Other aspects from ContentStore (might return prefixed strings; strip labels)
+        age_a = STORE.age_for_course(course_a, language_code) or ""
+        age_b = STORE.age_for_course(course_b, language_code) or ""
+        sched_a = STORE.schedule_for_course(course_a, language_code) or ""
+        sched_b = STORE.schedule_for_course(course_b, language_code) or ""
+        size_a = STORE.class_size_for_course(course_a, language_code) or ""
+        size_b = STORE.class_size_for_course(course_b, language_code) or ""
+        fee_a = STORE.tuition_for_course(course_a, language_code) or ""
+        fee_b = STORE.tuition_for_course(course_b, language_code) or ""
+
+        age_a, age_b = _after_colon(age_a), _after_colon(age_b)
+        sched_a, sched_b = _after_colon(sched_a), _after_colon(sched_b)
+        size_a, size_b = _after_colon(size_a), _after_colon(size_b)
+        fee_a, fee_b = _after_colon(fee_a), _after_colon(fee_b)
+
+        if language_code.startswith('zh-hk'):
+            lines = [
+                f"課程比較：{name_a} vs {name_b}",
+                f"- 簡介：{desc_a} / {desc_b}",
+                f"- 適合年齡：{age_a} / {age_b}" if age_a and age_b else "",
+                f"- 上課時間：{sched_a} / {sched_b}" if sched_a and sched_b else "",
+                f"- 班級人數：{size_a} / {size_b}" if size_a and size_b else "",
+                f"- 收費：{fee_a} / {fee_b}" if fee_a and fee_b else ""
+            ]
+        elif language_code.startswith('zh-cn') or language_code == 'zh':
+            lines = [
+                f"课程比较：{name_a} vs {name_b}",
+                f"- 简介：{desc_a} / {desc_b}",
+                f"- 适合年龄：{age_a} / {age_b}" if age_a and age_b else "",
+                f"- 上课时间：{sched_a} / {sched_b}" if sched_a and sched_b else "",
+                f"- 班级人数：{size_a} / {size_b}" if size_a and size_b else "",
+                f"- 收费：{fee_a} / {fee_b}" if fee_a and fee_b else ""
+            ]
+        else:
+            lines = [
+                f"Comparison: {name_a} vs {name_b}",
+                f"- Overview: {desc_a} / {desc_b}",
+                f"- Target age: {age_a} / {age_b}" if age_a and age_b else "",
+                f"- Schedule: {sched_a} / {sched_b}" if sched_a and sched_b else "",
+                f"- Class size: {size_a} / {size_b}" if size_a and size_b else "",
+                f"- Tuition: {fee_a} / {fee_b}" if fee_a and fee_b else ""
+            ]
+        fulfillment_text = "\n".join([l for l in lines if l])
+
+    elif intent_name == "Course_Inquiry":
         canonical_course_name = parameters.get("coursename")
 
         if not canonical_course_name:
-            # Dialogflow should slot-fill and only call webhook once this is present.
-            # Provide a minimal defensive prompt if it ever reaches here.
             if language_code.startswith("zh-hk"):
                 return {"fulfillmentText": "想查詢邊個課程？例如：數學班（Clevercal）、英語拼音、Playgroups。"}
             elif language_code.startswith("zh-cn") or language_code == "zh":

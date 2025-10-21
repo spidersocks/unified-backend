@@ -1,0 +1,5 @@
+[
+  { "id": "1", "data": [ { "text": "What's the difference between ", "userDefined": false }, { "text": "Language Arts", "meta": "@CourseName", "alias": "courseA", "userDefined": false }, { "text": " and ", "userDefined": false }, { "text": "Phonics", "meta": "@CourseName", "alias": "courseB", "userDefined": false }, { "text": "?", "userDefined": false } ], "isTemplate": false, "lang": "en" },
+  { "id": "2", "data": [ { "text": "Compare ", "userDefined": false }, { "text": "Phonics", "meta": "@CourseName", "alias": "courseA", "userDefined": false }, { "text": " vs ", "userDefined": false }, { "text": "Language Arts", "meta": "@CourseName", "alias": "courseB", "userDefined": false } ], "isTemplate": false, "lang": "en" },
+  { "id": "3", "data": [ { "text": "How is ", "userDefined": false }, { "text": "Clevercal", "meta": "@CourseName", "alias": "courseA", "userDefined": false }, { "text": " different from ", "userDefined": false }, { "text": "Phonics", "meta": "@CourseName", "alias": "courseB", "userDefined": false }, { "text": "?", "userDefined": false } ], "isTemplate": false, "lang": "en" }
+]
