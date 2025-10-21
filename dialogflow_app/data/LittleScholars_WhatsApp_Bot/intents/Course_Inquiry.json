@@ -12,12 +12,25 @@
         {
           "id": "8ea424a2-ef76-4b02-b879-95538f482ea9",
           "name": "coursename",
-          "required": false,
+          "required": true,
           "dataType": "@CourseName",
           "value": "$coursename",
           "defaultValue": "",
           "isList": false,
-          "prompts": [],
+          "prompts": [
+            {
+              "lang": "en",
+              "value": "Which course are you interested in?"
+            },
+            {
+              "lang": "zh-hk",
+              "value": "您想了解哪一門課程？"
+            },
+            {
+              "lang": "zh-cn",
+              "value": "您想了解哪一门课程？"
+            }
+          ],
           "promptMessages": [],
           "noMatchPromptMessages": [],
           "noInputPromptMessages": [],
