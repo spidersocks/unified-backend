@@ -7,6 +7,19 @@ LANG_EN = "en"
 LANG_ZH_HK = "zh-HK"
 LANG_ZH_CN = "zh-CN"
 
+# Canonical course keys used across the Dialogflow agent
+CANONICAL_COURSES = {
+    "Playgroups",
+    "Phonics",
+    "LanguageArts",
+    "Clevercal",
+    "Alludio",
+    "ToddlerCharRecognition",
+    "MandarinPinyin",
+    "ChineseLanguageArts",
+    "PrivateClass",
+}
+
 def norm_lang(lang_code: str) -> str:
     if not lang_code:
         return LANG_EN
@@ -56,8 +69,12 @@ class ContentStore:
         self.policy_absence = pd.DataFrame()          # key,en,zh-HK,zh-CN
         self.policy_refund = pd.DataFrame()           # key,en,zh-HK,zh-CN
         self.common_objections = pd.DataFrame()       # key,en,zh-HK,zh-CN
-        self.promotions = pd.DataFrame()              # key,en,zh-HK,zh-CN (usually single row)
-        self.success_stories = pd.DataFrame()         # key,en,zh-HK,zh-CN (or counts in en,zh-HK,zh-CN)
+        self.promotions = pd.DataFrame()              # key,en,zh-HK,zh-CN
+        self.success_stories = pd.DataFrame()         # key,en,zh-HK,zh-CN
+
+        # New: Course descriptions (migrated from dialogflow_app/data.py)
+        # Schema: canonical_name,en,zh-HK,zh-CN
+        self.course_descriptions = pd.DataFrame()
 
         self.reload()
 
@@ -91,6 +108,8 @@ class ContentStore:
         self.common_objections = load("common_objections")
         self.promotions = load("promotions")
         self.success_stories = load("success_stories")
+        # New: from catalog section "course_descriptions"
+        self.course_descriptions = load("course_descriptions")
 
         self.loaded_at = time.time()
         print("[INFO] ContentStore loaded from catalog.", flush=True)
@@ -441,3 +460,104 @@ class ContentStore:
             return None
         title = "成功個案：" if lang.startswith("zh-hk") else ("成功个案：" if lang.startswith("zh-cn") else "Success stories:")
         return f"{title}\n" + "\n".join(lines)
+
+    # ======= New: Course descriptions (migrated from data.py) =======
+
+    def course_description(self, canonical: str, lang: str) -> Optional[str]:
+        """
+        Return the course description for a canonical course key in the requested language,
+        using the course_descriptions table (canonical_name,en,zh-HK,zh-CN).
+        """
+        if not canonical:
+            return None
+        if self.course_descriptions.empty or "canonical_name" not in self.course_descriptions.columns:
+            return None
+        # Only serve known canonical courses
+        if canonical not in CANONICAL_COURSES:
+            return None
+        df = self.course_descriptions[self.course_descriptions["canonical_name"] == canonical]
+        if df.empty:
+            return None
+        col = self._lang_col(lang)
+        if col not in df.columns:
+            col = LANG_EN
+        txt = str(df.iloc[0].get(col, "")).strip()
+        if not txt:
+            # fallback to EN if localized empty
+            txt = str(df.iloc[0].get(LANG_EN, "")).strip()
+        return txt or None
+
+    def course_list(self, lang: str) -> Optional[str]:
+        """
+        Build a localized list of available courses, excluding non-public ones like PrivateClass if desired.
+        """
+        # Determine available canonical keys
+        keys: List[str] = []
+        if not self.course_descriptions.empty and "canonical_name" in self.course_descriptions.columns:
+            for _, r in self.course_descriptions.iterrows():
+                k = str(r.get("canonical_name", "")).strip()
+                if k in CANONICAL_COURSES and k != "PrivateClass":
+                    keys.append(k)
+        elif not self.display_names.empty and "canonical" in self.display_names.columns:
+            for _, r in self.display_names.iterrows():
+                k = str(r.get("canonical", "")).strip()
+                if k in CANONICAL_COURSES and k != "PrivateClass":
+                    keys.append(k)
+        else:
+            keys = [k for k in CANONICAL_COURSES if k != "PrivateClass"]
+
+        if not keys:
+            return None
+
+        # Localize names (without parentheses for cleaner list)
+        names = []
+        for k in keys:
+            names.append(f"*{self._get_display_name(k, lang)}*")
+
+        L = norm_lang(lang)
+        if L == LANG_EN:
+            course_list_str = ", ".join(names)
+            # Oxford comma handling and "and"
+            last_comma_index = course_list_str.rfind(',')
+            if last_comma_index > 0:
+                course_list_str = course_list_str[:last_comma_index] + ", and" + course_list_str[last_comma_index + 1:]
+            elif len(names) == 2:
+                course_list_str = " and ".join(names)
+            return f"We currently offer programs in {course_list_str}. Which area are you interested in?"
+        elif L == LANG_ZH_HK:
+            course_list_str = "、".join(names)
+            return f"我們提供{course_list_str}課程。請問您對哪個範疇感興趣？"
+        else:
+            course_list_str = "、".join(names)
+            return f"我们提供{course_list_str}课程。请问您对哪个范畴感兴趣？"
+
+
+# -------- Module-level singleton and convenience wrappers (shim for old data.py) --------
+
+STORE = ContentStore()
+
+def format_course_display(canonical_name: str, lang_code: str) -> str:
+    return STORE.format_course_name(canonical_name, lang_code)
+
+def get_course_info(course_name: str, lang_code: str) -> str:
+    """
+    Backwards-compatible wrapper used by the webhook:
+    - Returns a localized course description if found
+    - Otherwise, matches previous behavior with a friendly not-found message
+    """
+    txt = STORE.course_description(course_name, lang_code)
+    if txt:
+        return txt
+    return f"Sorry, I could not find details for the course: {course_name}."
+
+def get_course_list(lang_code: str) -> str:
+    txt = STORE.course_list(lang_code)
+    if txt:
+        return txt
+    # Very defensive fallback
+    if norm_lang(lang_code) == LANG_EN:
+        return "We offer several programs across English, Math, and Chinese. Which area are you interested in?"
+    elif norm_lang(lang_code) == LANG_ZH_HK:
+        return "我們提供多個英語、數學、中文課程。請問您對哪個範疇感興趣？"
+    else:
+        return "我们提供多个英语、数学、中文课程。请问您对哪个范畴感兴趣？"
