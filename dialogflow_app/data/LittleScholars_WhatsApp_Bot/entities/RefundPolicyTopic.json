@@ -1,0 +1,9 @@
+{
+  "id": "f8a9a9b2-9c5b-45a3-a80b-43fe6b0f2b06",
+  "name": "RefundPolicyTopic",
+  "isOverridable": true,
+  "isEnum": false,
+  "isRegexp": false,
+  "automatedExpansion": true,
+  "allowFuzzyExtraction": true
+}

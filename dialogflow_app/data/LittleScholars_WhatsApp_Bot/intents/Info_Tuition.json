@@ -1,0 +1,21 @@
+{
+  "id": "c0d1e2f3-5363-4fa9-9b0c-1d2e3f4a5b31",
+  "name": "Info_Tuition",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "parameters": [
+        { "id": "3c4d5e6f-7081-92a3-b4c5-d6e7f8a93131", "name": "coursename", "required": false, "dataType": "@CourseName", "value": "$coursename", "defaultValue": "", "isList": false }
+      ],
+      "messages": [
+        { "type": "0", "lang": "en", "speech": ["Let me check the tuition/fees."] },
+        { "type": "0", "lang": "zh-hk", "speech": ["我幫您查學費／收費。"] },
+        { "type": "0", "lang": "zh-cn", "speech": ["我帮您查询学费／收费。"] }
+      ]
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true
+}

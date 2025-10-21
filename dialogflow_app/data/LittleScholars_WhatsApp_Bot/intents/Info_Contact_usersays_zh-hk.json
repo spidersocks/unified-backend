@@ -1,0 +1,5 @@
+[
+  { "id": "6b9a1c2d-4e5f-4f61-8b72-1c2d3e4f5a12", "data": [ { "text": "你們", "userDefined": false }, { "text": "電話", "meta": "@ContactTopic", "alias": "contact", "userDefined": true }, { "text": "係幾多號？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+  { "id": "8d7c6b5a-4a3f-49e1-9c2d-5e4f3a2b1c13", "data": [ { "text": "點樣", "userDefined": false }, { "text": "聯絡", "meta": "@ContactTopic", "alias": "contact", "userDefined": true }, { "text": "你哋？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+  { "id": "9e1f2a3b-4c5d-6e7f-8a9b-0c1d2e3f4a14", "data": [ { "text": "請問", "userDefined": false }, { "text": "地址", "meta": "@ContactTopic", "alias": "contact", "userDefined": true }, { "text": "喺邊？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 }
+]

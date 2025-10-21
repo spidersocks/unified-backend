@@ -1,0 +1,15 @@
+{
+  "id": "e5f6a7b8-1920-4ba9-9b0c-1d2e3f4a5b26",
+  "name": "Info_ClassSize",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    { "resetContexts": false, "parameters": [], "messages": [
+      { "type": "0", "lang": "en", "speech": ["I'll fetch class size info."] },
+      { "type": "0", "lang": "zh-hk", "speech": ["我幫您查班級人數。"] },
+      { "type": "0", "lang": "zh-cn", "speech": ["我帮您查班级人数。"] }
+    ] }
+  ],
+  "priority": 500000,
+  "webhookUsed": true
+}

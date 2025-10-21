@@ -1,0 +1,19 @@
+{
+  "id": "d9c0c1d2-0a9f-4f2e-8a41-3b4adf9fbc11",
+  "name": "Info_Contact",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "parameters": [],
+      "messages": [
+        { "type": "0", "lang": "en", "speech": ["Sure, let me fetch our contact details."] },
+        { "type": "0", "lang": "zh-hk", "speech": ["好的，我幫您查聯絡資料。"] },
+        { "type": "0", "lang": "zh-cn", "speech": ["好的，我帮您查联系资料。"] }
+      ]
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true
+}

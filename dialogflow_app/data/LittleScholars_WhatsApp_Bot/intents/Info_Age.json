@@ -1,0 +1,21 @@
+{
+  "id": "a8b9c0d1-3141-4da9-9b0c-1d2e3f4a5b28",
+  "name": "Info_Age",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "parameters": [
+        { "id": "1a2b3c4d-5e6f-7081-92a3-b4c5d6e7f828", "name": "coursename", "required": false, "dataType": "@CourseName", "value": "$coursename", "defaultValue": "", "isList": false }
+      ],
+      "messages": [
+        { "type": "0", "lang": "en", "speech": ["Let me check the target age."] },
+        { "type": "0", "lang": "zh-hk", "speech": ["我幫您查適合年齡。"] },
+        { "type": "0", "lang": "zh-cn", "speech": ["我帮您查适合年龄。"] }
+      ]
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true
+}

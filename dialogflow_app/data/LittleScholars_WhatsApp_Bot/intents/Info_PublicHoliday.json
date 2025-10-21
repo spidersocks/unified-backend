@@ -1,0 +1,15 @@
+{
+  "id": "e1b2c3d4-5f60-47a8-9b0c-1d2e3f4a5b22",
+  "name": "Info_PublicHoliday",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    { "resetContexts": false, "parameters": [], "messages": [
+      { "type": "0", "lang": "en", "speech": ["Let me check our public holiday schedule."] },
+      { "type": "0", "lang": "zh-hk", "speech": ["我幫您查公眾假期安排。"] },
+      { "type": "0", "lang": "zh-cn", "speech": ["我帮您查公众假期安排。"] }
+    ] }
+  ],
+  "priority": 500000,
+  "webhookUsed": true
+}

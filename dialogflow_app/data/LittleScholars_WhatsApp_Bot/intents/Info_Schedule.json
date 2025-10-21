@@ -1,0 +1,21 @@
+{
+  "id": "b9c0d1e2-4252-4ea9-9b0c-1d2e3f4a5b29",
+  "name": "Info_Schedule",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "parameters": [
+        { "id": "2b3c4d5e-6f70-8192-a3b4-c5d6e7f82930", "name": "coursename", "required": false, "dataType": "@CourseName", "value": "$coursename", "defaultValue": "", "isList": false }
+      ],
+      "messages": [
+        { "type": "0", "lang": "en", "speech": ["I'll check the class schedule."] },
+        { "type": "0", "lang": "zh-hk", "speech": ["我幫您查上課時間。"] },
+        { "type": "0", "lang": "zh-cn", "speech": ["我帮您查上课时间。"] }
+      ]
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true
+}

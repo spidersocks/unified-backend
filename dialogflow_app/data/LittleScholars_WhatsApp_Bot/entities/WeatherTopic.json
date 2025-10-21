@@ -1,0 +1,9 @@
+{
+  "id": "e8d3a0d8-69d5-4d62-9a5a-7d0d1d3f8a02",
+  "name": "WeatherTopic",
+  "isOverridable": true,
+  "isEnum": false,
+  "isRegexp": false,
+  "automatedExpansion": true,
+  "allowFuzzyExtraction": true
+}

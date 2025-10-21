@@ -1,0 +1,9 @@
+{
+  "id": "b1c3e8f4-2a5c-4548-8d93-0a6cc9c9f807",
+  "name": "TuitionTopic",
+  "isOverridable": true,
+  "isEnum": false,
+  "isRegexp": false,
+  "automatedExpansion": true,
+  "allowFuzzyExtraction": true
+}

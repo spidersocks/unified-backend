@@ -1,0 +1,15 @@
+{
+  "id": "f6a7b8c9-2031-4ca9-9b0c-1d2e3f4a5b27",
+  "name": "Info_Enrollment",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    { "resetContexts": false, "parameters": [], "messages": [
+      { "type": "0", "lang": "en", "speech": ["I'll get the enrollment process."] },
+      { "type": "0", "lang": "zh-hk", "speech": ["我幫您查報名流程。"] },
+      { "type": "0", "lang": "zh-cn", "speech": ["我帮您查报名流程。"] }
+    ] }
+  ],
+  "priority": 500000,
+  "webhookUsed": true
+}
