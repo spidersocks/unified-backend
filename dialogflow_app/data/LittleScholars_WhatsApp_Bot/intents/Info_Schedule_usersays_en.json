@@ -1,4 +1,11 @@
 [
   { "id": "91a2b3c4-d5e6-4776-2c3d-80e1f2a3b7a5", "data": [ { "text": "When is the ", "userDefined": false }, { "text": "Language Arts", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": " class?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "a2b3c4d5-e6f7-4887-3d4e-91f2a3b4c8b6", "data": [ { "text": "What's your class schedule?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 }
+  { "id": "a2b3c4d5-e6f7-4887-3d4e-91f2a3b4c8b6", "data": [ { "text": "What's your class schedule?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
+
+  { "id": "b4c5d6e7-f809-4a1b-9c2d-3e4f5a6b7c01", "data": [ { "text": "Schedule for ", "userDefined": false }, { "text": "Phonics", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": " please.", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "c5d6e7f8-091a-4b2c-ad3e-4f5a6b7c8d02", "data": [ { "text": "What time are your ", "userDefined": false }, { "text": "Playgroups", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": " classes?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "d6e7f809-1a2b-4c3d-be4f-5a6b7c8d9e03", "data": [ { "text": "Timetable for ", "userDefined": false }, { "text": "Chinese Language Arts", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": ".", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "e7f8091a-2b3c-4d5e-cf60-6b7c8d9e0a04", "data": [ { "text": "When are ", "userDefined": false }, { "text": "Clevercal", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": " classes held?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "f8091a2b-3c4d-4e5f-d071-7c8d9e0a1b05", "data": [ { "text": "Do you have weekday or weekend classes?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "091a2b3c-4d5e-4f60-e182-8d9e0a1b2c06", "data": [ { "text": "What days/times do you run classes?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 }
 ]

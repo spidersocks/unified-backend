@@ -1,3 +1,6 @@
 [
-  { "id": "6b7c8d9e-0f41-4123-2345-6789abcdef01", "data": [ { "text": "有 Instagram 或 Facebook 吗？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 }
+  { "id": "6b7c8d9e-0f41-4123-2345-6789abcdef01", "data": [ { "text": "有 Instagram 或 Facebook 吗？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
+
+  { "id": "c567d8e9-f001-4345-c567-d8e9f001a2c6", "data": [ { "text": "你们的网站是什么？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
+  { "id": "d678e9f0-0123-4456-d678-e9f00123b3d7", "data": [ { "text": "发一下社交媒体链接", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 }
 ]

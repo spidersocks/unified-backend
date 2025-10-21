@@ -1,4 +1,8 @@
 [
   { "id": "5d6e7f80-912a-4332-e8f9-46a7b8c9d361", "data": [ { "text": "英語拼音", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": "幾錢？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
-  { "id": "6e7f8091-a2b3-4443-f9a0-57b8c9d0e472", "data": [ { "text": "學費點樣計？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 }
+  { "id": "6e7f8091-a2b3-4443-f9a0-57b8c9d0e472", "data": [ { "text": "學費點樣計？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+
+  { "id": "ef506172-8394-4a56-de1f-2a3b4c5d6e06", "data": [ { "text": "請問 ", "userDefined": false }, { "text": "英語語文課", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": " 收費？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 },
+  { "id": "f0617283-945a-4b67-e1f2-3b4c5d6e7f07", "data": [ { "text": "有冇一次過收費表？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 },
+  { "id": "01728394-5ab6-4c78-f2e3-4c5d6e7f8008", "data": [ { "text": "一個學期幾多錢？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 }
 ]

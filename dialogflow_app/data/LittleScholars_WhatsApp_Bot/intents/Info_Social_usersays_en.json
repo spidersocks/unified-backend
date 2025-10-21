@@ -1,4 +1,8 @@
 [
   { "id": "3e4f5a6b-7c8d-49e0-9012-3456789abcde", "data": [ { "text": "What's your Instagram?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "4f5a6b7c-8d9e-40f1-0123-456789abcdef", "data": [ { "text": "Share your social media links", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 }
+  { "id": "4f5a6b7c-8d9e-40f1-0123-456789abcdef", "data": [ { "text": "Share your social media links", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
+
+  { "id": "7012a3b4-c5d6-47e8-9012-a3b4c5d6e7f1", "data": [ { "text": "Do you have Facebook?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "8123b4c5-d6e7-48f9-a123-b4c5d6e7f8a2", "data": [ { "text": "What's your website?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "9234c5d6-e7f8-490a-b234-c5d6e7f8a9b3", "data": [ { "text": "Send me your social profiles", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 }
 ]

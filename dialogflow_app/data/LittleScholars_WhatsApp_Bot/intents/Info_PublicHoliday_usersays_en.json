@@ -1,4 +1,8 @@
 [
   { "id": "f9e1a1a8-2b9e-4a1a-9c2d-7a9e5f1c2a01", "data": [ { "text": "Are you open on public holidays?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "2a1b7c1d-3e2f-4f8a-8b1c-5d6e7f8a9b02", "data": [ { "text": "What's your holiday schedule?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 }
+  { "id": "2a1b7c1d-3e2f-4f8a-8b1c-5d6e7f8a9b02", "data": [ { "text": "What's your holiday schedule?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
+
+  { "id": "4b5c6d7e-8f90-4a1b-b2c3-d4e5f6a7b003", "data": [ { "text": "Do you run classes on red days?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "5c6d7e8f-9012-4b2c-c3d4-e5f6a7b8c104", "data": [ { "text": "Holiday opening hours?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "6d7e8f90-1234-4c3d-d4e5-f6a7b8c9d205", "data": [ { "text": "Are you closed on public holidays?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 }
 ]

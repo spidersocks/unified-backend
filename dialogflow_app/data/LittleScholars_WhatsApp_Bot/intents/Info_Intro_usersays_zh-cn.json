@@ -1,3 +1,6 @@
 [
-  { "id": "0f4a1b2c-3d4e-4567-6789-abcdef012345", "data": [ { "text": "介绍一下你们中心", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 }
+  { "id": "0f4a1b2c-3d4e-4567-6789-abcdef012345", "data": [ { "text": "介绍一下你们中心", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
+
+  { "id": "2345cd67-ef01-4789-9234-5cd67ef018c5", "data": [ { "text": "你们是什么机构？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
+  { "id": "3456de78-f012-489a-a345-6de78f0129d6", "data": [ { "text": "能简单介绍一下学校吗？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 }
 ]

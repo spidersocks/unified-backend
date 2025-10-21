@@ -1,5 +1,8 @@
 [
   { "id": "1a2b3c4d-5e6f-7081-92a3-b4c5d6e7f815", "data": [ { "text": "你们的", "userDefined": false }, { "text": "电话", "meta": "@ContactTopic", "alias": "contact", "userDefined": true }, { "text": "是多少？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
   { "id": "2b3c4d5e-6f70-8192-a3b4-c5d6e7f81916", "data": [ { "text": "怎么", "userDefined": false }, { "text": "联系", "meta": "@ContactTopic", "alias": "contact", "userDefined": true }, { "text": "你们？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
-  { "id": "3c4d5e6f-7081-92a3-b4c5-d6e7f8192a17", "data": [ { "text": "请问", "userDefined": false }, { "text": "地址", "meta": "@ContactTopic", "alias": "contact", "userDefined": true }, { "text": "在哪里？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 }
+  { "id": "3c4d5e6f-7081-92a3-b4c5-d6e7f8192a17", "data": [ { "text": "请问", "userDefined": false }, { "text": "地址", "meta": "@ContactTopic", "alias": "contact", "userDefined": true }, { "text": "在哪里？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
+
+  { "id": "f890abcd-ef01-4578-f890-abcd ef01e2c6", "data": [ { "text": "有 WhatsApp 吗？号码是多少？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
+  { "id": "0890bcde-f012-4689-0890-bcdef012f3d7", "data": [ { "text": "邮箱是什么？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 }
 ]

@@ -1,5 +1,9 @@
 [
   { "id": "0a1f5f2e-3c44-4c59-a0f7-0b2f9f1b0a10", "data": [ { "text": "What's your ", "userDefined": false }, { "text": "phone number", "meta": "@ContactTopic", "alias": "contact", "userDefined": true }, { "text": "?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
   { "id": "2f4b7c5a-9d24-44ec-8a19-b1d3f2c7a1a1", "data": [ { "text": "How do I ", "userDefined": false }, { "text": "contact", "meta": "@ContactTopic", "alias": "contact", "userDefined": true }, { "text": " you?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "3a9b5c1d-7e42-4a3f-9f12-8c5d1e0a3b11", "data": [ { "text": "What's your ", "userDefined": false }, { "text": "address", "meta": "@ContactTopic", "alias": "contact", "userDefined": true }, { "text": "?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 }
+  { "id": "3a9b5c1d-7e42-4a3f-9f12-8c5d1e0a3b11", "data": [ { "text": "What's your ", "userDefined": false }, { "text": "address", "meta": "@ContactTopic", "alias": "contact", "userDefined": true }, { "text": "?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
+
+  { "id": "a3456789-bcde-4012-a345-6789bcdefa71", "data": [ { "text": "Do you have WhatsApp?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "b456789a-cdef-4123-b456-789acdefb882", "data": [ { "text": "What's your email address?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "c56789ab-def0-4234-c567-89abdefc8993", "data": [ { "text": "Share your Google Maps link please", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 }
 ]

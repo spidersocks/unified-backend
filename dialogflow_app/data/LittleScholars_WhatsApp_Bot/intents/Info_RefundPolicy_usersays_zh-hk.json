@@ -1,4 +1,8 @@
 [
   { "id": "6e7f8091-a2b3-4453-f2a3-b4c5d6e7f822", "data": [ { "text": "退款政策係點？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
-  { "id": "7f8091a2-b3c4-4564-0a1b-c2d3e4f5a923", "data": [ { "text": "可唔可以轉班或取消？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 }
+  { "id": "7f8091a2-b3c4-4564-0a1b-c2d3e4f5a923", "data": [ { "text": "可唔可以轉班或取消？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+
+  { "id": "4de56789-abcd-4f01-b4de-56789cdef120", "data": [ { "text": "缺課有冇退款？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 },
+  { "id": "5ef6789a-bcde-4012-c5ef-6789cdefa221", "data": [ { "text": "如果要退學點樣處理？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 },
+  { "id": "6f0789ab-cdef-4123-d6f0-789cdefab322", "data": [ { "text": "想轉班要點做？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 }
 ]

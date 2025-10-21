@@ -1,4 +1,7 @@
 [
   { "id": "91a2b3c4-d5e6-47f8-f9a0-b1c2d3e4f509", "data": [ { "text": "有冇試堂？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
-  { "id": "a2b3c4d5-e6f7-4809-0a1b-c2d3e4f5a610", "data": [ { "text": "可唔可以先試一堂？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 }
+  { "id": "a2b3c4d5-e6f7-4809-0a1b-c2d3e4f5a610", "data": [ { "text": "可唔可以先試一堂？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+
+  { "id": "e3456789-abcd-4012-e345-6789abcdef04", "data": [ { "text": "有免費試堂嗎？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 },
+  { "id": "f456789a-bcde-4123-f456-789abcdef105", "data": [ { "text": "點樣預約試堂？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 }
 ]

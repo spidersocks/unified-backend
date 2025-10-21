@@ -1,4 +1,7 @@
 [
   { "id": "e6f70819-2a3b-4ccb-7172-d9e0f1a2b62a", "data": [ { "text": "如何报名？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
-  { "id": "f708192a-3b4c-4ddc-8283-e0f1a2b3c72b", "data": [ { "text": "报名流程是什么？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 }
+  { "id": "f708192a-3b4c-4ddc-8283-e0f1a2b3c72b", "data": [ { "text": "报名流程是什么？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
+
+  { "id": "5890f012-3456-4fa1-d589-0f012ff4977", "data": [ { "text": "怎么登记？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
+  { "id": "6901f123-4567-40b2-e690-1f123ff5a88", "data": [ { "text": "有报名表吗？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 }
 ]

@@ -1,5 +1,9 @@
 [
   { "id": "d5e6f708-192a-4b13-c3d4-e5f6a7b8c913", "data": [ { "text": "Tell me about your make-up policy", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
   { "id": "e6f70819-2a3b-4c15-d4e5-f6a7b8c9d014", "data": [ { "text": "What's your absence policy?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "f708192a-3b4c-4d16-e5f6-a7b8c9d0e115", "data": [ { "text": "How do make-up classes work?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 }
+  { "id": "f708192a-3b4c-4d16-e5f6-a7b8c9d0e115", "data": [ { "text": "How do make-up classes work?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
+
+  { "id": "26789abc-def0-4456-2789-abcdef123008", "data": [ { "text": "If we miss a class, can we make it up?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "3789abcd-ef01-4567-389a-bcdef1234509", "data": [ { "text": "How many free make-ups do we get?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "489abcde-f012-4678-49ab-cdef12345610", "data": [ { "text": "Do you require a doctor's note for sick leave?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 }
 ]

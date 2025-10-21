@@ -1,4 +1,8 @@
 [
   { "id": "4c5d6e7f-8091-4231-d0e1-f2a3b4c5d620", "data": [ { "text": "What's your refund policy?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "5d6e7f80-912a-4342-e1f2-a3b4c5d6e721", "data": [ { "text": "Can I transfer or cancel classes?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 }
+  { "id": "5d6e7f80-912a-4342-e1f2-a3b4c5d6e721", "data": [ { "text": "Can I transfer or cancel classes?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
+
+  { "id": "1ab23456-789a-4cde-81ab-23456789cd17", "data": [ { "text": "Do you offer refunds for missed classes?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "2bc34567-89ab-4def-92bc-3456789cde18", "data": [ { "text": "How do I withdraw from a course?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
+  { "id": "3cd45678-9abc-4ef0-a3cd-456789cdef19", "data": [ { "text": "What's the process to switch classes?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 }
 ]
