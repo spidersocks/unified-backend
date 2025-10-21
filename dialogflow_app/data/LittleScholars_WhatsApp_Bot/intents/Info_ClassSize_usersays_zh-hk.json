@@ -1,0 +1,10 @@
+[
+  { "id": "92a3b4c5-d6e7-4071-a8b9-c0d1e2f3a312", "data": [ { "text": "每班幾多人？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+  { "id": "a3b4c5d6-e7f8-4182-b9c0-d1e2f3a4b413", "data": [ { "text": "班級人數係幾多？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+  { "id": "b4c5d6e7-f809-4293-c0d1-e2f3a4b5c514", "data": [ { "text": "一班有幾多位學生？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+  { "id": "c5d6e7f8-091a-43a4-d1e2-f3a4b5c6d615", "data": [ { "text": "每組幾多人？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+  { "id": "d6e7f809-1a2b-44b5-e2f3-a4b5c6d7e716", "data": [ { "text": "係咪小班教學？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+  { "id": "e7f8091a-2b3c-45c6-f3a4-b5c6d7e8f817", "data": [ { "text": "你哋嘅班有幾大？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+  { "id": "f8091a2b-3c4d-46d7-04a5-c6d7e8f9a918", "data": [ { "text": "上課人數上限係幾多？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+  { "id": "091a2b3c-4d5e-47e8-15a6-d7e8f9a0b019", "data": [ { "text": "平均每班幾多人？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 }
+]
