@@ -2,104 +2,52 @@
   {
     "id": "6c72f455-bd6e-4b2a-a34a-3622e19086c2",
     "data": [
-      {
-        "text": "私人课",
-        "meta": "@CourseName",
-        "alias": "coursename",
-        "userDefined": false
-      },
-      {
-        "text": "多少钱？",
-        "userDefined": false
-      }
+      { "text": "私人课", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": "多少钱？", "userDefined": false }
     ],
-    "isTemplate": false,
-    "count": 0,
-    "lang": "zh-cn",
-    "updated": 0
+    "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0
   },
   {
     "id": "455d36aa-a103-4faa-90c1-59a37dd92734",
     "data": [
-      {
-        "text": "中文语文课",
-        "meta": "@CourseName",
-        "alias": "coursename",
-        "userDefined": false
-      },
-      {
-        "text": "有开班吗？",
-        "userDefined": false
-      }
+      { "text": "中文语文课", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": "有开班吗？", "userDefined": false }
     ],
-    "isTemplate": false,
-    "count": 0,
-    "lang": "zh-cn",
-    "updated": 0
+    "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0
   },
   {
     "id": "9ac70af2-ac4c-4c67-a7f1-dea1068b2087",
     "data": [
-      {
-        "text": "我想知道",
-        "userDefined": false
-      },
-      {
-        "text": "英语拼音",
-        "meta": "@CourseName",
-        "alias": "coursename",
-        "userDefined": false
-      },
-      {
-        "text": "的信息",
-        "userDefined": false
-      }
+      { "text": "我想知道", "userDefined": false },
+      { "text": "英语拼音", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": "的信息", "userDefined": false }
     ],
-    "isTemplate": false,
-    "count": 0,
-    "lang": "zh-cn",
-    "updated": 0
+    "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0
   },
   {
     "id": "682804e8-c1ee-47bf-8213-f71752dcac41",
     "data": [
-      {
-        "text": "数学班",
-        "meta": "@CourseName",
-        "alias": "coursename",
-        "userDefined": false
-      },
-      {
-        "text": "是什么？",
-        "userDefined": false
-      }
+      { "text": "数学班", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": "是什么？", "userDefined": false }
     ],
-    "isTemplate": false,
-    "count": 0,
-    "lang": "zh-cn",
-    "updated": 0
+    "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0
   },
   {
     "id": "c9af1b47-65cb-4045-9eb5-bdc51f29e907",
     "data": [
-      {
-        "text": "告诉我关于",
-        "userDefined": false
-      },
-      {
-        "text": "双语 playgroup",
-        "meta": "@CourseName",
-        "alias": "coursename",
-        "userDefined": false
-      },
-      {
-        "text": "的详情",
-        "userDefined": false
-      }
+      { "text": "告诉我关于", "userDefined": false },
+      { "text": "双语 playgroup", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": "的详情", "userDefined": false }
     ],
-    "isTemplate": false,
-    "count": 0,
-    "lang": "zh-cn",
-    "updated": 0
+    "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0
+  },
+  {
+    "id": "a1d2c3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e",
+    "data": [
+      { "text": "你有", "userDefined": false },
+      { "text": "中文语言堂", "meta": "@CourseName", "alias": "coursename", "userDefined": false },
+      { "text": "吗？", "userDefined": false }
+    ],
+    "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0
   }
 ]
