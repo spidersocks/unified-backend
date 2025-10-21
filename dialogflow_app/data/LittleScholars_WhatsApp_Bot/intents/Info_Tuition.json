@@ -7,7 +7,29 @@
     {
       "resetContexts": false,
       "parameters": [
-        { "id": "3c4d5e6f-7081-92a3-b4c5-d6e7f8a93131", "name": "coursename", "required": false, "dataType": "@CourseName", "value": "$coursename", "defaultValue": "", "isList": false }
+        { 
+          "id": "3c4d5e6f-7081-92a3-b4c5-d6e7f8a93131", 
+          "name": "coursename", 
+          "required": true, 
+          "dataType": "@CourseName", 
+          "value": "$coursename", 
+          "defaultValue": "", 
+          "isList": false,
+          "prompts": [
+            {
+              "lang": "en",
+              "value": "Which course's tuition would you like to know?"
+            },
+            {
+              "lang": "zh-hk",
+              "value": "您想了解哪門課程的學費？"
+            },
+            {
+              "lang": "zh-cn",
+              "value": "您想了解哪门课程的学费？"
+            }
+          ]
+        }
       ],
       "messages": [
         { "type": "0", "lang": "en", "speech": ["Let me check the tuition/fees."] },

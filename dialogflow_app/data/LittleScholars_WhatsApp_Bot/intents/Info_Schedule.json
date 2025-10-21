@@ -7,7 +7,29 @@
     {
       "resetContexts": false,
       "parameters": [
-        { "id": "2b3c4d5e-6f70-8192-a3b4-c5d6e7f82930", "name": "coursename", "required": false, "dataType": "@CourseName", "value": "$coursename", "defaultValue": "", "isList": false }
+        { 
+          "id": "2b3c4d5e-6f70-8192-a3b4-c5d6e7f82930", 
+          "name": "coursename", 
+          "required": true, 
+          "dataType": "@CourseName", 
+          "value": "$coursename", 
+          "defaultValue": "", 
+          "isList": false,
+          "prompts": [
+            {
+              "lang": "en",
+              "value": "Which course's schedule would you like to check?"
+            },
+            {
+              "lang": "zh-hk",
+              "value": "您想查詢哪門課程的上課時間？"
+            },
+            {
+              "lang": "zh-cn",
+              "value": "您想查询哪门课程的上课时间？"
+            }
+          ]
+        }
       ],
       "messages": [
         { "type": "0", "lang": "en", "speech": ["I'll check the class schedule."] },
