@@ -7,14 +7,14 @@
   { "value": "TargetStudentAge", "synonyms": ["age", "age requirement", "who is it for", "what age"] },
   { "value": "ClassSchedule", "synonyms": ["schedule", "class time", "when is the class", "time"] },
   { "value": "TuitionAndPayment", "synonyms": ["tuition", "fees", "price", "cost", "payment"] },
+  { "value": "Tuition", "synonyms": ["tuition", "fee", "how much", "how much is it"] },
   { "value": "TrialClassPolicy", "synonyms": ["trial class", "trial", "try a class"] },
   { "value": "AbsenceAndMakeupPolicy", "synonyms": ["make-up policy", "absence policy", "missed class", "make up"] },
   { "value": "RefundAndClassTransferPolicy", "synonyms": ["refund policy", "transfer policy", "cancel class", "withdraw"] },
   { "value": "TeacherNativeSpeaker", "synonyms": ["native teachers", "teacher native", "are teachers native"] },
   { "value": "PublicHolidaySchedule", "synonyms": ["public holiday", "holiday schedule", "open on holidays"] },
-  { "value": "WeatherPolicy", "synonyms": ["weather policy", "typhoon", "black rain", "rainstorm"] },
+  { "value": "WeatherPolicy", "synonyms": ["weather policy", "typhoon", "typhoons", "black rain", "rainstorm"] },
   { "value": "OtherCenters", "synonyms": ["other centers", "branches", "branch", "other locations"] },
   { "value": "PromotionsAndEvents", "synonyms": ["promotion", "discount", "events", "early bird"] },
-  { "value": "SuccessStories", "synonyms": ["success stories", "results", "testimonials"] },
-  { "value": "Tuition", "synonyms": ["tuition", "fee", "how much", "how much is it"] }
+  { "value": "SuccessStories", "synonyms": ["success stories", "results", "testimonials"] }
 ]
