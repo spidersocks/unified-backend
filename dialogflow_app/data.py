@@ -1,8 +1,12 @@
-# C:\Users\sfont\unified_backend\dialogflow_app\data.py
-
 import os
 import pandas as pd
-import time # Import time for measuring load duration
+import time
+
+try:
+    from dialogflow_app.content_store import ContentStore
+    _CONTENT_STORE = ContentStore()
+except Exception:
+    _CONTENT_STORE = None
 
 # --- Configuration ---
 # Use an environment variable to store the Google Sheet CSV export URL
@@ -106,22 +110,45 @@ def get_course_info(course_name: str, lang_code: str) -> str:
 
 
 def get_display_name(canonical_name: str, lang_code: str) -> str:
-    """
-    Retrieves the user-friendly display name for a course based on the 
-    canonical name and language code.
-    """
-    # Normalize language code for lookup
+    # Prefer ContentStore if available
+    if _CONTENT_STORE:
+        try:
+            return _CONTENT_STORE._get_display_name(canonical_name, lang_code)
+        except Exception:
+            pass
+    # existing fallback mapping
     if lang_code.startswith('zh-hk'):
         code = 'zh-hk'
     elif lang_code.startswith('zh-cn') or lang_code.startswith('zh'):
         code = 'zh-cn'
     else:
         code = 'en'
-    
-    # Look up the display name, fall back to the canonical name if not found in the map
-    # This prevents the output from breaking if a new course is added without a display name entry
     return DISPLAY_NAMES.get(canonical_name, {}).get(code, canonical_name)
 
+def format_course_display(canonical_name: str, lang_code: str) -> str:
+    """
+    Returns localized course name, and includes an alias in parentheses to avoid confusion:
+      - For zh requests: zh name (EN name)
+      - For en requests: EN name (HK name if available, else CN)
+    """
+    if _CONTENT_STORE:
+        try:
+            return _CONTENT_STORE.format_course_name(canonical_name, lang_code)
+        except Exception:
+            pass
+    # Fallback using our static DISPLAY_NAMES map
+    en = DISPLAY_NAMES.get(canonical_name, {}).get('en', canonical_name)
+    zh_hk = DISPLAY_NAMES.get(canonical_name, {}).get('zh-hk', "")
+    zh_cn = DISPLAY_NAMES.get(canonical_name, {}).get('zh-cn', "")
+
+    if lang_code.startswith('en'):
+        alt = zh_hk or zh_cn
+        return f"{en} ({alt})" if alt and alt != en else en
+    else:
+        primary = zh_hk if lang_code.startswith('zh-hk') else (zh_cn or zh_hk)
+        primary = primary or en
+        alt = en if en and en != primary else ""
+        return f"{primary} ({alt})" if alt else primary
 
 def get_course_list(lang_code: str) -> str:
     """

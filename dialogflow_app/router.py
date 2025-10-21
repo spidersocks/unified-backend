@@ -1,8 +1,8 @@
 # C:\Users\sfont\unified_backend\dialogflow_app\router.py
 
 from fastapi import APIRouter, Request
-from dialogflow_app.data import get_course_info, get_display_name, get_course_list
 from dialogflow_app.info import get_info, get_admin_redirect
+from dialogflow_app.data import get_course_info, get_display_name, get_course_list, format_course_display
 
 router = APIRouter(
     prefix="/dialogflow",
@@ -57,7 +57,7 @@ async def dialogflow_webhook(request: Request):
             else:
                 fulfillment_text = "I'm sorry, I didn't catch the name of the course you were asking about."
         else:
-            display_course_name = get_display_name(canonical_course_name, language_code)
+            display_course_name = format_course_display(canonical_course_name, language_code)
             course_details = get_course_info(canonical_course_name, language_code)
 
             if language_code.startswith('en'):
@@ -68,7 +68,6 @@ async def dialogflow_webhook(request: Request):
                 fulfillment_text = f"*{display_course_name}* 课程详情: {course_details}"
             else:
                 fulfillment_text = f"Details for the *{display_course_name}* course: {course_details}"
-
     elif intent_name == "Course_List":
         fulfillment_text = get_course_list(language_code)
 
