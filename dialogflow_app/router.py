@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Request
 from dialogflow_app.info import get_info, get_admin_redirect
-from dialogflow_app.data import get_course_info, get_display_name, get_course_list, format_course_display
+from dialogflow_app.data import get_course_info, format_course_display
 
 router = APIRouter(
     prefix="/dialogflow",
@@ -18,9 +18,8 @@ async def dialogflow_webhook(request: Request):
 
     query_result = req_json.get("queryResult", {})
     intent_name = query_result.get("intent", {}).get("displayName")
-    language_code = query_result.get("languageCode", "en").lower()
+    language_code = (query_result.get("languageCode") or "en").lower()
     parameters = query_result.get("parameters", {}) or {}
-    query_text = query_result.get("queryText", "") or ""
 
     fulfillment_text = ""
 
@@ -28,10 +27,14 @@ async def dialogflow_webhook(request: Request):
         canonical_course_name = parameters.get("coursename")
 
         if not canonical_course_name:
-            # Let Dialogflow drive slot filling via training; but if it still
-            # misses, provide a helpful, non-heuristic fallback list.
-            fulfillment_text = get_course_list(language_code)
-            return {"fulfillmentText": fulfillment_text}
+            # Dialogflow should slot-fill and only call webhook once this is present.
+            # Provide a minimal defensive prompt if it ever reaches here.
+            if language_code.startswith("zh-hk"):
+                return {"fulfillmentText": "想查詢邊個課程？例如：數學班（Clevercal）、英語拼音、Playgroups。"}
+            elif language_code.startswith("zh-cn") or language_code == "zh":
+                return {"fulfillmentText": "想查询哪个课程？例如：数学班（Clevercal）、英语拼音、Playgroups。"}
+            else:
+                return {"fulfillmentText": "Which course would you like details for? For example: Clevercal, Phonics, Playgroups."}
 
         display_course_name = format_course_display(canonical_course_name, language_code)
         course_details = get_course_info(canonical_course_name, language_code)
@@ -44,20 +47,6 @@ async def dialogflow_webhook(request: Request):
             fulfillment_text = f"*{display_course_name}* 课程详情: {course_details}"
         else:
             fulfillment_text = f"Details for the *{display_course_name}* course: {course_details}"
-
-    elif intent_name == "Course_List":
-        fulfillment_text = get_course_list(language_code)
-
-    elif intent_name == "Policy_MakeUp_Quota":
-        POLICY_CANONICAL_NAME = "Policy_MakeUp_Quota"
-        policy_text = get_course_info(POLICY_CANONICAL_NAME, language_code)
-        if policy_text.startswith("Sorry, I could not find details"):
-            if language_code.startswith('zh'):
-                fulfillment_text = "抱歉，目前找不到補課政策的詳細資訊，請聯繫我們的行政人員。"
-            else:
-                fulfillment_text = "Sorry, the makeup class policy details are currently unavailable. Please contact our administrative staff."
-        else:
-            fulfillment_text = policy_text
 
     elif intent_name == "Info_Contact":
         fulfillment_text = get_info("ContactInformation", language_code) or get_admin_redirect(language_code)
