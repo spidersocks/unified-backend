@@ -9,6 +9,20 @@ router = APIRouter(
     tags=["Dialogflow Webhook"],
 )
 
+INTRO_KEYWORDS = [
+    "about your centre", "about your center",
+    "about the centre", "about the center",
+    "education centre", "education center",
+    "who are you", "what do you do",
+    "introduce your school", "introduce your centre", "introduce your center",
+    "institution introduction", "about the institution", "about your institution",
+    "about your organization", "about your organisation"
+]
+
+def looks_like_intro(query_text: str) -> bool:
+    qt = (query_text or "").lower()
+    return any(k in qt for k in INTRO_KEYWORDS)
+
 @router.post("/webhook")
 async def dialogflow_webhook(request: Request):
     """
@@ -23,11 +37,23 @@ async def dialogflow_webhook(request: Request):
     intent_name = query_result.get("intent", {}).get("displayName")
     language_code = query_result.get("languageCode", "en").lower()
     parameters = query_result.get("parameters", {}) or {}
+    query_text = query_result.get("queryText", "") or ""
 
     fulfillment_text = ""
 
+    # If the user is clearly asking for an introduction, route to intro info regardless of mis-detected course.
+    if looks_like_intro(query_text) and intent_name in ("Course_Inquiry", "Info_Query"):
+        intro = get_info("InstitutionIntroduction", language_code)
+        if intro:
+            return {"fulfillmentText": intro}
+
     if intent_name == "Course_Inquiry":
         canonical_course_name = parameters.get("coursename")
+
+        # If this looks like an intro query, handle it here as well (extra safety)
+        if looks_like_intro(query_text):
+            fulfillment_text = get_info("InstitutionIntroduction", language_code) or get_admin_redirect(language_code)
+            return {"fulfillmentText": fulfillment_text}
 
         if not canonical_course_name:
             if language_code.startswith('zh'):
@@ -116,7 +142,13 @@ async def dialogflow_webhook(request: Request):
     elif intent_name == "Info_Query":
         topic = parameters.get("topic")
         coursename = parameters.get("coursename")
-        answer = get_info(topic, language_code, coursename)
+
+        # If query looks like intro, ignore any accidental course and serve intro
+        if looks_like_intro(query_text):
+            answer = get_info("InstitutionIntroduction", language_code)
+        else:
+            answer = get_info(topic, language_code, coursename)
+
         fulfillment_text = answer or get_admin_redirect(language_code)
 
     else:
