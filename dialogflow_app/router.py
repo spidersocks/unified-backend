@@ -9,22 +9,6 @@ router = APIRouter(
     tags=["Dialogflow Webhook"],
 )
 
-INTRO_KEYWORDS = [
-    "about your centre", "about your center",
-    "about the centre", "about the center",
-    "education centre", "education center",
-    "who are you", "what do you do",
-    "introduce your school", "introduce your centre", "introduce your center",
-    "institution introduction", "about the institution", "about your institution",
-    "about your organization", "about your organisation",
-    # brand-specific
-    "little scholars", "little scholars education centre", "little scholars education center"
-]
-
-def looks_like_intro(query_text: str) -> bool:
-    qt = (query_text or "").lower()
-    return any(k in qt for k in INTRO_KEYWORDS)
-
 @router.post("/webhook")
 async def dialogflow_webhook(request: Request):
     try:
@@ -38,36 +22,29 @@ async def dialogflow_webhook(request: Request):
     parameters = query_result.get("parameters", {}) or {}
     query_text = query_result.get("queryText", "") or ""
 
-    # Rescue intro-like queries that were misrouted (including fallbacks)
-    if looks_like_intro(query_text) and intent_name in ("Course_Inquiry", "Info_Query", "Default Fallback Intent"):
-        intro = get_info("InstitutionIntroduction", language_code) or get_admin_redirect(language_code)
-        return {"fulfillmentText": intro}
-
     fulfillment_text = ""
 
     if intent_name == "Course_Inquiry":
         canonical_course_name = parameters.get("coursename")
-        if looks_like_intro(query_text):
-            fulfillment_text = get_info("InstitutionIntroduction", language_code) or get_admin_redirect(language_code)
-            return {"fulfillmentText": fulfillment_text}
 
         if not canonical_course_name:
-            if language_code.startswith('zh'):
-                fulfillment_text = "抱歉，我沒有識別出您詢問的課程名稱。"
-            else:
-                fulfillment_text = "I'm sorry, I didn't catch the name of the course you were asking about."
-        else:
-            display_course_name = format_course_display(canonical_course_name, language_code)
-            course_details = get_course_info(canonical_course_name, language_code)
+            # Let Dialogflow drive slot filling via training; but if it still
+            # misses, provide a helpful, non-heuristic fallback list.
+            fulfillment_text = get_course_list(language_code)
+            return {"fulfillmentText": fulfillment_text}
 
-            if language_code.startswith('en'):
-                fulfillment_text = f"Details for the *{display_course_name}* course: {course_details}"
-            elif language_code == 'zh-hk':
-                fulfillment_text = f"*{display_course_name}* 課程詳情: {course_details}"
-            elif language_code == 'zh-cn':
-                fulfillment_text = f"*{display_course_name}* 课程详情: {course_details}"
-            else:
-                fulfillment_text = f"Details for the *{display_course_name}* course: {course_details}"
+        display_course_name = format_course_display(canonical_course_name, language_code)
+        course_details = get_course_info(canonical_course_name, language_code)
+
+        if language_code.startswith('en'):
+            fulfillment_text = f"Details for the *{display_course_name}* course: {course_details}"
+        elif language_code == 'zh-hk':
+            fulfillment_text = f"*{display_course_name}* 課程詳情: {course_details}"
+        elif language_code == 'zh-cn':
+            fulfillment_text = f"*{display_course_name}* 课程详情: {course_details}"
+        else:
+            fulfillment_text = f"Details for the *{display_course_name}* course: {course_details}"
+
     elif intent_name == "Course_List":
         fulfillment_text = get_course_list(language_code)
 
@@ -134,7 +111,7 @@ async def dialogflow_webhook(request: Request):
     elif intent_name == "Info_Query":
         topic = parameters.get("topic")
         coursename = parameters.get("coursename")
-        answer = get_info("InstitutionIntroduction", language_code) if looks_like_intro(query_text) else get_info(topic, language_code, coursename)
+        answer = get_info(topic, language_code, coursename)
         fulfillment_text = answer or get_admin_redirect(language_code)
 
     else:
