@@ -158,16 +158,30 @@ def _enrollment_process(lang: str) -> Optional[str]:
     bullet = "\n".join([f"- {s}" for s in steps])
     return f"{header}\n{bullet}"
 
-# Map canonical CourseName -> keys in JSON sections where necessary
-COURSE_KEY_MAP = {
+# Separate key maps:
+# - Age/Schedule sections use specific course labels such as "Phonics" and "Language Arts".
+# - Tuition section groups English courses under "English" and Chinese under "中文".
+AGE_SCHEDULE_KEY_MAP = {
     "Playgroups": "Playgroups",
-    "Phonics": "English",  # Fees/sections for English tracks
-    "LanguageArts": "English",  # Use English group where applicable
+    "Phonics": "Phonics",
+    "LanguageArts": "Language Arts",
     "Clevercal": "Clevercal (Math)",
     "Alludio": "Alludio (Games)",
     "ToddlerCharRecognition": "寶寶愛認字(普通話/ 廣東話)",
     "MandarinPinyin": "魔法拼音班",
     "ChineseLanguageArts": "中文語文課(普通話/ 廣東話)",
+    "PrivateClass": "Private class 私人課",
+}
+
+TUITION_KEY_MAP = {
+    "Playgroups": "Playgroups",
+    "Phonics": "English",            # English-track fees
+    "LanguageArts": "English",       # English-track fees
+    "Clevercal": "Clevercal (Math)",
+    "Alludio": "Alludio (Games)",
+    "ToddlerCharRecognition": "中文",
+    "MandarinPinyin": "中文",
+    "ChineseLanguageArts": "中文",
     "PrivateClass": "Private class 私人課",
 }
 
@@ -183,11 +197,11 @@ def _course_age(lang: str, coursename: Optional[str]) -> Optional[str]:
         title = "各課程年齡：" if lang == "zh-hk" else ("各课程年龄：" if lang == "zh-cn" else "Target ages:")
         return f"{title}\n" + "\n".join(lines)
 
-    key = COURSE_KEY_MAP.get(coursename)
-    if not key:
-        return None
+    key = AGE_SCHEDULE_KEY_MAP.get(coursename, coursename)
     val = ages.get(key)
     if not val:
+        # Debug-friendly fallback: try direct canonical name (already done) then bail
+        print(f"[WARN] _course_age: no age found for coursename={coursename} resolved_key={key}", flush=True)
         return None
     if lang == "zh-hk":
         return f"{key} 適合年齡：{val}"
@@ -207,11 +221,10 @@ def _course_schedule(lang: str, coursename: Optional[str]) -> Optional[str]:
         title = "上課時間：" if lang == "zh-hk" else ("上课时间：" if lang == "zh-cn" else "Class schedules:")
         return f"{title}\n" + "\n".join(lines)
 
-    key = COURSE_KEY_MAP.get(coursename)
-    if not key:
-        return None
+    key = AGE_SCHEDULE_KEY_MAP.get(coursename, coursename)
     val = sched.get(key)
     if not val:
+        print(f"[WARN] _course_schedule: no schedule found for coursename={coursename} resolved_key={key}", flush=True)
         return None
     if lang == "zh-hk":
         return f"{key} 上課安排：{val}"
@@ -238,15 +251,17 @@ def _tuition(lang: str, coursename: Optional[str]) -> Optional[str]:
     disclaimer_zh_cn = "备注：以上费用仅供参考，或有调整；以中心最新通知为准。"
 
     if coursename:
-        key = COURSE_KEY_MAP.get(coursename)
-        if key and key in fees:
-            val = fees.get(key)
+        key = TUITION_KEY_MAP.get(coursename, coursename)
+        val = fees.get(key)
+        if val:
             if lang == "zh-hk":
                 return _join_lines([f"{key} 收費：{val}", disclaimer_zh_hk])
             elif lang == "zh-cn":
                 return _join_lines([f"{key} 收费：{val}", disclaimer_zh_cn])
             else:
                 return _join_lines([f"{key} fee: {val}", disclaimer_en])
+        else:
+            print(f"[WARN] _tuition: no tuition found for coursename={coursename} resolved_key={key}", flush=True)
 
     # Otherwise list all
     lines = [f"- {k}: {v}" for k, v in fees.items()]
