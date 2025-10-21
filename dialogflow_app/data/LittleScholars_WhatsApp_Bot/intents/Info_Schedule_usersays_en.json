@@ -1,0 +1,4 @@
+[
+  { "id": "91a2b3c4-d5e6-4776-2c3d-80e1f2a3b7a5", "data": [ { "text": "When is the ", "userDefined": false }, { "text": "Language Arts", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": " class?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
+  { "id": "a2b3c4d5-e6f7-4887-3d4e-91f2a3b4c8b6", "data": [ { "text": "What's your class schedule?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 }
+]

@@ -1,0 +1,4 @@
+[
+  { "id": "5d6e7f80-912a-4332-e8f9-46a7b8c9d361", "data": [ { "text": "英語拼音", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": "幾錢？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+  { "id": "6e7f8091-a2b3-4443-f9a0-57b8c9d0e472", "data": [ { "text": "學費點樣計？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 }
+]

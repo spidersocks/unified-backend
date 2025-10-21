@@ -1,0 +1,15 @@
+{
+  "id": "a1b2c3d4-5678-49ab-9cde-0f1a2b3c4d5e",
+  "name": "Info_Social",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    { "resetContexts": false, "parameters": [], "messages": [
+      { "type": "0", "lang": "en", "speech": ["I'll share our social links."] },
+      { "type": "0", "lang": "zh-hk", "speech": ["我幫您查社交平台資料。"] },
+      { "type": "0", "lang": "zh-cn", "speech": ["我帮您查社交平台资料。"] }
+    ] }
+  ],
+  "priority": 500000,
+  "webhookUsed": true
+}

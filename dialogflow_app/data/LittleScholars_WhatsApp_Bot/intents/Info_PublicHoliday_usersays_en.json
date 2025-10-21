@@ -1,0 +1,4 @@
+[
+  { "id": "f9e1a1a8-2b9e-4a1a-9c2d-7a9e5f1c2a01", "data": [ { "text": "Are you open on public holidays?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
+  { "id": "2a1b7c1d-3e2f-4f8a-8b1c-5d6e7f8a9b02", "data": [ { "text": "What's your holiday schedule?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 }
+]

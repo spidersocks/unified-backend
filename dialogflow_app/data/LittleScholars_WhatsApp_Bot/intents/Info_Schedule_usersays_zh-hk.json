@@ -1,0 +1,4 @@
+[
+  { "id": "b3c4d5e6-f708-4998-4e5f-a2b3c4d5e9c7", "data": [ { "text": "中文語文課", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": "幾時上堂？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+  { "id": "c4d5e6f7-0819-4aa9-5f60-b3c4d5e6f0d8", "data": [ { "text": "上課時間係點？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 }
+]

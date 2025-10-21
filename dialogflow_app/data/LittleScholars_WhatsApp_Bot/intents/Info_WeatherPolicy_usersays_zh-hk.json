@@ -1,0 +1,5 @@
+[
+  { "id": "2f6d0e98-2f6b-42d1-9f4e-2c7b3c07c7b1", "data": [ { "text": "八號風球上唔上堂？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+  { "id": "5d4ce4a4-48c0-4d47-8d62-7d8e3f19f1e2", "data": [ { "text": "黑雨會唔會停課？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
+  { "id": "9c92b1c7-fb31-48c1-8f3f-2e7a2a7e72a0", "data": [ { "text": "天氣安排係點？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 }
+]

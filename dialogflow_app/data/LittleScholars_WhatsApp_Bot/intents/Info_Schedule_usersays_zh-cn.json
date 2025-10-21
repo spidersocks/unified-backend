@@ -1,0 +1,4 @@
+[
+  { "id": "d5e6f708-192a-4bb9-6061-c4d5e6f7a1e9", "data": [ { "text": "中文语文课", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": "什么时候上课？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
+  { "id": "e6f70819-2a3b-4cc9-7172-d5e6f708b2fa", "data": [ { "text": "上课时间是什么？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 }
+]

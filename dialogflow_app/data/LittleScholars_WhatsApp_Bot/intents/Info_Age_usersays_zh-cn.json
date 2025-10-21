@@ -1,0 +1,3 @@
+[
+  { "id": "2a3b4c5d-6e7f-400f-b5c6-192a3b4cf63e", "data": [ { "text": "英语拼音", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": "适合几岁？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 }
+]

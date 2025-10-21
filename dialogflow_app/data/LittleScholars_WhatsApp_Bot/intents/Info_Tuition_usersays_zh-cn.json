@@ -1,0 +1,4 @@
+[
+  { "id": "7f8091a2-b3c4-4554-0a1b-68c9d0e1f583", "data": [ { "text": "英语拼音", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": "多少钱？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
+  { "id": "8091a2b3-c4d5-4665-1b2c-79d0e1f2a694", "data": [ { "text": "学费怎么收？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 }
+]

@@ -1,0 +1,5 @@
+[
+  { "id": "a8c8a2a5-4a16-4c7b-9f31-0a94d1b7cf32", "data": [ { "text": "台风天上课吗？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
+  { "id": "d3a7e82e-1d4a-4e5f-8d7b-50b0f7aeb8f3", "data": [ { "text": "黑雨会停课吗？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
+  { "id": "e1c54d59-6f9a-4c6c-b9d9-2b17b4ddc9b4", "data": [ { "text": "你们的天气安排是什么？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 }
+]
