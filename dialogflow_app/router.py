@@ -28,9 +28,14 @@ async def dialogflow_webhook(request: Request):
         canonical_course_name = parameters.get("coursename")
 
         if not canonical_course_name:
-            # Let Dialogflow drive slot filling via training; but if it still
-            # misses, provide a helpful, non-heuristic fallback list.
-            fulfillment_text = get_course_list(language_code)
+            # Dialogflow should fill the slot via required parameter prompts.
+            # If we reach here without a coursename, provide a minimal defensive message.
+            if language_code.startswith('zh-hk'):
+                fulfillment_text = "請告訴我您想了解哪一門課程。"
+            elif language_code.startswith('zh-cn'):
+                fulfillment_text = "请告诉我您想了解哪一门课程。"
+            else:
+                fulfillment_text = "Please let me know which course you're interested in."
             return {"fulfillmentText": fulfillment_text}
 
         display_course_name = format_course_display(canonical_course_name, language_code)
