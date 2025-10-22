@@ -1,6 +1,6 @@
 # LLM RAG (Bedrock Knowledge Base) – Using Qwen
 
-This module wires FastAPI `/chat` to Amazon Bedrock Knowledge Bases (RAG). It reuses your ContentStore to generate multilingual Markdown into S3, and calls RetrieveAndGenerate with a Bedrock model.
+This module wires FastAPI `/chat` to Amazon Bedrock Knowledge Bases (RAG). It reuses the ContentStore from llm.content_store to generate multilingual Markdown into S3, and calls RetrieveAndGenerate with a Bedrock model.
 
 ## Choose the Knowledge Base type
 

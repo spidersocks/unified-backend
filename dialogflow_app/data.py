@@ -1,8 +1,8 @@
 # Deprecated: logic moved into ContentStore. This module now acts as a thin shim.
 # It preserves existing imports (get_course_info, format_course_display, get_course_list, DISPLAY_NAMES)
-# while delegating to dialogflow_app.content_store.
+# while delegating to llm.content_store.
 
-from dialogflow_app.content_store import (
+from llm.content_store import (
     STORE as _STORE,
     get_course_info,
     get_course_list,

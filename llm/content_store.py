@@ -7,7 +7,7 @@ LANG_EN = "en"
 LANG_ZH_HK = "zh-HK"
 LANG_ZH_CN = "zh-CN"
 
-# Canonical course keys used across the Dialogflow agent
+# Canonical course keys used across the app
 CANONICAL_COURSES = {
     "Playgroups",
     "Phonics",

@@ -3,7 +3,7 @@ import json
 from typing import Optional, Dict
 
 # Prefer the unified ContentStore implementation
-from dialogflow_app.content_store import ContentStore, norm_lang as _norm_lang
+from llm.content_store import ContentStore, norm_lang as _norm_lang
 
 # Optional course display-name map (for nicer localized names) used only in JSON fallback paths
 try:
