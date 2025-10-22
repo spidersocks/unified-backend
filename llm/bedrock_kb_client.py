@@ -1,17 +1,15 @@
 """
 Thin client for Bedrock Knowledge Base RetrieveAndGenerate.
 Notes:
-- We filter by language via metadata. This sample uses S3 object tags (language=...),
-  which many KB setups expose as retrievable metadata. If your KB doesn't surface
-  tags to filters, we automatically fall back to no-filter on empty citations.
-- Works with any Bedrock model that supports RnG, including Qwen (qwen.qwen3-32b-v1:0).
+- We filter by language via metadata when enabled. If your KB doesn't map S3 tags to retrievable
+  attributes yet, disable the filter (KB_DISABLE_LANG_FILTER=true) or map tags in the console.
+- Robust citation parsing handles slight schema differences across regions/versions.
 """
 import uuid
 import boto3
 from typing import Optional, Tuple, List, Dict
 from llm.config import SETTINGS
 
-# Bedrock Agent Runtime for RetrieveAndGenerate
 rag = boto3.client("bedrock-agent-runtime", region_name=SETTINGS.aws_region)
 
 INSTRUCTIONS = {
@@ -37,45 +35,57 @@ def _lang_label(lang: Optional[str]) -> str:
 def _prompt_prefix(lang: str) -> str:
     return f"{INSTRUCTIONS.get(lang, INSTRUCTIONS['en'])}\n\n{STAFF.get(lang, STAFF['en'])}\n"
 
+def _norm_uri(loc: Dict) -> Optional[str]:
+    if not loc:
+        return None
+    # location may be a dict with s3Location.uri or a plain string
+    if isinstance(loc, str):
+        return loc
+    s3 = loc.get("s3Location") or {}
+    if isinstance(s3, dict) and s3.get("uri"):
+        return s3.get("uri")
+    # Some regions return {"type":"S3","s3Location":{...}}
+    if "type" in loc and "s3Location" in loc and isinstance(loc["s3Location"], dict):
+        return loc["s3Location"].get("uri")
+    # Last resort: try a generic 'uri' field
+    return loc.get("uri")
+
 def _parse_citations(cits_raw: List[Dict]) -> List[Dict]:
     citations: List[Dict] = []
     for c in cits_raw or []:
-        for ref in c.get("retrievedReferences", []) or []:
+        refs = c.get("retrievedReferences") or c.get("references") or []
+        for ref in refs or []:
+            uri = _norm_uri(ref.get("location") or {})
             citations.append({
-                "uri": ref.get("location", {}).get("s3Location", {}).get("uri") or ref.get("location"),
+                "uri": uri,
                 "score": ref.get("score"),
-                "metadata": ref.get("metadata", {})
+                "metadata": ref.get("metadata", {}) or {}
             })
-    return citations
+    # Deduplicate empty/None URIs
+    return [c for c in citations if c.get("uri")]
 
 def _apply_no_filter(req: Dict) -> Dict:
-    nofilter_req = req.copy()
-    kb_conf = dict(nofilter_req["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"])
+    nf = dict(req)
+    kb_conf = dict(nf["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"])
     retr_conf = dict(kb_conf.get("retrievalConfiguration", {}))
     vec_conf = dict(retr_conf.get("vectorSearchConfiguration", {}))
     vec_conf.pop("filter", None)
     retr_conf["vectorSearchConfiguration"] = vec_conf
     kb_conf["retrievalConfiguration"] = retr_conf
-    nofilter_req["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"] = kb_conf
-    return nofilter_req
+    nf["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"] = kb_conf
+    return nf
 
 def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optional[str] = None) -> Tuple[str, List[Dict]]:
-    """
-    End-to-end RetrieveAndGenerate with Bedrock KB.
-    Model is selected via SETTINGS.kb_model_arn (set this to Qwen's ARN to use Qwen).
-    If the language filter yields no citations, automatically retries without the filter.
-    """
     if not SETTINGS.kb_id or not SETTINGS.kb_model_arn:
         raise RuntimeError("KB_ID or KB_MODEL_ARN not configured")
 
     lang = _lang_label(language)
     input_text = _prompt_prefix(lang) + "\nUser: " + message
 
-    # Retrieval with language filter
-    vector_search_cfg: Dict = {
-        "numberOfResults": 8,
-        "filter": {"equals": {"key": "language", "value": lang}}
-    }
+    # Retrieval configuration (optionally without language filter)
+    vec_cfg: Dict = {"numberOfResults": 8}
+    if not SETTINGS.kb_disable_lang_filter:
+        vec_cfg["filter"] = {"equals": {"key": "language", "value": lang}}
 
     base_req: Dict = {
         "input": {"text": input_text},
@@ -85,13 +95,11 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
                 "knowledgeBaseId": SETTINGS.kb_id,
                 "modelArn": SETTINGS.kb_model_arn,
                 "retrievalConfiguration": {
-                    "vectorSearchConfiguration": vector_search_cfg
+                    "vectorSearchConfiguration": vec_cfg
                 }
             }
         }
     }
-
-    # Only set a sessionId if the caller provided one; otherwise let Bedrock manage it.
     if session_id:
         base_req["sessionId"] = session_id
 
@@ -99,8 +107,8 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
     answer = (resp.get("output", {}) or {}).get("text", "") or ""
     citations = _parse_citations(resp.get("citations", []) or [])
 
-    # Fallback: retry without language filter if nothing cited (metadata not mapped or empty slice)
-    if not citations:
+    # Fallback: if we had a filter and got no citations, retry without filter
+    if not citations and not SETTINGS.kb_disable_lang_filter:
         resp2 = rag.retrieve_and_generate(**_apply_no_filter(base_req))
         answer2 = (resp2.get("output", {}) or {}).get("text", "") or ""
         cits2 = _parse_citations(resp2.get("citations", []) or [])

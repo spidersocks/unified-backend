@@ -20,6 +20,9 @@ class Settings:
     gen_temperature: float = float(os.environ.get("KB_GEN_TEMPERATURE", "0.2"))
     gen_top_p: float = float(os.environ.get("KB_GEN_TOP_P", "0.9"))
 
+    # Feature flags
+    kb_disable_lang_filter: bool = os.environ.get("KB_DISABLE_LANG_FILTER", "false").lower() in ("1", "true", "yes")
+
     # App behavior
     default_languages = ("en", "zh-HK", "zh-CN")
 
