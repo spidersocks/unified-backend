@@ -12,10 +12,14 @@ from llm.config import SETTINGS
 
 rag = boto3.client("bedrock-agent-runtime", region_name=SETTINGS.aws_region)
 
+# --- NEW STRUCTURED REFUSAL TOKEN ---
+NO_CONTEXT_TOKEN = "[NO_CONTEXT]"
+
 INSTRUCTIONS = {
-    "en": "Strictly answer ONLY using the retrieved context. Be concise (use lists/bullets). If the context is insufficient, you MUST output an empty string, unless you are asking a short clarifying question. DO NOT apologize, explain lack of information, or ramble.",
-    "zh-HK": "請嚴格只根據檢索到的內容回答。請精簡（使用列表/要點）。如果內容不足以回答問題，除非您提出簡短的澄清問題，否則您必須輸出一個空字符串。請勿道歉、解釋信息不足或冗長回答。",
-    "zh-CN": "请严格只根据检索到的内容回答。请简洁（使用列表/要点）。如果内容不足以回答问题，除非您提出簡短的澄清問題，否則您必須輸出一個空字符串。請勿道歉、解釋信息不足或冗長回答。"
+    # Instruction changed to output the specific token instead of an empty string
+    "en": f"Strictly answer ONLY using the retrieved context. Be concise (use lists/bullets). If the context is insufficient, you MUST output the single token: {NO_CONTEXT_TOKEN}. DO NOT apologize, explain lack of information, or ramble.",
+    "zh-HK": f"請嚴格只根據檢索到的內容回答。請精簡（使用列表/要點）。如果內容不足以回答問題，您必須輸出單一標記: {NO_CONTEXT_TOKEN}。請勿道歉、解釋信息不足或冗長回答。",
+    "zh-CN": f"请严格只根据检索到的内容回答。请简洁（使用列表/要点）。如果内容不足以回答问题，您必须输出单一标记: {NO_CONTEXT_TOKEN}。请勿道歉、解释信息不足或冗长回答。"
 }
 
 STAFF = {
@@ -24,28 +28,9 @@ STAFF = {
     "zh-CN": "如有需要，请联系职员：电话 +852 2537 9519；WhatsApp +852 5118 2819；电邮 info@decoders-ls.com",
 }
 
-# List of phrases that indicate the model failed to find an answer, 
-# which must be filtered out to enforce silence.
+# The list now only contains the structured token, making the filter deterministic.
 REFUSAL_PHRASES = [
-    # Expanded English Refusals
-    "no information provided", 
-    "no information is provided", 
-    "no information is available", # <-- ADDED to catch the latest variant
-    "i cannot answer based on the provided context", 
-    "i cannot find the answer in the context",
-    "based on the provided context, i cannot answer",
-    "the context does not contain", 
-    "i am unable to provide an answer",
-    
-    # Chinese (HK) Refusals
-    "根據提供的內容，我無法回答", 
-    "檢索到的內容中沒有相關信息", 
-    "沒有提供相關信息",
-    
-    # Chinese (CN) Refusals
-    "根据提供的内容，我无法回答", 
-    "检索到的内容中没有相关信息", 
-    "没有提供相关信息",
+    NO_CONTEXT_TOKEN.lower(),
 ]
 
 def _lang_label(lang: Optional[str]) -> str:
@@ -118,16 +103,16 @@ def _maybe_log(label: str, payload: Any):
             pass
 
 def _filter_refusal(answer: str) -> str:
-    """Checks if the answer is a refusal phrase and returns an empty string if so."""
+    """Checks if the answer is the structured refusal token and returns an empty string if so."""
     stripped_answer = answer.strip()
     if not stripped_answer:
         return ""
         
     answer_lower = stripped_answer.lower()
     
-    # Check if the answer starts with or is equal to a known refusal phrase
+    # Check if the answer starts with the unique refusal token
     if any(answer_lower.startswith(phrase) for phrase in REFUSAL_PHRASES):
-        _maybe_log("filter_applied", f"Refusal detected: '{stripped_answer}' -> Silence")
+        _maybe_log("filter_applied", f"Refusal detected (structured token): '{stripped_answer}' -> Silence")
         return ""
         
     return stripped_answer
