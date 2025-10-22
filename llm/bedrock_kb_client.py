@@ -13,9 +13,9 @@ from llm.config import SETTINGS
 rag = boto3.client("bedrock-agent-runtime", region_name=SETTINGS.aws_region)
 
 INSTRUCTIONS = {
-    "en": "Answer ONLY using the retrieved context. If unsure, ask a short clarifying question or share staff contact. Be concise, use bullet points for lists.",
-    "zh-HK": "請只根據檢索到的內容回答。如不確定，請先提出簡短問題澄清，或提供職員聯絡。請精簡、列表呈現。",
-    "zh-CN": "请只根据检索到的内容回答。如不确定，请先提出简短问题澄清，或提供职员联系。请简洁、用要点列出。"
+    "en": "Strictly answer ONLY using the retrieved context. Be concise (use lists/bullets). If the context is insufficient, you MUST output an empty string, unless you are asking a short clarifying question. DO NOT apologize, explain lack of information, or ramble.",
+    "zh-HK": "請嚴格只根據檢索到的內容回答。請精簡（使用列表/要點）。如果內容不足以回答問題，除非您提出簡短的澄清問題，否則您必須輸出一個空字符串。請勿道歉、解釋信息不足或冗長回答。",
+    "zh-CN": "请严格只根据检索到的内容回答。请简洁（使用列表/要点）。如果内容不足以回答问题，除非您提出简短的澄清问题，否则您必须输出一个空字符串。请勿道歉、解释信息不足或冗长回答。"
 }
 
 STAFF = {
