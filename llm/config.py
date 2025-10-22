@@ -23,6 +23,10 @@ class Settings:
     # Feature flags
     kb_disable_lang_filter: bool = os.environ.get("KB_DISABLE_LANG_FILTER", "false").lower() in ("1", "true", "yes")
 
+    # Debugging
+    debug_kb: bool = os.environ.get("DEBUG_KB", "false").lower() in ("1", "true", "yes")
+    debug_kb_log_prompt: bool = os.environ.get("DEBUG_KB_LOG_PROMPT", "false").lower() in ("1", "true", "yes")
+
     # App behavior
     default_languages = ("en", "zh-HK", "zh-CN")
 

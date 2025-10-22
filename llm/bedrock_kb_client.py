@@ -4,9 +4,10 @@ Notes:
 - We filter by language via metadata when enabled. If your KB doesn't map S3 tags to retrievable
   attributes yet, disable the filter (KB_DISABLE_LANG_FILTER=true) or map tags in the console.
 - Robust citation parsing handles slight schema differences across regions/versions.
+- Optional debug: set DEBUG_KB=true to emit server logs; pass debug=true to /chat to receive a debug object.
 """
 import boto3
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, Any
 from llm.config import SETTINGS
 
 rag = boto3.client("bedrock-agent-runtime", region_name=SETTINGS.aws_region)
@@ -46,10 +47,8 @@ def _norm_uri(loc: Dict) -> Optional[str]:
     # 3) {"s3Location":{"bucketArn":"arn:aws:s3:::bucket","key":"key"}}
     s3 = loc.get("s3Location") or loc.get("S3Location") or {}
     if isinstance(s3, dict):
-        # Direct uri present
         if s3.get("uri"):
             return s3["uri"]
-        # Build uri from bucket + key (or bucketArn + key)
         bucket = (
             s3.get("bucketName")
             or s3.get("bucket")
@@ -57,21 +56,17 @@ def _norm_uri(loc: Dict) -> Optional[str]:
             or s3.get("bucketArn")
         )
         key = s3.get("key") or s3.get("objectKey") or s3.get("Key") or s3.get("path")
-        if bucket:
-            # If it’s an ARN, extract the name after ':::'
-            if isinstance(bucket, str) and "arn:aws:s3:::" in bucket:
-                bucket = bucket.split(":::")[-1]
+        if bucket and isinstance(bucket, str) and "arn:aws:s3:::" in bucket:
+            bucket = bucket.split(":::")[-1]
         if bucket and key:
             return f"s3://{bucket}/{key}"
 
-    # Sometimes bucket/key live at top level with type hint
     if loc.get("type") == "S3":
         bucket = loc.get("bucketName") or loc.get("bucket")
         key = loc.get("key") or loc.get("objectKey")
         if bucket and key:
             return f"s3://{bucket}/{key}"
 
-    # Last resort
     return loc.get("uri")
 
 def _parse_citations(cits_raw: List[Dict]) -> List[Dict]:
@@ -98,12 +93,42 @@ def _apply_no_filter(req: Dict) -> Dict:
     nf["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"] = kb_conf
     return nf
 
-def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optional[str] = None) -> Tuple[str, List[Dict]]:
+def _maybe_log(label: str, payload: Any):
+    if SETTINGS.debug_kb:
+        try:
+            print(f"[KB DEBUG] {label}: {payload}", flush=True)
+        except Exception:
+            # Never let logging break the flow
+            pass
+
+def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optional[str] = None, debug: bool = False) -> Tuple[str, List[Dict], Dict[str, Any]]:
+    """
+    Returns (answer, citations, debug_info).
+    - debug_info is empty unless debug=True or DEBUG_KB=true.
+    """
+    debug_info: Dict[str, Any] = {
+        "region": SETTINGS.aws_region,
+        "kb_id": SETTINGS.kb_id[:12] + "…" if SETTINGS.kb_id else "",
+        "model": SETTINGS.kb_model_arn.split("/")[-1] if SETTINGS.kb_model_arn else "",
+        "lang_filter_enabled": not SETTINGS.kb_disable_lang_filter,
+        "session_provided": bool(session_id),
+        "message_chars": len(message or ""),
+        "error": None,
+        "attempts": []
+    }
+
     if not SETTINGS.kb_id or not SETTINGS.kb_model_arn:
-        raise RuntimeError("KB_ID or KB_MODEL_ARN not configured")
+        err = "KB_ID or KB_MODEL_ARN not configured"
+        debug_info["error"] = err
+        return "", [], debug_info
 
     lang = _lang_label(language)
-    input_text = _prompt_prefix(lang) + "\nUser: " + message
+    prefix = _prompt_prefix(lang)
+    input_text = prefix + "\nUser: " + (message or "")
+    if SETTINGS.debug_kb_log_prompt:
+        _maybe_log("prompt", input_text)
+    else:
+        _maybe_log("prompt_preview", input_text[:200] + ("…" if len(input_text) > 200 else ""))
 
     vec_cfg: Dict = {"numberOfResults": 8}
     if not SETTINGS.kb_disable_lang_filter:
@@ -125,15 +150,42 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
     if session_id:
         base_req["sessionId"] = session_id
 
-    resp = rag.retrieve_and_generate(**base_req)
-    answer = (resp.get("output", {}) or {}).get("text", "") or ""
-    citations = _parse_citations(resp.get("citations", []) or [])
+    try:
+        _maybe_log("request.vectorSearchConfiguration", vec_cfg)
+        resp = rag.retrieve_and_generate(**base_req)
+        answer = (resp.get("output", {}) or {}).get("text", "") or ""
+        raw_cits = resp.get("citations", []) or []
+        parsed = _parse_citations(raw_cits)
+        attempt = {
+            "used_filter": "filter" in vec_cfg,
+            "raw_citation_blocks": len(raw_cits),
+            "parsed_citations": len(parsed),
+            "first_uris": [c.get("uri") for c in parsed[:3]]
+        }
+        debug_info["attempts"].append(attempt)
+        _maybe_log("response.first_attempt", attempt)
 
-    if not citations and not SETTINGS.kb_disable_lang_filter:
-        resp2 = rag.retrieve_and_generate(**_apply_no_filter(base_req))
-        answer2 = (resp2.get("output", {}) or {}).get("text", "") or ""
-        cits2 = _parse_citations(resp2.get("citations", []) or [])
-        if answer2:
-            answer, citations = answer2, cits2
+        # Fallback without filter if no citations and filter was used
+        if not parsed and not SETTINGS.kb_disable_lang_filter:
+            resp2 = rag.retrieve_and_generate(**_apply_no_filter(base_req))
+            answer2 = (resp2.get("output", {}) or {}).get("text", "") or ""
+            raw2 = resp2.get("citations", []) or []
+            parsed2 = _parse_citations(raw2)
+            attempt2 = {
+                "used_filter": False,
+                "raw_citation_blocks": len(raw2),
+                "parsed_citations": len(parsed2),
+                "first_uris": [c.get("uri") for c in parsed2[:3]]
+            }
+            debug_info["attempts"].append(attempt2)
+            _maybe_log("response.second_attempt", attempt2)
+            if answer2:
+                return answer2.strip(), parsed2, (debug_info if (debug or SETTINGS.debug_kb) else {})
 
-    return answer.strip(), citations
+        return answer.strip(), parsed, (debug_info if (debug or SETTINGS.debug_kb) else {})
+
+    except Exception as e:
+        debug_info["error"] = f"{type(e).__name__}: {e}"
+        _maybe_log("exception", debug_info["error"])
+        # Return empty answer so the caller can decide how to format
+        return "", [], (debug_info if (debug or SETTINGS.debug_kb) else {})
