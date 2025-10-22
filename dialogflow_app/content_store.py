@@ -66,11 +66,13 @@ class ContentStore:
         self.tuition_groups = pd.DataFrame()          # group_key,en_label,zh-HK_label,zh-CN_label,en_value,zh-HK_value,zh-CN_value
         self.course_tuition_map = pd.DataFrame()      # course_key,group_key
         self.enrollment_steps = pd.DataFrame()        # step_number,en,zh-HK,zh-CN
-        self.policy_absence = pd.DataFrame()          # key,en,zh-HK,zh-CN
-        self.policy_refund = pd.DataFrame()           # key,en,zh-HK,zh-CN
+
+        # IMPORTANT: Use df_ prefix to avoid name collisions with methods
+        self.df_policy_absence = pd.DataFrame()       # key,en,zh-HK,zh-CN
+        self.df_policy_refund = pd.DataFrame()        # key,en,zh-HK,zh-CN
         self.common_objections = pd.DataFrame()       # key,en,zh-HK,zh-CN
-        self.promotions = pd.DataFrame()              # key,en,zh-HK,zh-CN
-        self.success_stories = pd.DataFrame()         # key,en,zh-HK,zh-CN
+        self.df_promotions = pd.DataFrame()           # key,en,zh-HK,zh-CN
+        self.df_success_stories = pd.DataFrame()      # key,en,zh-HK,zh-CN
 
         # New: Course descriptions (migrated from dialogflow_app/data.py)
         # Schema: canonical_name,en,zh-HK,zh-CN
@@ -103,11 +105,11 @@ class ContentStore:
         self.tuition_groups = load("tuition_groups")
         self.course_tuition_map = load("course_tuition_map")
         self.enrollment_steps = load("enrollment_steps")
-        self.policy_absence = load("policy_absence")
-        self.policy_refund = load("policy_refund")
+        self.df_policy_absence = load("policy_absence")
+        self.df_policy_refund = load("policy_refund")
         self.common_objections = load("common_objections")
-        self.promotions = load("promotions")
-        self.success_stories = load("success_stories")
+        self.df_promotions = load("promotions")
+        self.df_success_stories = load("success_stories")
         # New: from catalog section "course_descriptions"
         self.course_descriptions = load("course_descriptions")
 
@@ -385,7 +387,7 @@ class ContentStore:
         return f"{header}\n" + "\n".join(steps)
 
     def policy_absence_makeup(self, lang: str) -> Optional[str]:
-        if self.policy_absence.empty:
+        if self.df_policy_absence.empty:
             return None
         col = self._lang_col(lang)
         order = [
@@ -396,7 +398,7 @@ class ContentStore:
         ]
         lines = []
         for k in order:
-            rows = self.policy_absence[self.policy_absence["key"] == k]
+            rows = self.df_policy_absence[self.df_policy_absence["key"] == k]
             if rows.empty or col not in rows.columns:
                 continue
             txt = str(rows.iloc[0][col]).strip()
@@ -408,13 +410,13 @@ class ContentStore:
         return f"{title}\n" + "\n".join(lines)
 
     def policy_refund(self, lang: str) -> Optional[str]:
-        if self.policy_refund.empty:
+        if self.df_policy_refund.empty:
             return None
         col = self._lang_col(lang)
         order = ["RefundPolicy", "ContinuationAssumption", "WithdrawalNotice", "ClassTransferInquiry"]
         lines = []
         for k in order:
-            rows = self.policy_refund[self.policy_refund["key"] == k]
+            rows = self.df_policy_refund[self.df_policy_refund["key"] == k]
             if rows.empty or col not in rows.columns:
                 continue
             txt = str(rows.iloc[0][col]).strip()
@@ -439,19 +441,19 @@ class ContentStore:
         return f"{title}\n- {val}"
 
     def promotions(self, lang: str) -> Optional[str]:
-        if self.promotions.empty:
+        if self.df_promotions.empty:
             return None
         col = self._lang_col(lang)
         # single row or multiple; concatenate
-        vals = [str(r.get(col, "")).strip() for _, r in self.promotions.iterrows() if str(r.get(col, "")).strip()]
+        vals = [str(r.get(col, "")).strip() for _, r in self.df_promotions.iterrows() if str(r.get(col, "")).strip()]
         return "\n".join(vals) if vals else None
 
     def success_stories(self, lang: str) -> Optional[str]:
-        if self.success_stories.empty:
+        if self.df_success_stories.empty:
             return None
         col = self._lang_col(lang)
         lines = []
-        for _, r in self.success_stories.iterrows():
+        for _, r in self.df_success_stories.iterrows():
             key = str(r.get("key", "")).strip()
             val = str(r.get(col, "")).strip()
             if key and val:
