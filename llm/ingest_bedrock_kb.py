@@ -1,28 +1,75 @@
 """
 Emit multilingual, topic-scoped Markdown docs from the ContentStore and upload to S3
-for Bedrock Knowledge Base ingestion. Uses S3 object tags to label language/type/course.
+for Bedrock Knowledge Base ingestion. Also writes sidecar metadata files (*.metadata.json)
+to expose filterable attributes (language/type/canonical) without needing data source mappings.
 
 Run:
   INFO_SHEET_CATALOG_URL=... KB_S3_BUCKET=... KB_S3_PREFIX=... KB_ID=... KB_MODEL_ARN=... \
   AWS_REGION=... python -m llm.ingest_bedrock_kb
 """
 import sys
+import json
 import boto3
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from llm.config import SETTINGS
 from dialogflow_app.content_store import ContentStore, norm_lang, CANONICAL_COURSES
 
 s3 = boto3.client("s3", region_name=SETTINGS.aws_region)
 
+def _put_object(bucket: str, key: str, body: bytes, content_type: str, tags: Optional[str] = None):
+    params = {
+        "Bucket": bucket,
+        "Key": key,
+        "Body": body,
+        "ContentType": content_type,
+    }
+    if tags:
+        params["Tagging"] = tags
+    s3.put_object(**params)
+
 def _put_md(key: str, body: str, tags: str):
-    s3.put_object(
-        Bucket=SETTINGS.kb_s3_bucket,
-        Key=key,
-        Body=body.encode("utf-8"),
-        ContentType="text/markdown; charset=utf-8",
-        Tagging=tags
+    _put_object(
+        SETTINGS.kb_s3_bucket,
+        key,
+        body.encode("utf-8"),
+        "text/markdown; charset=utf-8",
+        tags,
     )
     print(f"[UPLOAD] s3://{SETTINGS.kb_s3_bucket}/{key} tags={tags}")
+
+def _sidecar_key(doc_key: str) -> str:
+    # e.g., courses/ChineseLanguageArts.md -> courses/ChineseLanguageArts.md.metadata.json
+    return f"{doc_key}.metadata.json"
+
+def _meta_attr_string(value: str, include: bool = True) -> dict:
+    return {"value": {"type": "STRING", "stringValue": value}, "includeForEmbedding": include}
+
+def _put_metadata_json(doc_key: str, language: str, type_value: str, canonical: Optional[str] = None, extra: Optional[dict] = None):
+    """
+    Write <doc_key>.metadata.json next to the source document with attributes Bedrock KB will ingest.
+    """
+    attrs = {
+        "language": _meta_attr_string(language, True),
+        "type": _meta_attr_string(type_value, True),
+    }
+    if canonical:
+        attrs["canonical"] = _meta_attr_string(canonical, True)
+    if extra:
+        # Allow callers to pass any additional attributes, each as a simple string
+        for k, v in extra.items():
+            if v is None:
+                continue
+            attrs[k] = _meta_attr_string(str(v), True)
+
+    payload = {"metadataAttributes": attrs}
+    meta_key = _sidecar_key(doc_key)
+    _put_object(
+        SETTINGS.kb_s3_bucket,
+        meta_key,
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        "application/json",
+    )
+    print(f"[META]   s3://{SETTINGS.kb_s3_bucket}/{meta_key} attrs={list(attrs.keys())}")
 
 def _h1(txt: str) -> str:
     return f"# {txt}\n\n"
@@ -93,9 +140,9 @@ def build_course_doc(store: ContentStore, canonical: str, lang: str) -> Optional
         ]
     return "".join(parts)
 
-def build_policy_doc(store: ContentStore, lang: str) -> List[tuple[str, str]]:
+def build_policy_doc(store: ContentStore, lang: str) -> List[Tuple[str, str]]:
     L = _lang_label(lang)
-    out: List[tuple[str, str]] = []
+    out: List[Tuple[str, str]] = []
 
     intro = store.institution_intro(L)
     if intro:
@@ -139,20 +186,42 @@ def main():
 
     for L in langs:
         lang_dir = _lang_label(L)
+
+        # Courses
         for course in sorted(CANONICAL_COURSES):
             doc = build_course_doc(store, course, L)
             if not doc:
                 continue
-            key = f"{SETTINGS.kb_s3_prefix}/{lang_dir}/courses/{course}.md"
+            rel = f"{SETTINGS.kb_s3_prefix}/{lang_dir}/courses/{course}.md"
             tags = f"language={lang_dir}&type=course&canonical={course}"
-            _put_md(key, doc, tags)
+            _put_md(rel, doc, tags)
+            # Sidecar metadata
+            _put_metadata_json(
+                rel,
+                language=lang_dir,
+                type_value="course",
+                canonical=course,
+                extra={"folder": "courses"}
+            )
 
+        # Non-course policy/organization/marketing docs
         for rel_key, md in build_policy_doc(store, L):
-            key = f"{SETTINGS.kb_s3_prefix}/{lang_dir}/{rel_key}"
-            tags = f"language={lang_dir}&type={rel_key.split('/')[0]}"
-            _put_md(key, md, tags)
+            rel = f"{SETTINGS.kb_s3_prefix}/{lang_dir}/{rel_key}"
+            top_folder = rel_key.split("/")[0]  # institution | policies | marketing
+            typemap = {"institution": "institution", "policies": "policy", "marketing": "marketing"}
+            type_value = typemap.get(top_folder, top_folder)
+            canonical = rel_key.split("/")[-1].replace(".md", "")  # e.g., contact, absence_makeup
+            tags = f"language={lang_dir}&type={type_value}&canonical={canonical}"
+            _put_md(rel, md, tags)
+            _put_metadata_json(
+                rel,
+                language=lang_dir,
+                type_value=type_value,
+                canonical=canonical,
+                extra={"folder": top_folder}
+            )
 
-    print("[DONE] Upload complete. If your KB is not auto-syncing, trigger a sync now.")
+    print("[DONE] Upload complete. Trigger a KB sync/ingestion so Bedrock reads the metadata files.")
 
 if __name__ == "__main__":
     main()
