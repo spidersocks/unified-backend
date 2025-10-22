@@ -27,3 +27,5 @@ temp/
 # Use the wildcard form so the negation below can re-include the single file.
 dialogflow_app/data/*
 !dialogflow_app/data/little_scholars_info.json
+
+content/*

@@ -15,7 +15,7 @@ rag = boto3.client("bedrock-agent-runtime", region_name=SETTINGS.aws_region)
 INSTRUCTIONS = {
     "en": "Strictly answer ONLY using the retrieved context. Be concise (use lists/bullets). If the context is insufficient, you MUST output an empty string, unless you are asking a short clarifying question. DO NOT apologize, explain lack of information, or ramble.",
     "zh-HK": "請嚴格只根據檢索到的內容回答。請精簡（使用列表/要點）。如果內容不足以回答問題，除非您提出簡短的澄清問題，否則您必須輸出一個空字符串。請勿道歉、解釋信息不足或冗長回答。",
-    "zh-CN": "请严格只根据检索到的内容回答。请简洁（使用列表/要点）。如果内容不足以回答问题，除非您提出简短的澄清问题，否则您必须输出一个空字符串。请勿道歉、解释信息不足或冗长回答。"
+    "zh-CN": "请严格只根据检索到的内容回答。请简洁（使用列表/要点）。如果内容不足以回答问题，除非您提出簡短的澄清問題，否則您必須輸出一個空字符串。請勿道歉、解釋信息不足或冗長回答。"
 }
 
 STAFF = {
@@ -29,11 +29,12 @@ STAFF = {
 REFUSAL_PHRASES = [
     # Expanded English Refusals
     "no information provided", 
-    "no information is provided", # Catches the user's specific example start
+    "no information is provided", 
+    "no information is available", # <-- ADDED to catch the latest variant
     "i cannot answer based on the provided context", 
     "i cannot find the answer in the context",
     "based on the provided context, i cannot answer",
-    "the context does not contain", # New generic refusal pattern
+    "the context does not contain", 
     "i am unable to provide an answer",
     
     # Chinese (HK) Refusals
