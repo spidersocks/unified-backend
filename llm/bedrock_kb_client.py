@@ -24,6 +24,21 @@ STAFF = {
     "zh-CN": "如有需要，请联系职员：电话 +852 2537 9519；WhatsApp +852 5118 2819；电邮 info@decoders-ls.com",
 }
 
+# List of phrases that indicate the model failed to find an answer, 
+# which must be filtered out to enforce silence.
+REFUSAL_PHRASES = [
+    "no information provided", 
+    "i cannot answer based on the provided context", 
+    "i cannot find the answer in the context",
+    "based on the provided context, i cannot answer",
+    "根據提供的內容，我無法回答", 
+    "檢索到的內容中沒有相關信息", 
+    "沒有提供相關信息",
+    "根据提供的内容，我无法回答", 
+    "检索到的内容中没有相关信息", 
+    "没有提供相关信息",
+]
+
 def _lang_label(lang: Optional[str]) -> str:
     l = (lang or "").lower()
     if l.startswith("zh-hk"):
@@ -93,6 +108,21 @@ def _maybe_log(label: str, payload: Any):
         except Exception:
             pass
 
+def _filter_refusal(answer: str) -> str:
+    """Checks if the answer is a refusal phrase and returns an empty string if so."""
+    stripped_answer = answer.strip()
+    if not stripped_answer:
+        return ""
+        
+    answer_lower = stripped_answer.lower()
+    
+    # Check if the answer starts with or is equal to a known refusal phrase
+    if any(answer_lower.startswith(phrase) for phrase in REFUSAL_PHRASES):
+        _maybe_log("filter_applied", f"Refusal detected: '{stripped_answer}' -> Silence")
+        return ""
+        
+    return stripped_answer
+
 def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optional[str] = None, debug: bool = False) -> Tuple[str, List[Dict], Dict[str, Any]]:
     """
     Returns (answer, citations, debug_info).
@@ -146,6 +176,10 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
         _maybe_log("request.vectorSearchConfiguration", vec_cfg)
         resp = rag.retrieve_and_generate(**base_req)
         answer = (resp.get("output", {}) or {}).get("text", "") or ""
+        
+        # Apply strict filtering to the answer
+        answer = _filter_refusal(answer)
+        
         raw_cits = resp.get("citations", []) or []
         parsed = _parse_citations(raw_cits)
         attempt = {
@@ -161,6 +195,10 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
         if not parsed and not SETTINGS.kb_disable_lang_filter:
             resp2 = rag.retrieve_and_generate(**_apply_no_filter(base_req))
             answer2 = (resp2.get("output", {}) or {}).get("text", "") or ""
+            
+            # Apply strict filtering to the fallback answer
+            answer2 = _filter_refusal(answer2)
+            
             raw2 = resp2.get("citations", []) or []
             parsed2 = _parse_citations(raw2)
             attempt2 = {
@@ -171,10 +209,11 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
             }
             debug_info["attempts"].append(attempt2)
             _maybe_log("response.second_attempt", attempt2)
+            
             if answer2:
-                return answer2.strip(), parsed2, (debug_info if (debug or SETTINGS.debug_kb) else {})
+                return answer2, parsed2, (debug_info if (debug or SETTINGS.debug_kb) else {})
 
-        return answer.strip(), parsed, (debug_info if (debug or SETTINGS.debug_kb) else {})
+        return answer, parsed, (debug_info if (debug or SETTINGS.debug_kb) else {})
 
     except Exception as e:
         debug_info["error"] = f"{type(e).__name__}: {e}"
