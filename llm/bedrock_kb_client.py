@@ -77,13 +77,6 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
         "filter": {"equals": {"key": "language", "value": lang}}
     }
 
-    # Optional generation/inference config (works with Qwen on Bedrock)
-    inference_cfg: Dict = {
-        "temperature": SETTINGS.gen_temperature,
-        "topP": SETTINGS.gen_top_p,
-        "maxTokens": SETTINGS.gen_max_tokens
-    }
-
     base_req: Dict = {
         "input": {"text": input_text},
         "retrieveAndGenerateConfiguration": {
@@ -96,8 +89,7 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
                 }
             }
         },
-        "sessionId": session_id or str(uuid.uuid4()),
-        "inferenceConfig": inference_cfg
+        "sessionId": session_id or str(uuid.uuid4())
     }
 
     resp = rag.retrieve_and_generate(**base_req)
