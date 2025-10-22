@@ -4,14 +4,12 @@ for Bedrock Knowledge Base ingestion. Uses S3 object tags to label language/type
 
 Run:
   INFO_SHEET_CATALOG_URL=... KB_S3_BUCKET=... KB_S3_PREFIX=... KB_ID=... KB_MODEL_ARN=... \
-  AWS_REGION=... python -m llm_agent.ingest_bedrock_kb
+  AWS_REGION=... python -m llm.ingest_bedrock_kb
 """
-import io
 import sys
-import time
 import boto3
 from typing import Optional, List
-from llm_agent.config import SETTINGS
+from llm.config import SETTINGS
 from dialogflow_app.content_store import ContentStore, norm_lang, CANONICAL_COURSES
 
 s3 = boto3.client("s3", region_name=SETTINGS.aws_region)
@@ -22,15 +20,12 @@ def _put_md(key: str, body: str, tags: str):
         Key=key,
         Body=body.encode("utf-8"),
         ContentType="text/markdown; charset=utf-8",
-        Tagging=tags  # e.g. "language=zh-HK&type=course&canonical=Phonics"
+        Tagging=tags
     )
     print(f"[UPLOAD] s3://{SETTINGS.kb_s3_bucket}/{key} tags={tags}")
 
 def _h1(txt: str) -> str:
     return f"# {txt}\n\n"
-
-def _h2(txt: str) -> str:
-    return f"## {txt}\n\n"
 
 def _sec(name: str, txt: Optional[str]) -> str:
     return f"### {name}\n{txt}\n\n" if txt else ""
@@ -46,9 +41,6 @@ def _guess_display(store: ContentStore, canonical: str, lang: str) -> str:
         return canonical
 
 def build_course_doc(store: ContentStore, canonical: str, lang: str) -> Optional[str]:
-    """
-    Build a Markdown doc for a single course in one language with clear sections.
-    """
     L = _lang_label(lang)
     title = _guess_display(store, canonical, L)
 
@@ -58,7 +50,6 @@ def build_course_doc(store: ContentStore, canonical: str, lang: str) -> Optional
     size = store.class_size_for_course(canonical, L)
     fee = store.tuition_for_course(canonical, L)
 
-    # Clean "X: value" headers for age/schedule/etc. Keep only the value lines after colon.
     def after_colon(s: Optional[str]) -> Optional[str]:
         if not s:
             return s
@@ -103,10 +94,6 @@ def build_course_doc(store: ContentStore, canonical: str, lang: str) -> Optional
     return "".join(parts)
 
 def build_policy_doc(store: ContentStore, lang: str) -> List[tuple[str, str]]:
-    """
-    Build policy/intro/contact docs for one language.
-    Returns list of (key, markdown_text).
-    """
     L = _lang_label(lang)
     out: List[tuple[str, str]] = []
 
@@ -152,7 +139,6 @@ def main():
 
     for L in langs:
         lang_dir = _lang_label(L)
-        # Courses
         for course in sorted(CANONICAL_COURSES):
             doc = build_course_doc(store, course, L)
             if not doc:
@@ -161,7 +147,6 @@ def main():
             tags = f"language={lang_dir}&type=course&canonical={course}"
             _put_md(key, doc, tags)
 
-        # Policies / intro / contact / marketing
         for rel_key, md in build_policy_doc(store, L):
             key = f"{SETTINGS.kb_s3_prefix}/{lang_dir}/{rel_key}"
             tags = f"language={lang_dir}&type={rel_key.split('/')[0]}"

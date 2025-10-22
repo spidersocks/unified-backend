@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
-from llm_agent.bedrock_kb_client import chat_with_kb
+from llm.bedrock_kb_client import chat_with_kb
 
 router = APIRouter(prefix="/chat", tags=["LLM Chat (Bedrock KB)"])
 
@@ -16,7 +16,6 @@ class ChatResponse(BaseModel):
 
 def _guess_lang(s: str) -> str:
     if any("\u4e00" <= ch <= "\u9fff" for ch in s):
-        # default Traditional for HK
         return "zh-HK"
     return "en"
 
