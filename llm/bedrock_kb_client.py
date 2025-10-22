@@ -40,11 +40,6 @@ def _norm_uri(loc: Dict) -> Optional[str]:
         return None
     if isinstance(loc, str):
         return loc
-
-    # Common shapes:
-    # 1) {"s3Location":{"uri":"s3://bucket/key"}}
-    # 2) {"type":"S3","s3Location":{"bucketName":"bucket","key":"key"}}
-    # 3) {"s3Location":{"bucketArn":"arn:aws:s3:::bucket","key":"key"}}
     s3 = loc.get("s3Location") or loc.get("S3Location") or {}
     if isinstance(s3, dict):
         if s3.get("uri"):
@@ -60,13 +55,11 @@ def _norm_uri(loc: Dict) -> Optional[str]:
             bucket = bucket.split(":::")[-1]
         if bucket and key:
             return f"s3://{bucket}/{key}"
-
     if loc.get("type") == "S3":
         bucket = loc.get("bucketName") or loc.get("bucket")
         key = loc.get("key") or loc.get("objectKey")
         if bucket and key:
             return f"s3://{bucket}/{key}"
-
     return loc.get("uri")
 
 def _parse_citations(cits_raw: List[Dict]) -> List[Dict]:
@@ -98,7 +91,6 @@ def _maybe_log(label: str, payload: Any):
         try:
             print(f"[KB DEBUG] {label}: {payload}", flush=True)
         except Exception:
-            # Never let logging break the flow
             pass
 
 def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optional[str] = None, debug: bool = False) -> Tuple[str, List[Dict], Dict[str, Any]]:
@@ -187,5 +179,36 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
     except Exception as e:
         debug_info["error"] = f"{type(e).__name__}: {e}"
         _maybe_log("exception", debug_info["error"])
-        # Return empty answer so the caller can decide how to format
         return "", [], (debug_info if (debug or SETTINGS.debug_kb) else {})
+
+def debug_retrieve_only(message: str, language: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Call Bedrock 'retrieve' directly to inspect raw hits from the KB without generation.
+    Returns a dict with raw results and normalized URIs.
+    """
+    lang = _lang_label(language)
+    vec_cfg: Dict = {"numberOfResults": 8}
+    if not SETTINGS.kb_disable_lang_filter:
+        vec_cfg["filter"] = {"equals": {"key": "language", "value": lang}}
+
+    req = {
+        "knowledgeBaseId": SETTINGS.kb_id,
+        "retrievalQuery": {"text": message},
+        "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
+    }
+    out: Dict[str, Any] = {"used_filter": "filter" in vec_cfg, "raw_results": [], "uris": []}
+    try:
+        resp = rag.retrieve(**req)
+        results = resp.get("retrievalResults", []) or []
+        out["raw_results"] = results
+        uris: List[str] = []
+        for r in results:
+            uri = _norm_uri(r.get("location") or {}) or _norm_uri((r.get("content") or {}).get("location") or {})
+            if uri:
+                uris.append(uri)
+        out["uris"] = uris
+        _maybe_log("retrieve.debug", {"used_filter": out["used_filter"], "count": len(results), "first_uris": uris[:3]})
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+        _maybe_log("retrieve.debug.error", out["error"])
+    return out
