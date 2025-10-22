@@ -5,7 +5,6 @@ Notes:
   attributes yet, disable the filter (KB_DISABLE_LANG_FILTER=true) or map tags in the console.
 - Robust citation parsing handles slight schema differences across regions/versions.
 """
-import uuid
 import boto3
 from typing import Optional, Tuple, List, Dict
 from llm.config import SETTINGS
@@ -38,16 +37,41 @@ def _prompt_prefix(lang: str) -> str:
 def _norm_uri(loc: Dict) -> Optional[str]:
     if not loc:
         return None
-    # location may be a dict with s3Location.uri or a plain string
     if isinstance(loc, str):
         return loc
-    s3 = loc.get("s3Location") or {}
-    if isinstance(s3, dict) and s3.get("uri"):
-        return s3.get("uri")
-    # Some regions return {"type":"S3","s3Location":{...}}
-    if "type" in loc and "s3Location" in loc and isinstance(loc["s3Location"], dict):
-        return loc["s3Location"].get("uri")
-    # Last resort: try a generic 'uri' field
+
+    # Common shapes:
+    # 1) {"s3Location":{"uri":"s3://bucket/key"}}
+    # 2) {"type":"S3","s3Location":{"bucketName":"bucket","key":"key"}}
+    # 3) {"s3Location":{"bucketArn":"arn:aws:s3:::bucket","key":"key"}}
+    s3 = loc.get("s3Location") or loc.get("S3Location") or {}
+    if isinstance(s3, dict):
+        # Direct uri present
+        if s3.get("uri"):
+            return s3["uri"]
+        # Build uri from bucket + key (or bucketArn + key)
+        bucket = (
+            s3.get("bucketName")
+            or s3.get("bucket")
+            or s3.get("Bucket")
+            or s3.get("bucketArn")
+        )
+        key = s3.get("key") or s3.get("objectKey") or s3.get("Key") or s3.get("path")
+        if bucket:
+            # If it’s an ARN, extract the name after ':::'
+            if isinstance(bucket, str) and "arn:aws:s3:::" in bucket:
+                bucket = bucket.split(":::")[-1]
+        if bucket and key:
+            return f"s3://{bucket}/{key}"
+
+    # Sometimes bucket/key live at top level with type hint
+    if loc.get("type") == "S3":
+        bucket = loc.get("bucketName") or loc.get("bucket")
+        key = loc.get("key") or loc.get("objectKey")
+        if bucket and key:
+            return f"s3://{bucket}/{key}"
+
+    # Last resort
     return loc.get("uri")
 
 def _parse_citations(cits_raw: List[Dict]) -> List[Dict]:
@@ -61,7 +85,6 @@ def _parse_citations(cits_raw: List[Dict]) -> List[Dict]:
                 "score": ref.get("score"),
                 "metadata": ref.get("metadata", {}) or {}
             })
-    # Deduplicate empty/None URIs
     return [c for c in citations if c.get("uri")]
 
 def _apply_no_filter(req: Dict) -> Dict:
@@ -82,7 +105,6 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
     lang = _lang_label(language)
     input_text = _prompt_prefix(lang) + "\nUser: " + message
 
-    # Retrieval configuration (optionally without language filter)
     vec_cfg: Dict = {"numberOfResults": 8}
     if not SETTINGS.kb_disable_lang_filter:
         vec_cfg["filter"] = {"equals": {"key": "language", "value": lang}}
@@ -107,7 +129,6 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
     answer = (resp.get("output", {}) or {}).get("text", "") or ""
     citations = _parse_citations(resp.get("citations", []) or [])
 
-    # Fallback: if we had a filter and got no citations, retry without filter
     if not citations and not SETTINGS.kb_disable_lang_filter:
         resp2 = rag.retrieve_and_generate(**_apply_no_filter(base_req))
         answer2 = (resp2.get("output", {}) or {}).get("text", "") or ""
