@@ -88,9 +88,12 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
                     "vectorSearchConfiguration": vector_search_cfg
                 }
             }
-        },
-        "sessionId": session_id or str(uuid.uuid4())
+        }
     }
+
+    # Only set a sessionId if the caller provided one; otherwise let Bedrock manage it.
+    if session_id:
+        base_req["sessionId"] = session_id
 
     resp = rag.retrieve_and_generate(**base_req)
     answer = (resp.get("output", {}) or {}).get("text", "") or ""
