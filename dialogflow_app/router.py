@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request
 from dialogflow_app.info import get_info, get_admin_redirect
 # Migrate to ContentStore accessors (course descriptions and display names)
-from dialogflow_app.content_store import get_course_info, format_course_display, STORE
+from llm.content_store import get_course_info, format_course_display, STORE
 
 router = APIRouter(
     prefix="/dialogflow",
