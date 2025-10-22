@@ -1,8 +1,0 @@
-[
-  { "id": "2a3b4c5d-6e7f-4019-b8c9-d0e1f2a3b418", "data": [ { "text": "补课政策是什么？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
-  { "id": "3b4c5d6e-7f80-4120-c9d0-e1f2a3b4c519", "data": [ { "text": "请假如何安排？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
-
-  { "id": "8cdef012-3456-4abc-8def-123456789a14", "data": [ { "text": "缺课能补吗？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
-  { "id": "9def0123-4567-4bcd-9ef0-23456789ab15", "data": [ { "text": "有几次免费补课？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
-  { "id": "0ef01234-5678-4cde-0f12-3456789abc16", "data": [ { "text": "病假需要医生证明吗？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 }
-]

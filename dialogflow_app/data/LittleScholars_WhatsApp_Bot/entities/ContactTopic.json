@@ -1,9 +1,0 @@
-{
-  "id": "7f4b6e6f-5a42-4a3b-9f72-b6e1c93f8a01",
-  "name": "ContactTopic",
-  "isOverridable": true,
-  "isEnum": false,
-  "isRegexp": false,
-  "automatedExpansion": true,
-  "allowFuzzyExtraction": true
-}

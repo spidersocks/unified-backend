@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pokemon_app.router import router as pokemon_router
 from news_app.router import router as news_router
 from run_calculator_app.router import router as run_calculator_router
-from dialogflow_app.router import router as dialogflow_router
+# Removed Dialogflow webhook router
 from llm.router import router as llm_router
 
 from pokemon_app.router import load_pokemon_assets
@@ -41,7 +41,7 @@ def read_root():
 app.include_router(pokemon_router)
 app.include_router(news_router)
 app.include_router(run_calculator_router)
-app.include_router(dialogflow_router)
+# app.include_router(dialogflow_router)  # removed
 app.include_router(llm_router)
 
 if __name__ == "__main__":

@@ -1,9 +1,0 @@
-[
-  { "id": "d5e6f708-192a-4bb9-6061-c4d5e6f7a1e9", "data": [ { "text": "中文语文课", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": "什么时候上课？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
-  { "id": "e6f70819-2a3b-4cc9-7172-d5e6f708b2fa", "data": [ { "text": "上课时间是什么？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
-
-  { "id": "5e6f7081-92a3-4b4c-c3d4-e5f6a7b8c901", "data": [ { "text": "有周末班吗？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
-  { "id": "6f708192-a3b4-4c5d-d4e5-f6a7b8c9d002", "data": [ { "text": "请问 ", "userDefined": false }, { "text": "Phonics", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": " 上课时间？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
-  { "id": "708192a3-b4c5-4d6e-e5f6-a7b8c9d0e103", "data": [ { "text": "平日晚上有课吗？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
-  { "id": "8192a3b4-c5d6-4e70-f6a7-b8c9d0e1f204", "data": [ { "text": "能发一下课程时间表吗？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 }
-]

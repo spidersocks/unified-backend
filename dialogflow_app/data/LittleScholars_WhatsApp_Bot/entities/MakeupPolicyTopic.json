@@ -1,9 +1,0 @@
-{
-  "id": "c7e2fbf9-5d1f-4b1b-b3a1-7a63c72b7605",
-  "name": "MakeupPolicyTopic",
-  "isOverridable": true,
-  "isEnum": false,
-  "isRegexp": false,
-  "automatedExpansion": true,
-  "allowFuzzyExtraction": true
-}

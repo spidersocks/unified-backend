@@ -1,8 +1,0 @@
-[
-  { "id": "8091a2b3-c4d5-4675-1b2c-d3e4f5a6b024", "data": [ { "text": "退款政策是什么？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
-  { "id": "91a2b3c4-d5e6-4786-2c3d-e4f5a6b7c125", "data": [ { "text": "可以转班或取消吗？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
-
-  { "id": "70189abc-def0-4234-8701-89abcdefc223", "data": [ { "text": "缺课可以退费吗？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
-  { "id": "8129abcd-ef01-4345-9812-9abcdefcd324", "data": [ { "text": "如果退课怎么处理？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
-  { "id": "923abcd0-1ef2-4456-a923-bcdefcde435", "data": [ { "text": "想转班需要什么流程？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 }
-]

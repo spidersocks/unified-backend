@@ -1,8 +1,0 @@
-[
-  { "id": "7f8091a2-b3c4-4554-0a1b-68c9d0e1f583", "data": [ { "text": "英语拼音", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": "多少钱？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
-  { "id": "8091a2b3-c4d5-4665-1b2c-79d0e1f2a694", "data": [ { "text": "学费怎么收？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
-
-  { "id": "12839475-6a8b-49c7-9123-4567abcde009", "data": [ { "text": "请问 ", "userDefined": false }, { "text": "中文语文课", "meta": "@CourseName", "alias": "coursename", "userDefined": false }, { "text": " 收费是多少？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
-  { "id": "2384756a-9b8c-4ad7-a234-5678bcdef10a", "data": [ { "text": "有价目表吗？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
-  { "id": "3a84756a-1b2c-4cd8-b345-6789cdefa20b", "data": [ { "text": "按节收费还是按期收费？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 }
-]

@@ -1,7 +1,0 @@
-[
-  { "id": "c4d5e6f7-0819-4ab9-5f60-b7c8d9e0f428", "data": [ { "text": "如何報名？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
-  { "id": "d5e6f708-192a-4bba-6061-c8d9e0f1a529", "data": [ { "text": "報名流程係點？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
-
-  { "id": "3678def0-1234-4d89-b367-8def0ff2755", "data": [ { "text": "點樣登記？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 },
-  { "id": "4789ef01-2345-4e90-c478-9ef01ff3866", "data": [ { "text": "有冇報名表？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 }
-]

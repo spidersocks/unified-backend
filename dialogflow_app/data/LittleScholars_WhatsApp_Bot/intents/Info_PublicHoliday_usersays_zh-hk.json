@@ -1,7 +1,0 @@
-[
-  { "id": "3b4c5d6e-7f80-41a2-93b4-5c6d7e8f9a03", "data": [ { "text": "公眾假期有無開？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
-  { "id": "4c5d6e7f-8091-42b3-a4c5-6d7e8f9a0b04", "data": [ { "text": "紅日會唔會開放？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
-
-  { "id": "7e8f9012-3456-4d3e-e4f5-a6b7c8d9e306", "data": [ { "text": "假期上唔上堂？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 },
-  { "id": "8f901234-5678-4e4f-f5a6-b7c8d9e0a407", "data": [ { "text": "公眾假期營業時間？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 }
-]

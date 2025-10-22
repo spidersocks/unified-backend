@@ -1,9 +1,0 @@
-{
-  "id": "bda3a9b8-5f0b-4f7a-8a2e-1d1e9b7c0a03",
-  "name": "HolidayTopic",
-  "isOverridable": true,
-  "isEnum": false,
-  "isRegexp": false,
-  "automatedExpansion": true,
-  "allowFuzzyExtraction": true
-}

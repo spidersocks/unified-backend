@@ -1,9 +1,0 @@
-{
-  "id": "d8f157e5-cc9b-4b02-9a2b-1efbcb5a1a09",
-  "name": "AgeTopic",
-  "isOverridable": true,
-  "isEnum": false,
-  "isRegexp": false,
-  "automatedExpansion": true,
-  "allowFuzzyExtraction": true
-}

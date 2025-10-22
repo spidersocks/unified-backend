@@ -12,7 +12,7 @@ import json
 import boto3
 from typing import Optional, List, Tuple
 from llm.config import SETTINGS
-from dialogflow_app.content_store import ContentStore, norm_lang, CANONICAL_COURSES
+from llm.content_store import ContentStore, norm_lang, CANONICAL_COURSES
 
 s3 = boto3.client("s3", region_name=SETTINGS.aws_region)
 

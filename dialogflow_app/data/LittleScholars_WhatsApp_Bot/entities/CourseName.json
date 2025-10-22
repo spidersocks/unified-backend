@@ -1,9 +1,0 @@
-{
-  "id": "c2d62b42-ceb2-4578-add0-9f5063bb00e5",
-  "name": "CourseName",
-  "isOverridable": true,
-  "isEnum": false,
-  "isRegexp": false,
-  "automatedExpansion": false,
-  "allowFuzzyExtraction": false
-}

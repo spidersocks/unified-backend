@@ -1,7 +1,0 @@
-[
-  { "id": "c2bc34dd-0dae-407d-878a-b9913176e9ac", "data": [ { "text": "课程清单", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 },
-  { "id": "651f4cfb-265f-4964-90c5-f4943980f0e6", "data": [ { "text": "你们提供哪些教学内容？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 },
-  { "id": "dcf1092d-bab1-4f5a-b609-4b574583bc0e", "data": [ { "text": "有什么课可以上？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 },
-  { "id": "67fe1a67-3794-4622-aacc-dbc43f3b5f09", "data": [ { "text": "请列出你们的课程。", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 },
-  { "id": "f4c57545-dba1-46a0-9799-1ce79f792fd3", "data": [ { "text": "你们有什么课程？", "userDefined": false } ], "isTemplate": false, "count": 0, "lang": "zh-cn", "updated": 0 }
-]

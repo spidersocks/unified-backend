@@ -1,9 +1,0 @@
-{
-  "id": "c0c3c766-9e58-4d7b-9b34-8f4f7f25a908",
-  "name": "ScheduleTopic",
-  "isOverridable": true,
-  "isEnum": false,
-  "isRegexp": false,
-  "automatedExpansion": true,
-  "allowFuzzyExtraction": true
-}

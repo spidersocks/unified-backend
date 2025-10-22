@@ -1,7 +1,0 @@
-[
-  { "id": "5d6e7f80-912a-43c4-b5d6-7e8f9a0b1c05", "data": [ { "text": "公众假期开门吗？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
-  { "id": "6e7f8091-a2b3-44d5-c6d7-8f9a0b1c2d06", "data": [ { "text": "你们的假期安排是什么？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn", "updated": 0 },
-
-  { "id": "90123456-789a-4f5e-a6b7-c8d9e0a1b508", "data": [ { "text": "红日有课吗？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 },
-  { "id": "a0123456-89ab-405f-b7c8-d9e0a1b2c609", "data": [ { "text": "假期营业时间是？", "userDefined": false } ], "lang": "zh-cn", "isTemplate": false, "updated": 0 }
-]

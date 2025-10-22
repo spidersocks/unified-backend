@@ -1,8 +1,0 @@
-[
-  { "id": "7f8091a2-b3c4-45d6-d7e8-9a0b1c2d3e07", "data": [ { "text": "Do you have a trial class?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "8091a2b3-c4d5-46e7-e8f9-a0b1c2d3e408", "data": [ { "text": "Can I try a class first?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-
-  { "id": "b0123456-789a-4cde-b012-3456789abc01", "data": [ { "text": "Is there a free trial?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
-  { "id": "c1234567-89ab-4def-c123-456789abce02", "data": [ { "text": "Can my child attend a trial lesson?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
-  { "id": "d2345678-9abc-4ef0-d234-56789abcef03", "data": [ { "text": "How to book a trial?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 }
-]

@@ -1,6 +1,0 @@
-[
-  { "id": "5a6b7c8d-9e0f-4112-1234-56789abcdef0", "data": [ { "text": "有無 Facebook/IG？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
-
-  { "id": "a345b6c7-d8e9-4123-a345-b6c7d8e9f0a4", "data": [ { "text": "你哋嘅網站係邊個？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 },
-  { "id": "b456c7d8-e9f0-4234-b456-c7d8e9f0a1b5", "data": [ { "text": "比我你哋嘅社交平台連結", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 }
-]

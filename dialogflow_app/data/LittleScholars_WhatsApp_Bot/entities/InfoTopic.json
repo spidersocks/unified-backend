@@ -1,9 +1,0 @@
-{
-  "id": "4ed142be-b1a7-4b96-b87e-1f1b3f351234",
-  "name": "InfoTopic",
-  "isOverridable": true,
-  "isEnum": false,
-  "isRegexp": false,
-  "automatedExpansion": false,
-  "allowFuzzyExtraction": true
-}

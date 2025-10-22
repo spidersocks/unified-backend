@@ -1,9 +1,0 @@
-{
-  "id": "9a23f557-622a-4bda-9fda-1a6e3d5b4a04",
-  "name": "TrialTopic",
-  "isOverridable": true,
-  "isEnum": false,
-  "isRegexp": false,
-  "automatedExpansion": true,
-  "allowFuzzyExtraction": true
-}

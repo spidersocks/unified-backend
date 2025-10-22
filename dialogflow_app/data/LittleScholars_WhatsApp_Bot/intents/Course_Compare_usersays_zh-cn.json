@@ -1,5 +1,0 @@
-[
-  { "id": "1", "data": [ { "text": "", "userDefined": false }, { "text": "英语语文课", "meta": "@CourseName", "alias": "courseA", "userDefined": false }, { "text": " 和 ", "userDefined": false }, { "text": "英语拼音", "meta": "@CourseName", "alias": "courseB", "userDefined": false }, { "text": "有什么区别？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn" },
-  { "id": "2", "data": [ { "text": "对比 ", "userDefined": false }, { "text": "Phonics", "meta": "@CourseName", "alias": "courseA", "userDefined": false }, { "text": " 和 ", "userDefined": false }, { "text": "Language Arts", "meta": "@CourseName", "alias": "courseB", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn" },
-  { "id": "3", "data": [ { "text": "", "userDefined": false }, { "text": "数学班", "meta": "@CourseName", "alias": "courseA", "userDefined": false }, { "text": " 和 ", "userDefined": false }, { "text": "英语拼音", "meta": "@CourseName", "alias": "courseB", "userDefined": false }, { "text": "有何不同？", "userDefined": false } ], "isTemplate": false, "lang": "zh-cn" }
-]

@@ -27,13 +27,21 @@ STAFF = {
 # List of phrases that indicate the model failed to find an answer, 
 # which must be filtered out to enforce silence.
 REFUSAL_PHRASES = [
+    # Expanded English Refusals
     "no information provided", 
+    "no information is provided", # Catches the user's specific example start
     "i cannot answer based on the provided context", 
     "i cannot find the answer in the context",
     "based on the provided context, i cannot answer",
+    "the context does not contain", # New generic refusal pattern
+    "i am unable to provide an answer",
+    
+    # Chinese (HK) Refusals
     "根據提供的內容，我無法回答", 
     "檢索到的內容中沒有相關信息", 
     "沒有提供相關信息",
+    
+    # Chinese (CN) Refusals
     "根据提供的内容，我无法回答", 
     "检索到的内容中没有相关信息", 
     "没有提供相关信息",

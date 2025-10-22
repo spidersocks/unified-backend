@@ -1,8 +1,0 @@
-[
-  { "id": "08192a3b-4c5d-4e17-f6a7-b8c9d0e1f216", "data": [ { "text": "補課政策係點？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
-  { "id": "192a3b4c-5d6e-4f18-a7b8-c9d0e1f2a317", "data": [ { "text": "請假安排係點樣？", "userDefined": false } ], "isTemplate": false, "lang": "zh-hk", "updated": 0 },
-
-  { "id": "59abcdef-0123-4789-5abc-def123456711", "data": [ { "text": "缺課可唔可以補堂？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 },
-  { "id": "6abcdef0-1234-489a-6bcd-ef1234567812", "data": [ { "text": "有幾多次免費補課？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 },
-  { "id": "7bcdef01-2345-49ab-7cde-f12345678913", "data": [ { "text": "病假要唔要醫生紙？", "userDefined": false } ], "lang": "zh-hk", "isTemplate": false, "updated": 0 }
-]

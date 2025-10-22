@@ -1,8 +1,0 @@
-[
-  { "id": "a2b3c4d5-e6f7-4897-3d4e-f5a6b7c8d226", "data": [ { "text": "How do I enroll?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-  { "id": "b3c4d5e6-f708-49a8-4e5f-a6b7c8d9e327", "data": [ { "text": "What is the enrollment process?", "userDefined": false } ], "isTemplate": false, "lang": "en", "updated": 0 },
-
-  { "id": "0345abcd-ef01-4a56-8034-5abcdefde426", "data": [ { "text": "How to sign up?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
-  { "id": "1456bcde-f012-4b67-9145-6bcdefef053", "data": [ { "text": "Steps to register my child?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 },
-  { "id": "2567cdef-0123-4c78-a256-7cdefeff164", "data": [ { "text": "Do you have an application form?", "userDefined": false } ], "lang": "en", "isTemplate": false, "updated": 0 }
-]
