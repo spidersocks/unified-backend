@@ -101,20 +101,11 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
     )
     answer = answer or ""
 
-    # If LLM had no answer but tool did, fall back to tool’s deterministic answer
+    # Prefer deterministic tool answer to avoid contradictions with the LLM text.
+    # Keep citations from RAG if any.
     appended_tool = False
-    if not answer and tool_answer:
+    if tool_answer:
         answer = tool_answer
-        appended_tool = True
-    elif answer and tool_answer:
-        # Append a short localized note so users see both
-        if lang.lower().startswith("zh-hk"):
-            note_hdr = "（營業時間／上課安排）"
-        elif lang.lower().startswith("zh-cn") or lang.lower() == "zh":
-            note_hdr = "（营业时间／上课安排）"
-        else:
-            note_hdr = "(Opening hours / class arrangement)"
-        answer = f"{answer}\n\n{note_hdr}\n{tool_answer}"
         appended_tool = True
 
     if debug_info is not None:

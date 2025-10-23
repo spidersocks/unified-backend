@@ -237,6 +237,12 @@ def _parse_time(msg: str) -> Optional[time]:
     return _parse_time_zh(msg or "")
 
 def _parse_datetime(message: str, now: datetime, L: str) -> Optional[datetime]:
+    """
+    Parse a datetime in HK timezone.
+    - If dateparser yields a date but no explicit time in the message, normalize time to 12:00
+      to avoid leaking RELATIVE_BASE hours.
+    - If the message contains an explicit time (e.g., 下午三点), overlay that time onto the parsed date.
+    """
     if dateparser:
         settings = {
             "TIMEZONE": "Asia/Hong_Kong",
@@ -249,6 +255,18 @@ def _parse_datetime(message: str, now: datetime, L: str) -> Optional[datetime]:
         langs = ["en"] if L == "en" else ["zh"]
         dt = dateparser.parse(message, settings=settings, languages=langs)
         if dt:
+            # Ensure HK timezone
+            if not dt.tzinfo:
+                dt = HK_TZ.localize(dt)
+            else:
+                dt = dt.astimezone(HK_TZ)
+            # Overlay explicit time if present
+            t = _parse_time(message or "")
+            if t:
+                dt = dt.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
+            else:
+                # No explicit time in message: normalize to noon to avoid odd carry-over times
+                dt = dt.replace(hour=12, minute=0, second=0, microsecond=0)
             return dt
 
     dom = _extract_day_of_month(message or "")
@@ -370,7 +388,6 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
             return "营业时间：周一至周五 09:00–18:00；周六 09:00–16:00；香港公众假期休息。"
         return "Hours: Mon–Fri 09:00–18:00; Sat 09:00–16:00; closed on Hong Kong public holidays."
 
-    # ... rest of function unchanged ...
     # Holiday
     if holiday_reason:
         hol_local = _localize_holiday_name(holiday_reason, L)
