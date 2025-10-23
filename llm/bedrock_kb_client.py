@@ -115,13 +115,14 @@ def _maybe_log(label: str, payload: Any):
             pass
 
 def _filter_refusal(answer: str) -> str:
-    """Checks if the answer is the structured refusal token and returns an empty string if so."""
+    """Checks if the answer contains the structured refusal token anywhere and returns an empty string if so."""
     stripped_answer = answer.strip()
     if not stripped_answer:
         return ""
     answer_lower = stripped_answer.lower()
-    if any(answer_lower.startswith(phrase) for phrase in REFUSAL_PHRASES):
-        _maybe_log("filter_applied", f"Refusal detected (structured token): '{stripped_answer}' -> Silence")
+    # Silences if the NO_CONTEXT token appears anywhere in the output
+    if any(phrase in answer_lower for phrase in REFUSAL_PHRASES):
+        _maybe_log("filter_applied", f"Refusal detected (structured token found): '{stripped_answer}' -> Silence")
         return ""
     return stripped_answer
 
@@ -129,7 +130,7 @@ def _silence_reason(answer: str, parsed_count: int) -> Optional[str]:
     """
     Returns a human-readable reason to silence the answer, or None if it's acceptable.
     Enforces:
-      - [NO_CONTEXT] token
+      - [NO_CONTEXT] token (anywhere in output)
       - Require at least one parsed citation (configurable)
       - Blackhole apology markers in any language
     """
@@ -137,7 +138,8 @@ def _silence_reason(answer: str, parsed_count: int) -> Optional[str]:
     if not stripped:
         return "empty"
     lower = stripped.lower()
-    if lower.startswith(NO_CONTEXT_TOKEN.lower()):
+    # Silences if the NO_CONTEXT token appears anywhere in the output
+    if NO_CONTEXT_TOKEN.lower() in lower:
         return "refusal_token"
     if SETTINGS.kb_require_citation and parsed_count == 0:
         return "no_citations"
