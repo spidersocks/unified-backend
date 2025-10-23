@@ -99,7 +99,7 @@ def _decide_zh_variant(text: str) -> str:
         return "zh-HK"
     if simp_score > trad_score:
         return "zh-CN"
-    # Tie-breaker: default to HK for CJK (tends to be safer for your audience)
+    # Tie-breaker: default to HK for CJK (safer for your audience)
     return "zh-HK"
 
 def _detect_with_comprehend(text: str) -> Optional[str]:
@@ -144,30 +144,32 @@ def _detect_with_cld3(text: str) -> Optional[str]:
 def detect_language(message: str, accept_language: Optional[str] = None) -> str:
     """
     Returns one of: 'en' | 'zh-HK' | 'zh-CN'
-    Priority:
-      1) Accept-Language (if specific enough)
-      2) AWS Comprehend (optional if USE_COMPREHEND_LID=true)
-      3) pycld3 (if installed)
-      4) Heuristic fallback (script analysis; default zh-HK for CJK)
+    New priority:
+      1) Strong content signal: if message contains CJK, pick zh-HK vs zh-CN from the text.
+      2) AWS Comprehend (optional) or CLD3 if installed.
+      3) Accept-Language header as a hint (used only when content is ambiguous).
+      4) Default to English.
     """
+    msg = message or ""
+    # 1) Text content takes precedence
+    if _contains_cjk(msg):
+        return _decide_zh_variant(msg)
+
+    # 2) ML detectors if available
+    v = _detect_with_comprehend(msg)
+    if v in ("en", "zh-HK", "zh-CN"):
+        return v
+    v = _detect_with_cld3(msg)
+    if v in ("en", "zh-HK", "zh-CN"):
+        return v
+
+    # 3) Only now consider Accept-Language
     hinted = _parse_accept_language(accept_language)
     if hinted in ("en", "zh-HK", "zh-CN"):
         return hinted
 
-    if not message:
-        return "en"
-
-    v = _detect_with_comprehend(message)
-    if v in ("en", "zh-HK", "zh-CN"):
-        return v
-
-    v = _detect_with_cld3(message)
-    if v in ("en", "zh-HK", "zh-CN"):
-        return v
-
-    if not _contains_cjk(message):
-        return "en"
-    return _decide_zh_variant(message)
+    # 4) Default
+    return "en"
 
 def remember_session_language(session_id: Optional[str], lang: str):
     if not session_id or not lang:

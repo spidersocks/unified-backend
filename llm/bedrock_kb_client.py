@@ -4,10 +4,12 @@ Optimized for latency: fewer retrieved chunks, smaller max tokens, no unconditio
 """
 import os
 import time
+import re
 import boto3
 from botocore.config import Config
 from typing import Optional, Tuple, List, Dict, Any
 from llm.config import SETTINGS
+from llm import tags_index  # NEW: runtime tag index for query expansion
 
 # Configure Bedrock client timeouts + limited retries to reduce tail latency
 _boto_cfg = Config(
@@ -35,6 +37,17 @@ STAFF = {
 
 REFUSAL_PHRASES = [NO_CONTEXT_TOKEN.lower()]
 APOLOGY_MARKERS = ["sorry","i am unable","i'm unable","i cannot","i can't","抱歉","很抱歉","對不起","对不起"]
+
+# Heuristic policy-query detectors (very lightweight). Used to nudge filters to type=policy.
+_POLICY_PATTERNS = {
+    "en": re.compile(r"\b(refund|withdrawal|make[\s-]?up|absence|policy|transfer)\b", re.I),
+    "zh-HK": re.compile(r"(退款|轉班|補課|請假|政策|配額|收費|行政費)"),
+    "zh-CN": re.compile(r"(退款|转班|补课|请假|政策|配额|收费|行政费)"),
+}
+
+def _looks_like_policy_query(msg: str, L: str) -> bool:
+    pat = _POLICY_PATTERNS.get(L) or _POLICY_PATTERNS["en"]
+    return bool(pat.search(msg or ""))
 
 # Tiny in-memory response cache to avoid double work on repeated/duplicate messages
 _CACHE: Dict[Tuple[str,str], Tuple[float, str, List[Dict], Dict[str,Any]]] = {}
@@ -139,17 +152,39 @@ def chat_with_kb(
 
     t0 = time.time()
     prefix = _prompt_prefix(L)
+
+    # 1) Tag-aware query expansion
+    matched_tags = tags_index.find_matching_tags(message or "", L, limit=12) if message else []
+    keywords_line = ""
+    if matched_tags:
+        keywords_line = "Keywords: " + "; ".join(matched_tags) + "\n"
+        debug_info["matched_tags"] = matched_tags
+
+    # 2) Optional extra verified tool context
     injected = ""
     if extra_context and extra_context.strip():
-        # Keep this short; it’s treated as verified contextual note in addition to retrieved content.
         injected = f"Additional verified context (non-retrieved):\n{extra_context.strip()}\n\n"
-    input_text = prefix + injected + "User: " + (message or "")
 
+    # Build the final input text — put keywords ahead of the user text to steer retrieval
+    input_text = prefix + keywords_line + injected + "User: " + (message or "")
+
+    # 3) Compose vector search config (+ language filter)
     vec_cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
+    meta_filter = None
     if not SETTINGS.kb_disable_lang_filter:
-        vec_cfg["filter"] = {"equals": {"key": "language", "value": L}}
+        meta_filter = {"equals": {"key": "language", "value": L}}
 
-    # IMPORTANT: use inferenceConfig.textInferenceConfig and drop responseConfiguration
+    # 4) Heuristic: policy queries → prefer type=policy
+    if _looks_like_policy_query(message or "", L):
+        pol = {"equals": {"key": "type", "value": "policy"}}
+        meta_filter = {"andAll": [meta_filter, pol]} if meta_filter else pol
+        debug_info["applied_policy_filter"] = True
+    else:
+        debug_info["applied_policy_filter"] = False
+
+    if meta_filter:
+        vec_cfg["filter"] = meta_filter
+
     base_req: Dict = {
         "input": {"text": input_text},
         "retrieveAndGenerateConfiguration": {
@@ -184,7 +219,7 @@ def chat_with_kb(
         answer = _filter_refusal(answer)
         reason = _silence_reason(answer, len(parsed))
 
-        # Optional retry without filter (disabled by default for latency)
+        # Optional retry without filters to recover recall if configured
         if (reason or not answer) and (not SETTINGS.kb_disable_lang_filter) and SETTINGS.kb_retry_nofilter:
             kb_conf = base_req["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"]
             kb_conf["retrievalConfiguration"]["vectorSearchConfiguration"].pop("filter", None)
