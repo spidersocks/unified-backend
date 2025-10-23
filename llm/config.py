@@ -22,6 +22,8 @@ class Settings:
 
     # Feature flags
     kb_disable_lang_filter: bool = os.environ.get("KB_DISABLE_LANG_FILTER", "false").lower() in ("1", "true", "yes")
+    # NEW: Require at least one parsed citation to allow any non-empty answer
+    kb_require_citation: bool = os.environ.get("KB_REQUIRE_CITATION", "true").lower() in ("1", "true", "yes")
 
     # Debugging
     debug_kb: bool = os.environ.get("DEBUG_KB", "false").lower() in ("1", "true", "yes")

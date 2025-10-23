@@ -32,6 +32,19 @@ REFUSAL_PHRASES = [
     NO_CONTEXT_TOKEN.lower(),
 ]
 
+# NEW: common apology markers to blackhole even if the model ignores instructions
+APOLOGY_MARKERS = [
+    "sorry",
+    "i am unable to assist",
+    "i'm unable to assist",
+    "i cannot assist",
+    "i can't assist",
+    "抱歉",
+    "很抱歉",
+    "對不起",
+    "对不起",
+]
+
 def _lang_label(lang: Optional[str]) -> str:
     l = (lang or "").lower()
     if l.startswith("zh-hk"):
@@ -106,15 +119,31 @@ def _filter_refusal(answer: str) -> str:
     stripped_answer = answer.strip()
     if not stripped_answer:
         return ""
-        
     answer_lower = stripped_answer.lower()
-    
-    # Check if the answer starts with the unique refusal token
     if any(answer_lower.startswith(phrase) for phrase in REFUSAL_PHRASES):
         _maybe_log("filter_applied", f"Refusal detected (structured token): '{stripped_answer}' -> Silence")
         return ""
-        
     return stripped_answer
+
+def _silence_reason(answer: str, parsed_count: int) -> Optional[str]:
+    """
+    Returns a human-readable reason to silence the answer, or None if it's acceptable.
+    Enforces:
+      - [NO_CONTEXT] token
+      - Require at least one parsed citation (configurable)
+      - Blackhole apology markers in any language
+    """
+    stripped = (answer or "").strip()
+    if not stripped:
+        return "empty"
+    lower = stripped.lower()
+    if lower.startswith(NO_CONTEXT_TOKEN.lower()):
+        return "refusal_token"
+    if SETTINGS.kb_require_citation and parsed_count == 0:
+        return "no_citations"
+    if any(marker in lower for marker in APOLOGY_MARKERS):
+        return "apology_marker"
+    return None
 
 def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optional[str] = None, debug: bool = False) -> Tuple[str, List[Dict], Dict[str, Any]]:
     """
@@ -129,7 +158,10 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
         "session_provided": bool(session_id),
         "message_chars": len(message or ""),
         "error": None,
-        "attempts": []
+        "attempts": [],
+        # NEW: overall silence flag
+        "silenced": False,
+        "silence_reason": None,
     }
 
     if not SETTINGS.kb_id or not SETTINGS.kb_model_arn:
@@ -169,44 +201,59 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
         _maybe_log("request.vectorSearchConfiguration", vec_cfg)
         resp = rag.retrieve_and_generate(**base_req)
         answer = (resp.get("output", {}) or {}).get("text", "") or ""
-        
-        # Apply strict filtering to the answer
-        answer = _filter_refusal(answer)
-        
         raw_cits = resp.get("citations", []) or []
         parsed = _parse_citations(raw_cits)
+
+        # Apply filters
+        answer = _filter_refusal(answer)
+        reason = _silence_reason(answer, len(parsed))
         attempt = {
             "used_filter": "filter" in vec_cfg,
             "raw_citation_blocks": len(raw_cits),
             "parsed_citations": len(parsed),
-            "first_uris": [c.get("uri") for c in parsed[:3]]
+            "first_uris": [c.get("uri") for c in parsed[:3]],
+            "silenced": bool(reason),
+            "silence_reason": reason,
         }
         debug_info["attempts"].append(attempt)
         _maybe_log("response.first_attempt", attempt)
 
-        # Fallback without filter if no citations and filter was used
-        if not parsed and not SETTINGS.kb_disable_lang_filter:
+        # If first attempt produced no acceptable answer and we used a filter, retry without filter
+        if (reason or not answer) and not SETTINGS.kb_disable_lang_filter:
             resp2 = rag.retrieve_and_generate(**_apply_no_filter(base_req))
             answer2 = (resp2.get("output", {}) or {}).get("text", "") or ""
-            
-            # Apply strict filtering to the fallback answer
-            answer2 = _filter_refusal(answer2)
-            
             raw2 = resp2.get("citations", []) or []
             parsed2 = _parse_citations(raw2)
+
+            answer2 = _filter_refusal(answer2)
+            reason2 = _silence_reason(answer2, len(parsed2))
             attempt2 = {
                 "used_filter": False,
                 "raw_citation_blocks": len(raw2),
                 "parsed_citations": len(parsed2),
-                "first_uris": [c.get("uri") for c in parsed2[:3]]
+                "first_uris": [c.get("uri") for c in parsed2[:3]],
+                "silenced": bool(reason2),
+                "silence_reason": reason2,
             }
             debug_info["attempts"].append(attempt2)
             _maybe_log("response.second_attempt", attempt2)
-            
-            if answer2:
+
+            if not reason2 and answer2:
                 return answer2, parsed2, (debug_info if (debug or SETTINGS.debug_kb) else {})
 
-        return answer, parsed, (debug_info if (debug or SETTINGS.debug_kb) else {})
+            # If still silenced, empty out any residual text
+            debug_info["silenced"] = True
+            debug_info["silence_reason"] = reason2 or "no_answer"
+            return "", [], (debug_info if (debug or SETTINGS.debug_kb) else {})
+
+        # First attempt acceptable
+        if not reason and answer:
+            return answer, parsed, (debug_info if (debug or SETTINGS.debug_kb) else {})
+
+        # First attempt silenced; no retry
+        debug_info["silenced"] = True
+        debug_info["silence_reason"] = reason or "no_answer"
+        return "", [], (debug_info if (debug or SETTINGS.debug_kb) else {})
 
     except Exception as e:
         debug_info["error"] = f"{type(e).__name__}: {e}"
