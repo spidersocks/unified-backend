@@ -1,8 +1,7 @@
 """
 Thin client for Bedrock Knowledge Base RetrieveAndGenerate.
 Notes:
-- We filter by language via metadata when enabled. If your KB doesn't map S3 tags to retrievable
-  attributes yet, disable the filter (KB_DISABLE_LANG_FILTER=true) or map tags in the console.
+- We filter by language via metadata when enabled.
 - Robust citation parsing handles slight schema differences across regions/versions.
 - Optional debug: set DEBUG_KB=true to emit server logs; pass debug=true to /chat to receive a debug object.
 """
