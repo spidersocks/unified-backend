@@ -43,6 +43,14 @@ def _maybe_answer_opening_hours(message: str, lang: str) -> Optional[str]:
     # Compute deterministic answer. Weather hint (if any) is appended inside.
     return compute_opening_answer(message, lang)
 
+def _opening_hours_keywords(lang: str) -> List[str]:
+    L = (lang or "en").lower()
+    if L.startswith("zh-hk"):
+        return ["營業時間","開放時間","有冇開","星期日","公眾假期","上堂","上課","安排","颱風","黑雨","八號風球","明天","聽日"]
+    if L.startswith("zh-cn") or L == "zh":
+        return ["营业时间","开放时间","开门","周日","公众假期","上课","安排","台风","黑雨","八号风球","明天"]
+    return ["opening hours","hours","open","closed","Sunday","public holiday","tomorrow","typhoon","rainstorm"]
+
 @router.post("", response_model=ChatResponse)
 def chat(req: ChatRequest, request: Request) -> ChatResponse:
     # 1) explicit override
@@ -60,9 +68,22 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
     # Try opening-hours tool; do NOT block KB
     tool_answer = _maybe_answer_opening_hours(req.message, lang)
 
-    # Send tool context to the LLM as additional prompt material
+    # If the intent is opening-hours, inject strong keywords and a canonical hint to boost recall
+    extra_keywords: Optional[List[str]] = None
+    hint_canonical: Optional[str] = None
+    if tool_answer:
+        extra_keywords = _opening_hours_keywords(lang or "")
+        hint_canonical = "opening_hours"
+
+    # Send tool context + retrieval hints to the LLM
     answer, citations, debug_info = chat_with_kb(
-        req.message, lang, req.session_id, debug=bool(req.debug), extra_context=tool_answer
+        req.message,
+        lang,
+        req.session_id,
+        debug=bool(req.debug),
+        extra_context=tool_answer,
+        extra_keywords=extra_keywords,
+        hint_canonical=hint_canonical,
     )
     answer = answer or ""
 
@@ -88,6 +109,7 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
         if tool_answer:
             debug_info["opening_hours_tool"] = True
             debug_info["tool_appended_or_fallback"] = appended_tool
+            debug_info["opening_hours_keywords_injected"] = True
 
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
 

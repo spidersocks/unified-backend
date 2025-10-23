@@ -39,7 +39,7 @@ REFUSAL_PHRASES = [NO_CONTEXT_TOKEN.lower()]
 APOLOGY_MARKERS = [
     "sorry","i am unable","i'm unable","i cannot","i can't",
     "抱歉","很抱歉","對不起","对不起",
-    # NEW: generic “no info” markers to force silence
+    # generic “no info” markers to force silence
     "無提供相關信息","沒有相關信息","沒有資料","沒有相关资料","暂无相关信息","暂无资料",
 ]
 
@@ -129,7 +129,9 @@ def chat_with_kb(
     language: Optional[str] = None,
     session_id: Optional[str] = None,
     debug: bool = False,
-    extra_context: Optional[str] = None,  # optional tool/context injection
+    extra_context: Optional[str] = None,          # optional tool/context injection (non-retrieved)
+    extra_keywords: Optional[List[str]] = None,   # optional query-boost keywords
+    hint_canonical: Optional[str] = None,         # optional narrow-by-canonical (first try), with fallback
 ) -> Tuple[str, List[Dict], Dict[str, Any]]:
     # Serve from cache if available
     L = _lang_label(language)
@@ -160,6 +162,12 @@ def chat_with_kb(
 
     # 1) Tag-aware query expansion
     matched_tags = tags_index.find_matching_tags(message or "", L, limit=12) if message else []
+    # Merge in extra_keywords (de-dup)
+    if extra_keywords:
+        for kw in extra_keywords:
+            k = (kw or "").strip()
+            if k and k.lower() not in [m.lower() for m in matched_tags]:
+                matched_tags.append(k)
     debug_info["matched_tags"] = matched_tags or []  # always include
     keywords_line = "Keywords: " + "; ".join(matched_tags) + "\n" if matched_tags else ""
 
@@ -171,13 +179,20 @@ def chat_with_kb(
     # Build the final input text — put keywords ahead of the user text to steer retrieval
     input_text = prefix + keywords_line + injected + "User: " + (message or "")
 
-    # 3) Compose vector search config (+ language filter)
-    vec_cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
-    meta_filter = None
-    if not SETTINGS.kb_disable_lang_filter:
-        meta_filter = {"equals": {"key": "language", "value": L}}
+    def make_vec_cfg(base_filter: Optional[Dict] = None) -> Dict:
+        cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
+        if base_filter:
+            cfg["filter"] = base_filter
+        return cfg
 
-    # 4) Heuristic: policy queries → prefer type=policy
+    def make_lang_filter() -> Optional[Dict]:
+        if SETTINGS.kb_disable_lang_filter:
+            return None
+        return {"equals": {"key": "language", "value": L}}
+
+    # Policy biasing
+    lang_filter = make_lang_filter()
+    meta_filter = lang_filter
     if _looks_like_policy_query(message or "", L):
         pol = {"equals": {"key": "type", "value": "policy"}}
         meta_filter = {"andAll": [meta_filter, pol]} if meta_filter else pol
@@ -185,10 +200,58 @@ def chat_with_kb(
     else:
         debug_info["applied_policy_filter"] = False
 
-    if meta_filter:
-        vec_cfg["filter"] = meta_filter
+    # Optional canonical hint (first try only)
+    used_hint = False
+    if hint_canonical:
+        can = {"equals": {"key": "canonical", "value": hint_canonical}}
+        meta_with_can = {"andAll": [meta_filter, can]} if meta_filter else can
+        vec_cfg = make_vec_cfg(meta_with_can)
+        debug_info["hint_canonical"] = hint_canonical
 
-    # Snapshot retrieval config for debugging
+        base_req: Dict = {
+            "input": {"text": input_text},
+            "retrieveAndGenerateConfiguration": {
+                "type": "KNOWLEDGE_BASE",
+                "knowledgeBaseConfiguration": {
+                    "knowledgeBaseId": SETTINGS.kb_id,
+                    "modelArn": SETTINGS.kb_model_arn,
+                    "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
+                    "generationConfiguration": {
+                        "inferenceConfig": {
+                            "textInferenceConfig": {
+                                "maxTokens": SETTINGS.gen_max_tokens,
+                                "temperature": SETTINGS.gen_temperature,
+                                "topP": SETTINGS.gen_top_p,
+                            }
+                        }
+                    },
+                }
+            },
+        }
+        if session_id:
+            base_req["sessionId"] = session_id
+
+        try:
+            resp0 = rag.retrieve_and_generate(**base_req)
+            ans0 = ((resp0.get("output") or {}).get("text") or "").strip()
+            raw0 = resp0.get("citations", []) or []
+            parsed0 = _parse_citations(raw0)
+            if debug:
+                debug_info.setdefault("attempts", []).append({"stage": "hint_canonical", "raw_citations": raw0})
+            ans0 = _filter_refusal(ans0)
+            reason0 = _silence_reason(ans0, len(parsed0))
+            if not reason0 and ans0:
+                debug_info["latency_ms"] = int((time.time() - t0) * 1000)
+                _cache_set(L, message or "", ans0, parsed0, debug_info)
+                return ans0, parsed0, (debug_info if debug else {})
+            used_hint = True
+        except Exception as e:
+            # Swallow and continue to general path
+            if debug:
+                debug_info.setdefault("attempts", []).append({"stage": "hint_canonical_error", "error": f"{type(e).__name__}: {e}"})
+
+    # General attempt (no canonical hint)
+    vec_cfg = make_vec_cfg(meta_filter)
     debug_info["retrieval_config"] = vec_cfg
 
     base_req: Dict = {
@@ -221,7 +284,7 @@ def chat_with_kb(
         raw_cits = resp.get("citations", []) or []
         parsed = _parse_citations(raw_cits)
 
-        # NEW: expose raw citations in debug to see shape from Bedrock
+        # Expose raw citations in debug to see shape from Bedrock
         if debug:
             debug_info["raw_citations"] = raw_cits
 

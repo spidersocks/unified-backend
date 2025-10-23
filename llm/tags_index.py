@@ -55,14 +55,28 @@ def _load_sidecar(path: pathlib.Path) -> Optional[dict]:
         return None
 
 def build_index(content_root: Optional[str] = None):
+    """
+    Build the in-process tags index from local sidecars.
+    More robust root resolution:
+      1) KB_CONTENT_DIR (if exists)
+      2) repo-relative: <repo>/content (based on this file's location)
+    """
     global _BUILT
     with _LOCK:
         if _BUILT:
             return
+        # 1) KB_CONTENT_DIR or param
         root = pathlib.Path(content_root or _CONTENT_ROOT)
+        # 2) Fallback to package-relative content/
         if not root.exists():
+            pkg_root = pathlib.Path(__file__).resolve().parents[1] / "content"
+            if pkg_root.exists():
+                root = pkg_root
+        if not root.exists():
+            # Could not find content; keep empty index but don't crash
             _BUILT = True
             return
+
         for sc in root.glob("**/*.metadata.json"):
             data = _load_sidecar(sc)
             if not data:
