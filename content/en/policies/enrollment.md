@@ -3,7 +3,9 @@ language: en
 type: policy
 canonical: enrollment
 folder: policies
-aliases: enrollment; registration; assessment; assessment fee; application form; placement; timetable; schedule
+aliases: enrollment; registration; assessment; assessment fee; application form; placement;
+  timetable; schedule
+category: enrollment
 ---
 # Enrollment Procedure (報名程序 (Enrollment Procedure))
 

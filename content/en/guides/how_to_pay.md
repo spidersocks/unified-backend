@@ -1,9 +1,11 @@
 ---
 language: en
-type: faq
+type: guide
 canonical: how-to-pay
-folder: faq
-aliases: payment; pay; tuition; fees; bank transfer; FPS; FPS ID; account number; bank code; deposit slip
+folder: guides
+aliases: payment; pay; tuition; fees; bank transfer; FPS; FPS ID; account number;
+  bank code; deposit slip
+category: payment
 ---
 # How to Pay?
 

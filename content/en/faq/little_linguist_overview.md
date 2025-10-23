@@ -3,7 +3,8 @@ language: en
 type: faq
 canonical: LittleLinguistOverview
 folder: faq
-aliases: Little Linguist; what do children learn; English communication; alphabet; fine motor; social skills
+aliases: Little Linguist; what do children learn; English communication; alphabet;
+  fine motor; social skills
 ---
 # Little Linguist — what children learn
 

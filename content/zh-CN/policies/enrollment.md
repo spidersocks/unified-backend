@@ -4,6 +4,7 @@ type: policy
 canonical: enrollment
 folder: policies
 aliases: 报名; 注册; 评估; 评估费; 申请表; 分班; 时间表
+category: enrollment
 ---
 # 报名程序 (Enrollment Procedure)
 

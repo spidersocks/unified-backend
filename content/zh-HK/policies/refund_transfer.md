@@ -4,6 +4,7 @@ type: policy
 canonical: refund_transfer
 folder: policies
 aliases: 退款; 退學; 轉班; 升班; 通知期; 不設退款
+category: refund
 ---
 # 退款與轉班政策
 

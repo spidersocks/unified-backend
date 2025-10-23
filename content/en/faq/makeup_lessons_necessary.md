@@ -3,7 +3,8 @@ language: en
 type: faq
 canonical: MakeupLessonsNecessary
 folder: faq
-aliases: make up lesson; makeup lesson; make-up; do I need a make up; catch up; fall behind; absence; missed class
+aliases: make up lesson; makeup lesson; make-up; do I need a make up; catch up; fall
+  behind; absence; missed class
 ---
 # Make‑up lessons — are they necessary?
 

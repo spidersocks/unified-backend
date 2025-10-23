@@ -3,7 +3,8 @@ language: en
 type: faq
 canonical: SoundExplorersVsSmartSpell
 folder: faq
-aliases: Sound Explorers; Smart Spell; difference; phonics; tracing; fine-motor; writing independently
+aliases: Sound Explorers; Smart Spell; difference; phonics; tracing; fine-motor; writing
+  independently
 ---
 # Sound Explorers vs Smart Spell
 

@@ -3,7 +3,8 @@ language: en
 type: faq
 canonical: ReadingAssignmentsPurpose
 folder: faq
-aliases: why reading; reading homework; reading aloud; pronunciation; pacing; intonation; feedback
+aliases: why reading; reading homework; reading aloud; pronunciation; pacing; intonation;
+  feedback
 ---
 # Why do we assign reading?
 

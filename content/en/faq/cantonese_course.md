@@ -3,7 +3,8 @@ language: en
 type: faq
 canonical: CantoneseCourseAvailability
 folder: faq
-aliases: Cantonese course; Cantonese class; Cantonese availability; Cantonese for kids; 粵語課; 廣東話課程; 粤语课; 广东话课程
+aliases: Cantonese course; Cantonese class; Cantonese availability; Cantonese for
+  kids; 粵語課; 廣東話課程; 粤语课; 广东话课程
 ---
 # Cantonese classes
 

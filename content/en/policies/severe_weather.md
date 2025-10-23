@@ -4,6 +4,7 @@ type: policy
 canonical: severe_weather
 folder: policies
 aliases: typhoon; rainstorm; black rain; T8; weather policy; bad weather
+category: weather
 ---
 # Severe Weather Arrangements
 

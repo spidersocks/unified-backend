@@ -4,6 +4,7 @@ type: policy
 canonical: enrollment
 folder: policies
 aliases: 報名; 註冊; 評估; 評估費; 申請表; 編班; 時間表
+category: enrollment
 ---
 # 報名程序 (Enrollment Procedure)
 

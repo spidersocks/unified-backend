@@ -3,7 +3,9 @@ language: en
 type: faq
 canonical: InterviewRecitation
 folder: faq
-aliases: interview class; interview prep; school interview; P1 interview; recitation class; speech festival; poem; verse; Cantonese recitation; Putonghua recitation; speech training; public speaking
+aliases: interview class; interview prep; school interview; P1 interview; recitation
+  class; speech festival; poem; verse; Cantonese recitation; Putonghua recitation;
+  speech training; public speaking
 ---
 # Interview & Recitation classes (FAQ)
 

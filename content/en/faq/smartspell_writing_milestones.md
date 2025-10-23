@@ -3,7 +3,8 @@ language: en
 type: faq
 canonical: SmartSpellWritingMilestones
 folder: faq
-aliases: writing short stories; when start writing; Smart Spell level 4; Smart Spell level 5; sentences; composition
+aliases: writing short stories; when start writing; Smart Spell level 4; Smart Spell
+  level 5; sentences; composition
 ---
 # When do children start writing short stories?
 

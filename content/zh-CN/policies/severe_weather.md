@@ -4,6 +4,7 @@ type: policy
 canonical: severe_weather
 folder: policies
 aliases: 恶劣天气; 八号风球; 黑雨; 红雨; 三号风球; 天气安排
+category: weather
 ---
 # 恶劣天气安排
 

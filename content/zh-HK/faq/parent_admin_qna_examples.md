@@ -3,7 +3,8 @@ language: zh-HK
 type: faq
 canonical: ParentAdminQnAExamples
 folder: faq
-aliases: 母語老師; 外籍老師; 教師資格; 評估費; 班級人數; 補課; 天氣安排; 八號風球; 黑雨; 付款; FPS; 聖誕營業; 寫作班; 面試班; 時間表; 口才訓練; 演講訓練
+aliases: 母語老師; 外籍老師; 教師資格; 評估費; 班級人數; 補課; 天氣安排; 八號風球; 黑雨; 付款; FPS; 聖誕營業; 寫作班; 面試班;
+  時間表; 口才訓練; 演講訓練
 ---
 # 家長與行政對話（標準回覆示例）
 

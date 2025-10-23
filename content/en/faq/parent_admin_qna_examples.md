@@ -3,7 +3,9 @@ language: en
 type: faq
 canonical: ParentAdminQnAExamples
 folder: faq
-aliases: native speaker; teacher qualification; assessment fee; class size; makeup policy; typhoon; rainstorm; payment; FPS; Christmas hours; writing class; interview class; timetable; speech training
+aliases: native speaker; teacher qualification; assessment fee; class size; makeup
+  policy; typhoon; rainstorm; payment; FPS; Christmas hours; writing class; interview
+  class; timetable; speech training
 ---
 # Parent–Admin Q&A (Gold Standard Responses)
 

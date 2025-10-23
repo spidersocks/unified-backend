@@ -3,7 +3,9 @@ language: en
 type: faq
 canonical: MandarinProgramOverview
 folder: faq
-aliases: Mandarin program; Chinese program; course content; feedback; homework; pinyin; simplified character course; teacher qualifications; PSC certificate; Putonghua; Mandarin Chinese; placement assessment; K1; K2; how many characters
+aliases: Mandarin program; Chinese program; course content; feedback; homework; pinyin;
+  simplified character course; teacher qualifications; PSC certificate; Putonghua;
+  Mandarin Chinese; placement assessment; K1; K2; how many characters
 ---
 # Mandarin/Chinese Program – Overview
 

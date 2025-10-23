@@ -3,7 +3,9 @@ language: en
 type: policy
 canonical: absence_makeup
 folder: policies
-aliases: absence; make‑up; makeup; make up lesson; quota; admin fee; HK$100; notice; sick leave
+aliases: absence; make‑up; makeup; make up lesson; quota; admin fee; HK$100; notice;
+  sick leave
+category: makeup
 ---
 # Absence & Make-up Policy
 

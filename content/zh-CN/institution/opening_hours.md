@@ -3,7 +3,9 @@ language: zh-CN
 type: institution
 canonical: opening_hours
 folder: institution
-aliases: 营业时间; 开放时间; 几点开; 几点关; 是否开门; 上课; 安排; 明天; 后天; 下周; 公共假期; 香港公众假期; 台风; 黑雨; 八号风球; 周日
+aliases: 营业时间; 开放时间; 几点开; 几点关; 是否开门; 上课; 安排; 明天; 后天; 下周; 公共假期; 香港公众假期; 台风; 黑雨; 八号风球;
+  周日
+category: hours
 ---
 # 营业时间
 

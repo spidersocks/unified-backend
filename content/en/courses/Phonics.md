@@ -3,7 +3,11 @@ language: en
 type: course
 canonical: Phonics
 folder: courses
-aliases: phoneme; grapheme; PGC; phoneme-grapheme correspondences; CCVC; CVCC; consonant digraphs; short vowel digraphs; split digraphs; silent letters; r-controlled vowels; homophones; soft c; hard c; soft g; hard g; affixes; unstressed vowels; sight words; SVO; sentence structure; Level 1; Level 2; Level 3; Level 4; Level 5; Level 6; Level 7; Level 8; L1; L2; L3; L4; L5; L6; L7; L8
+aliases: phoneme; grapheme; PGC; phoneme-grapheme correspondences; CCVC; CVCC; consonant
+  digraphs; short vowel digraphs; split digraphs; silent letters; r-controlled vowels;
+  homophones; soft c; hard c; soft g; hard g; affixes; unstressed vowels; sight words;
+  SVO; sentence structure; Level 1; Level 2; Level 3; Level 4; Level 5; Level 6; Level
+  7; Level 8; L1; L2; L3; L4; L5; L6; L7; L8
 ---
 # Phonics (英語拼音)
 

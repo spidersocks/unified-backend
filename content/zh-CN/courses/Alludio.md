@@ -1,9 +1,7 @@
 ---
 language: zh-CN
-type: course
 canonical: Alludio
 folder: courses
-教育游戏; Alludio; 听觉学习; 听力; 词汇; 故事; 音乐
 ---
 # 教育游戏 (Alludio) (Alludio Educational Games)
 

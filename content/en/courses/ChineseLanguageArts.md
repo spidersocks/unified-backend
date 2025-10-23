@@ -3,7 +3,8 @@ language: en
 type: course
 canonical: ChineseLanguageArts
 folder: courses
-aliases: Chinese language arts; Chinese composition; reading comprehension; classical texts; culture
+aliases: Chinese language arts; Chinese composition; reading comprehension; classical
+  texts; culture
 ---
 # Chinese Language Arts (中文語文課)
 

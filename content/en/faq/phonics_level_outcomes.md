@@ -3,7 +3,10 @@ language: en
 type: faq
 canonical: PhonicsLevelOutcomes
 folder: faq
-aliases: Phonics levels; Level 1; Level 2; Level 3; Level 4; Level 5; Level 6; Level 7; Level 8; L1; L2; L3; L4; L5; L6; L7; L8; outcomes; curriculum; objectives; phoneme; grapheme; PGC; CCVC; CVCC; digraphs; split digraph; r-controlled; silent letters; homophones; soft c; hard g; affixes; unstressed vowels; sight words; hours
+aliases: Phonics levels; Level 1; Level 2; Level 3; Level 4; Level 5; Level 6; Level
+  7; Level 8; L1; L2; L3; L4; L5; L6; L7; L8; outcomes; curriculum; objectives; phoneme;
+  grapheme; PGC; CCVC; CVCC; digraphs; split digraph; r-controlled; silent letters;
+  homophones; soft c; hard g; affixes; unstressed vowels; sight words; hours
 ---
 # Phonics — learning outcomes and hours by level
 

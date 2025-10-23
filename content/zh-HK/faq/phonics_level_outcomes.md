@@ -3,7 +3,8 @@ language: zh-HK
 type: faq
 canonical: PhonicsLevelOutcomes
 folder: faq
-aliases: 拼音級別; 分級; L1; L2; L3; L4; L5; L6; L7; L8; 課程大綱; 學習目標; 音素; 字母對應; PGC; CCVC; CVCC; 二合字; 分離式二合字; r 控制母音; 不發音字母; 同音異義詞; 軟 c; 硬 g; 詞綴; 弱讀母音; 常見字; 學時
+aliases: 拼音級別; 分級; L1; L2; L3; L4; L5; L6; L7; L8; 課程大綱; 學習目標; 音素; 字母對應; PGC; CCVC;
+  CVCC; 二合字; 分離式二合字; r 控制母音; 不發音字母; 同音異義詞; 軟 c; 硬 g; 詞綴; 弱讀母音; 常見字; 學時
 ---
 # Phonics — 各級學習重點與學時
 

@@ -3,7 +3,10 @@ language: en
 type: institution
 canonical: opening_hours
 folder: institution
-aliases: opening hours; hours; business hours; when open; are you open; closed; timetable; schedule; attend class; arrangements; tomorrow; today; next week; public holiday; Hong Kong public holiday; holiday; typhoon; rainstorm; T8; black rain; Sunday
+aliases: opening hours; hours; business hours; when open; are you open; closed; timetable;
+  schedule; attend class; arrangements; tomorrow; today; next week; public holiday;
+  Hong Kong public holiday; holiday; typhoon; rainstorm; T8; black rain; Sunday
+category: hours
 ---
 # Opening Hours
 

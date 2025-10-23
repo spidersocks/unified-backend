@@ -1,9 +1,10 @@
 ---
 language: zh-CN
-type: faq
+type: guide
 canonical: how-to-pay
-folder: faq
+folder: guides
 aliases: 付款; 学费; 收费; 银行转账; FPS; FPS 账号; 账户号码; 银行代码; 存款凭证
+category: payment
 ---
 # 如何付款？
 
