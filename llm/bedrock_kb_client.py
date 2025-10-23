@@ -5,10 +5,17 @@ Optimized for latency: fewer retrieved chunks, smaller max tokens, no unconditio
 import os
 import time
 import boto3
+from botocore.config import Config
 from typing import Optional, Tuple, List, Dict, Any
 from llm.config import SETTINGS
 
-rag = boto3.client("bedrock-agent-runtime", region_name=SETTINGS.aws_region)
+# Configure Bedrock client timeouts + limited retries to reduce tail latency
+_boto_cfg = Config(
+    connect_timeout=SETTINGS.kb_rag_connect_timeout_secs,
+    read_timeout=SETTINGS.kb_rag_read_timeout_secs,
+    retries={"max_attempts": SETTINGS.kb_rag_max_attempts, "mode": "standard"},
+)
+rag = boto3.client("bedrock-agent-runtime", region_name=SETTINGS.aws_region, config=_boto_cfg)
 
 NO_CONTEXT_TOKEN = "[NO_CONTEXT]"
 
@@ -43,7 +50,6 @@ def _prompt_prefix(lang: str) -> str:
     return f"{INSTRUCTIONS.get(lang, INSTRUCTIONS['en'])}\n\n"
 
 def _norm_uri(loc: Dict) -> Optional[str]:
-    # (unchanged)
     s3 = loc.get("s3Location") or loc.get("S3Location") or {}
     if isinstance(s3, dict):
         if s3.get("uri"):
@@ -83,7 +89,7 @@ def _silence_reason(answer: str, parsed_count: int) -> Optional[str]:
     lower = stripped.lower()
     if NO_CONTEXT_TOKEN.lower() in lower: return "refusal_token"
     if SETTINGS.kb_require_citation and parsed_count == 0: return "no_citations"
-    if any(m in lower for m in APOLOGY_MARKERS): return "apology_marker"
+    if SETTINGS.kb_silence_apology and any(m in lower for m in APOLOGY_MARKERS): return "apology_marker"
     return None
 
 def _cache_get(lang: str, message: str):
@@ -232,7 +238,7 @@ def debug_retrieve_only(message: str, language: Optional[str] = None) -> Dict[st
                 "modelArn": SETTINGS.kb_model_arn,
                 "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
                 "generationConfiguration": {
-                    "maxTokens": 1,        # keep tiny to minimize latency
+                    "maxTokens": 1,
                     "temperature": 0.0,
                     "topP": 0.9,
                 },

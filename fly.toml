@@ -5,8 +5,8 @@ primary_region = 'nrt'
 [build]
 
 [processes]
-  # Increase workers slightly and keep connections alive longer
-  web = "/app/.venv/bin/gunicorn -w 3 -k uvicorn.workers.UvicornWorker --keep-alive 120 --bind 0.0.0.0:8000 main:app"
+  # Increase keep-alive and worker timeout so startup work doesn't get killed
+  web = "/app/.venv/bin/gunicorn -w 3 -k uvicorn.workers.UvicornWorker --keep-alive 120 --timeout 180 --bind 0.0.0.0:8000 main:app"
 
 [http_service]
   internal_port = 8000

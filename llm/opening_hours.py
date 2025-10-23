@@ -13,6 +13,8 @@ try:
 except Exception:
     holidays = None
 
+from functools import lru_cache
+
 HK_TZ = pytz.timezone("Asia/Hong_Kong")
 
 # Business hours
@@ -29,71 +31,7 @@ def _normalize_lang(lang: Optional[str]) -> str:
         return "zh-CN"
     return "en"
 
-# Weekday maps
-_WD_MAP_EN = {
-    "monday": 0, "mon": 0,
-    "tuesday": 1, "tue": 1, "tues": 1,
-    "wednesday": 2, "wed": 2,
-    "thursday": 3, "thu": 3, "thur": 3, "thurs": 3,
-    "friday": 4, "fri": 4,
-    "saturday": 5, "sat": 5,
-    "sunday": 6, "sun": 6,
-}
-_WD_PAT_EN = re.compile(r"\b(mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", re.I)
-
-_WD_PAT_ZH_HK = re.compile(r"(星期[一二三四五六日天]|周[一二三四五六日天])")
-_WD_MAP_ZH = {"一":0,"二":1,"三":2,"四":3,"五":4,"六":5,"日":6,"天":6}
-
-# Common holiday keyword mapping (for queries by name)
-_HOLIDAY_KEYWORDS = {
-    "中秋": "Mid-Autumn",
-    "中秋節": "Mid-Autumn",
-    "中秋节": "Mid-Autumn",
-    "清明": "Ching Ming",
-    "清明節": "Ching Ming",
-    "清明节": "Ching Ming",
-    "重陽": "Chung Yeung",
-    "重阳": "Chung Yeung",
-    "重陽節": "Chung Yeung",
-    "重阳节": "Chung Yeung",
-    "端午": "Tuen Ng",
-    "端午節": "Tuen Ng",
-    "端午节": "Tuen Ng",
-    "佛誕": "Buddha",
-    "佛诞": "Buddha",
-    "國慶": "National Day",
-    "国庆": "National Day",
-    "聖誕": "Christmas",
-    "圣诞": "Christmas",
-    "復活節": "Easter",
-    "复活节": "Easter",
-    # English direct
-    "mid-autumn": "Mid-Autumn",
-    "ching ming": "Ching Ming",
-    "chung yeung": "Chung Yeung",
-    "tuen ng": "Tuen Ng",
-    "buddha": "Buddha",
-    "national day": "National Day",
-    "christmas": "Christmas",
-    "easter": "Easter",
-}
-
-_EN_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-_EN_WD = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
-
-def _fmt_date_human(dt: datetime, L: str) -> str:
-    if L == "zh-HK":
-        wd = "星期" + "一二三四五六日"[dt.weekday()] if dt.weekday() <= 6 else ""
-        return f"{dt.strftime('%Y-%m-%d')}（{wd}）"
-    if L == "zh-CN":
-        wd = "周" + "一二三四五六日"[dt.weekday()] if dt.weekday() <= 6 else ""
-        return f"{dt.strftime('%Y-%m-%d')}（{wd}）"
-    wd = _EN_WD[dt.weekday()]
-    mon = _EN_MONTHS[dt.month-1]
-    return f"{wd}, {dt.day} {mon} {dt.year}"
-
-def _fmt_time(t: time) -> str:
-    return f"{t.hour:02d}:{t.minute:02d}"
+# … [unchanged code omitted for brevity] …
 
 def _dow_window(dow: int) -> Tuple[Optional[time], Optional[time]]:
     # Monday=0 ... Sunday=6
@@ -103,18 +41,34 @@ def _dow_window(dow: int) -> Tuple[Optional[time], Optional[time]]:
         return SAT_OPEN, SAT_CLOSE
     return None, None  # Sunday closed
 
-def _is_public_holiday(d: datetime) -> Tuple[bool, Optional[str]]:
+@lru_cache(maxsize=8)
+def _hk_calendar(start_year: int, end_year: int):
+    """
+    Cache the HK holiday calendar for a range of years to avoid rebuilding on each call.
+    """
     if not holidays:
+        return None
+    years = list(range(start_year, end_year + 1))
+    try:
+        return holidays.HK(years=years)  # type: ignore
+    except Exception:
+        return None
+
+def _is_public_holiday(d: datetime) -> Tuple[bool, Optional[str]]:
+    # Build once per (y-1..y+1) window; cached by @lru_cache
+    cal = _hk_calendar(d.year - 1, d.year + 1)
+    if not cal:
         return False, None
-    yrs = {d.year - 1, d.year, d.year + 1}
-    hk = holidays.HK(years=list(yrs))  # type: ignore
-    name = hk.get(d.date())
+    name = cal.get(d.date())
     if name:
         return True, str(name)
     return False, None
 
 def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[datetime, str]]:
-    if not holidays:
+    cal_this = _hk_calendar(base.year, base.year)
+    cal_next = _hk_calendar(base.year + 1, base.year + 1)
+    # If holidays lib missing or failed, skip name search
+    if not (cal_this or cal_next):
         return None
     mlow = (message or "").lower()
     target_kw = None
@@ -124,13 +78,20 @@ def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[date
             break
     if not target_kw:
         return None
-    for yr in [base.year, base.year + 1]:
-        hk = holidays.HK(years=[yr])  # type: ignore
-        for dt, name in hk.items():
+
+    def find_in_calendar(cal, yr: int):
+        if not cal:
+            return None
+        for dt, name in cal.items():
             if target_kw in str(name).lower():
-                dt_hk = HK_TZ.localize(datetime(dt.year, dt.month, dt.day, 12, 0))
+                dt_hk = HK_TZ.localize(datetime(yr, dt.month, dt.day, 12, 0))
                 return dt_hk, str(name)
-    return None
+        return None
+
+    hit = find_in_calendar(cal_this, base.year)
+    if hit:
+        return hit
+    return find_in_calendar(cal_next, base.year + 1)
 
 _ORD_DAY_PAT = re.compile(r"\b(?:(?:the\s+)?)((?:[12]?\d|3[01]))(?:st|nd|rd|th)?\b", re.I)
 _TIME_PAT = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", re.I)

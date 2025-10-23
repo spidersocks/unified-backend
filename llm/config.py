@@ -16,17 +16,25 @@ class Settings:
     kb_s3_prefix: str = os.environ.get("KB_S3_PREFIX", "ls/kb/v1/").strip("/")
 
     # Inference config for generator
-    gen_max_tokens: int = int(os.environ.get("KB_GEN_MAX_TOKENS", "300"))  # lower default
+    gen_max_tokens: int = int(os.environ.get("KB_GEN_MAX_TOKENS", "300"))
     gen_temperature: float = float(os.environ.get("KB_GEN_TEMPERATURE", "0.15"))
     gen_top_p: float = float(os.environ.get("KB_GEN_TOP_P", "0.9"))
 
     # Retrieval config
-    kb_vector_results: int = int(os.environ.get("KB_VECTOR_RESULTS", "6"))  # lower default
+    kb_vector_results: int = int(os.environ.get("KB_VECTOR_RESULTS", "6"))
     kb_retry_nofilter: bool = os.environ.get("KB_RAG_RETRY_NOFILTER", "false").lower() in ("1","true","yes")
 
     # Feature flags
     kb_disable_lang_filter: bool = os.environ.get("KB_DISABLE_LANG_FILTER", "false").lower() in ("1","true","yes")
-    kb_require_citation: bool = os.environ.get("KB_REQUIRE_CITATION", "true").lower() in ("1","true","yes")
+    # IMPORTANT: default to not requiring citations so answers aren’t silenced
+    kb_require_citation: bool = os.environ.get("KB_REQUIRE_CITATION", "false").lower() in ("1","true","yes")
+    # Only silence “apology” answers if explicitly enabled
+    kb_silence_apology: bool = os.environ.get("KB_SILENCE_APOLOGY", "false").lower() in ("1","true","yes")
+
+    # Bedrock client timeouts (seconds)
+    kb_rag_connect_timeout_secs: int = int(os.environ.get("KB_RAG_CONNECT_TIMEOUT", "5"))
+    kb_rag_read_timeout_secs: int = int(os.environ.get("KB_RAG_READ_TIMEOUT", "25"))
+    kb_rag_max_attempts: int = int(os.environ.get("KB_RAG_MAX_ATTEMPTS", "2"))
 
     # Opening-hours feature flags
     opening_hours_enabled: bool = os.environ.get("OPENING_HOURS_ENABLED", "true").lower() in ("1","true","yes")
