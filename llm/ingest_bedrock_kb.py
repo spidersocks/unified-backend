@@ -258,6 +258,7 @@ def debug_retrieve_only(message: str, language: Optional[str] = None, canonical:
         "error": None,
         "citations": [],
         "retrieval_config": None,
+        "nofilter": bool(nofilter),
     }
     if not SETTINGS.kb_id or not SETTINGS.kb_model_arn:
         info["error"] = "KB_ID or KB_MODEL_ARN not configured"
@@ -268,14 +269,15 @@ def debug_retrieve_only(message: str, language: Optional[str] = None, canonical:
 
     # Build optional filter
     f = None
-    if not nofilter and not SETTINGS.kb_disable_lang_filter:
-        f = {"equals": {"key": "language", "value": L}}
-    if doc_type:
-        tfil = {"equals": {"key": "type", "value": doc_type}}
-        f = {"andAll": [f, tfil]} if f else tfil
-    if canonical:
-        cfil = {"equals": {"key": "canonical", "value": canonical}}
-        f = {"andAll": [f, cfil]} if f else cfil
+    if not nofilter:
+        if not SETTINGS.kb_disable_lang_filter:
+            f = {"equals": {"key": "language", "value": L}}
+        if doc_type:
+            tfil = {"equals": {"key": "type", "value": doc_type}}
+            f = {"andAll": [f, tfil]} if f else tfil
+        if canonical:
+            cfil = {"equals": {"key": "canonical", "value": canonical}}
+            f = {"andAll": [f, cfil]} if f else cfil
 
     vec_cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
     if f:
