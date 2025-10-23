@@ -45,5 +45,4 @@ typing_extensions==4.14.0
 tzdata==2025.2
 urllib3==2.5.0
 uvicorn==0.34.3
-pycld3==0.22
 opencc==1.1.7
