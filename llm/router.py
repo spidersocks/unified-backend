@@ -128,3 +128,24 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
             debug_info["opening_hours_keywords_injected"] = True
 
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
+
+@router.get("/debug-retrieve")
+def debug_retrieve(
+    message: str = Query(..., description="User query to probe retrieval"),
+    language: str | None = Query(None, description="en | zh-HK | zh-CN"),
+    canonical: str | None = Query(None, description="Optional canonical to bias filter"),
+    doc_type: str | None = Query(None, description="Optional type (institution|course|policy|marketing|faq)"),
+    nofilter: bool = Query(False, description="If true, do not send any metadata filter"),
+):
+    if _kb_debug_retrieve_only is None:
+        raise HTTPException(status_code=501, detail="Debug retrieval not available in this build")
+    try:
+        return _kb_debug_retrieve_only(
+            message=message,
+            language=language,
+            canonical=canonical,
+            doc_type=doc_type,
+            nofilter=nofilter,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
