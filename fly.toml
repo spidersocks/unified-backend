@@ -5,8 +5,6 @@ primary_region = 'nrt'
 [build]
 
 [processes]
-  # Mirror Dockerfile command and enable debug logs
-  [processes]
   web = "/app/.venv/bin/gunicorn -w 1 -k uvicorn.workers.UvicornWorker --keep-alive 120 --timeout 180 --bind 0.0.0.0:8000 main:app"
 
 [http_service]
