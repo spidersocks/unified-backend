@@ -65,23 +65,38 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
     if req.session_id and lang:
         remember_session_language(req.session_id, lang)
 
-    # NEW: try opening-hours tool first (deterministic)
+    # Try opening-hours tool, but DO NOT block KB
     tool_answer = _maybe_answer_opening_hours(req.message, lang)
-    if tool_answer:
-        debug_payload: Dict[str, Any] = {"detected_language": lang, "opening_hours_tool": True}
-        if req.debug:
-            debug_payload["note"] = "Answered by opening-hours tool"
-        return ChatResponse(answer=tool_answer, citations=[], debug=(debug_payload if req.debug else None))
 
-    # Fall back to KB RAG
-    answer, citations, debug_info = chat_with_kb(req.message, lang, req.session_id, debug=bool(req.debug))
-    # IMPORTANT: Do NOT replace empty answers. Empty means: emit nothing (admin will respond).
+    # Send tool context to the LLM as additional prompt material
+    answer, citations, debug_info = chat_with_kb(
+        req.message, lang, req.session_id, debug=bool(req.debug), extra_context=tool_answer
+    )
     answer = answer or ""
 
-    # Attach detected language to debug payload if present
+    # If LLM had no answer but tool did, fall back to tool’s deterministic answer
+    appended_tool = False
+    if not answer and tool_answer:
+        answer = tool_answer
+        appended_tool = True
+    elif answer and tool_answer:
+        # Append a short localized note so users see both
+        if lang.lower().startswith("zh-hk"):
+            note_hdr = "（營業時間／上課安排提示）"
+        elif lang.lower().startswith("zh-cn") or lang.lower() == "zh":
+            note_hdr = "（营业时间／上课安排提示）"
+        else:
+            note_hdr = "(Opening-hours / class-arrangement note)"
+        answer = f"{answer}\n\n{note_hdr}\n{tool_answer}"
+        appended_tool = True
+
+    # Attach detected language and tool flags to debug payload if present
     if debug_info is not None:
         debug_info = dict(debug_info)
         debug_info["detected_language"] = lang
+        if tool_answer:
+            debug_info["opening_hours_tool"] = True
+            debug_info["tool_appended_or_fallback"] = appended_tool
 
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
 

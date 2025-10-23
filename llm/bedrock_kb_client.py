@@ -106,7 +106,13 @@ def _cache_get(lang: str, message: str):
 def _cache_set(lang: str, message: str, ans: str, cits: List[Dict], dbg: Dict[str,Any]):
     _CACHE[(lang, message.strip())] = (time.time(), ans, cits, dbg)
 
-def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optional[str] = None, debug: bool = False) -> Tuple[str, List[Dict], Dict[str, Any]]:
+def chat_with_kb(
+    message: str,
+    language: Optional[str] = None,
+    session_id: Optional[str] = None,
+    debug: bool = False,
+    extra_context: Optional[str] = None,  # optional tool/context injection
+) -> Tuple[str, List[Dict], Dict[str, Any]]:
     # Serve from cache if available
     L = _lang_label(language)
     cached = _cache_get(L, message or "")
@@ -133,12 +139,17 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
 
     t0 = time.time()
     prefix = _prompt_prefix(L)
-    input_text = prefix + "User: " + (message or "")
+    injected = ""
+    if extra_context and extra_context.strip():
+        # Keep this short; it’s treated as verified contextual note in addition to retrieved content.
+        injected = f"Additional verified context (non-retrieved):\n{extra_context.strip()}\n\n"
+    input_text = prefix + injected + "User: " + (message or "")
 
     vec_cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
     if not SETTINGS.kb_disable_lang_filter:
         vec_cfg["filter"] = {"equals": {"key": "language", "value": L}}
 
+    # IMPORTANT: use inferenceConfig.textInferenceConfig and drop responseConfiguration
     base_req: Dict = {
         "input": {"text": input_text},
         "retrieveAndGenerateConfiguration": {
@@ -148,19 +159,23 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
                 "modelArn": SETTINGS.kb_model_arn,
                 "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
                 "generationConfiguration": {
-                    "maxTokens": SETTINGS.gen_max_tokens,
-                    "temperature": SETTINGS.gen_temperature,
-                    "topP": SETTINGS.gen_top_p,
+                    "inferenceConfig": {
+                        "textInferenceConfig": {
+                            "maxTokens": SETTINGS.gen_max_tokens,
+                            "temperature": SETTINGS.gen_temperature,
+                            "topP": SETTINGS.gen_top_p,
+                        }
+                    }
                 },
             }
         },
-        "responseConfiguration": {"type": "TEXT"},
     }
     if session_id:
         base_req["sessionId"] = session_id
 
     try:
         resp = rag.retrieve_and_generate(**base_req)
+        # Parse answer (handle typical structure)
         answer = ((resp.get("output") or {}).get("text") or "").strip()
         raw_cits = resp.get("citations", []) or []
         parsed = _parse_citations(raw_cits)
@@ -238,13 +253,16 @@ def debug_retrieve_only(message: str, language: Optional[str] = None) -> Dict[st
                 "modelArn": SETTINGS.kb_model_arn,
                 "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
                 "generationConfiguration": {
-                    "maxTokens": 1,
-                    "temperature": 0.0,
-                    "topP": 0.9,
+                    "inferenceConfig": {
+                        "textInferenceConfig": {
+                            "maxTokens": 1,
+                            "temperature": 0.0,
+                            "topP": 0.9,
+                        }
+                    }
                 },
             }
         },
-        "responseConfiguration": {"type": "TEXT"},
     }
 
     try:
