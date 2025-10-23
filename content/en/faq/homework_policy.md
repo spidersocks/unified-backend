@@ -12,5 +12,8 @@ aliases: homework; reading; writing; time needed; duration; K1; P1; 作业; 功�
 - Primary (P1–P6): about 30–60 minutes total (adjusted for appropriate challenge). We recommend splitting; complete before the next lesson.
 - Independence: Homework reinforces taught material; children should be able to complete it independently. Teachers provide regular feedback and comments.
 
+### Why do we have reading assignments?
+Reading assignments help children practise pronunciation, pacing, and intonation. Teachers can provide feedback, which helps children learn more efficiently.
+
 If you need adjustments to homework volume or format, please contact our staff:  
 Phone +852 2537 9519; WhatsApp +852 5118 2819; Email info@decoders-ls.com

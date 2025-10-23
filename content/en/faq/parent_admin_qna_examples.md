@@ -42,3 +42,24 @@ A: Yes. We offer a regular P1–P2 writing class (ideas & planning, sentence/par
 
 Q: How was the first lesson today?  
 A: We’ll check with the teacher‑in‑charge and get back to you shortly.
+
+Q: Is it necessary for my child to have the make‑up lesson?  
+A: We recommend make‑up lessons. They help ensure children don’t fall behind in the curriculum; by catching up on the missed lesson, children feel more confident when they rejoin the class.
+
+Q: Why do you assign reading?  
+A: Reading aloud helps children practise pronunciation, pacing, and intonation. Teachers give feedback, which makes learning more efficient.
+
+Q: How long does it take to finish all the phonics classes?  
+A: Our phonics programme has 8 levels and typically takes about 1.5 years to complete. Actual pace varies with practice.
+
+Q: How many stages are in the SmartSpell Programme?  
+A: There are 8 stages. We’ll conduct a placement assessment to determine the best starting level.
+
+Q: What do children learn in Little Linguist?  
+A: They develop communication skills in English and recognise the alphabet. Fine‑motor, cognitive, and social skills are also part of the curriculum.
+
+Q: What’s the difference between Sound Explorers and Smart Spell?  
+A: Both are phonics programmes for children who can name all the letters. Sound Explorers suits children who need more fine‑motor development for tracing; children who can write independently are advised to join Smart Spell.
+
+Q: When can children start writing short stories?  
+A: After Smart Spell Level 4, children can start writing short sentences. After Level 5, they learn to compose a short story on their own.
