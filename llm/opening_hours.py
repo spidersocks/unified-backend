@@ -59,104 +59,107 @@ _REL_ZH = {
 _REL_EN = {"today": 0, "tomorrow": 1, "day after tomorrow": 2}
 
 # Holiday keyword hints - expanded to cover common synonyms in English, zh-HK, zh-CN
-# Maps to the English holiday labels returned by holidays.HK (e.g., "Chung Yeung Festival", "National Day", etc.)
+# Maps user input keywords to the Chinese holiday labels returned by holidays.HK library
 _HOLIDAY_KEYWORDS = {
-    # Lunar New Year / Spring Festival
-    "lunar new year": "Lunar New Year",
-    "chinese new year": "Lunar New Year",
-    "spring festival": "Lunar New Year",
-    "新年": "Lunar New Year",
-    "農曆新年": "Lunar New Year",
-    "农历新年": "Lunar New Year",
-    "春節": "Lunar New Year",
-    "春节": "Lunar New Year",
+    # Lunar New Year / Spring Festival -> 農曆年初一/初二/初三
+    "lunar new year": "農曆年初",
+    "chinese new year": "農曆年初",
+    "spring festival": "農曆年初",
+    "新年": "農曆年初",
+    "農曆新年": "農曆年初",
+    "农历新年": "農曆年初",
+    "春節": "農曆年初",
+    "春节": "農曆年初",
+    "年初一": "農曆年初一",
     
-    # Ching Ming
-    "ching ming": "Ching Ming",
-    "qingming": "Ching Ming",
-    "清明": "Ching Ming",
-    "清明節": "Ching Ming",
-    "清明节": "Ching Ming",
+    # Ching Ming -> 清明節
+    "ching ming": "清明節",
+    "qingming": "清明節",
+    "清明": "清明節",
+    "清明節": "清明節",
+    "清明节": "清明節",
     
-    # Good Friday
-    "good friday": "Good Friday",
-    "耶穌受難節": "Good Friday",
-    "耶稣受难日": "Good Friday",
-    "受難節": "Good Friday",
-    "受难节": "Good Friday",
+    # Good Friday -> 耶穌受難節 (in 2024)
+    "good friday": "耶穌受難節",
+    "耶穌受難節": "耶穌受難節",
+    "耶稣受难日": "耶穌受難節",
+    "受難節": "耶穌受難節",
+    "受难节": "耶穌受難節",
     
-    # Easter Monday
-    "easter monday": "Easter Monday",
-    "easter": "Easter",
-    "復活節": "Easter",
-    "复活节": "Easter",
-    "復活節星期一": "Easter Monday",
-    "复活节星期一": "Easter Monday",
+    # Easter Monday -> 復活節星期一
+    "easter monday": "復活節",
+    "easter": "復活節",
+    "復活節": "復活節",
+    "复活节": "復活節",
+    "復活節星期一": "復活節星期一",
+    "复活节星期一": "復活節星期一",
     
-    # Labour Day / Labor Day
-    "labour day": "Labour Day",
-    "labor day": "Labour Day",
-    "勞動節": "Labour Day",
-    "劳动节": "Labour Day",
+    # Labour Day / Labor Day -> 勞動節
+    "labour day": "勞動節",
+    "labor day": "勞動節",
+    "勞動節": "勞動節",
+    "劳动节": "勞動節",
     
-    # Buddha's Birthday
-    "buddha": "Buddha",
-    "buddha's birthday": "Buddha",
-    "佛誕": "Buddha",
-    "佛诞": "Buddha",
-    "佛誕日": "Buddha",
-    "佛诞日": "Buddha",
+    # Buddha's Birthday -> 佛誕
+    "buddha": "佛誕",
+    "buddha's birthday": "佛誕",
+    "佛誕": "佛誕",
+    "佛诞": "佛誕",
+    "佛誕日": "佛誕",
+    "佛诞日": "佛誕",
     
-    # Tuen Ng Festival / Dragon Boat Festival
-    "tuen ng": "Tuen Ng",
-    "dragon boat": "Tuen Ng",
-    "duanwu": "Tuen Ng",
-    "端午": "Tuen Ng",
-    "端午節": "Tuen Ng",
-    "端午节": "Tuen Ng",
+    # Tuen Ng Festival / Dragon Boat Festival -> 端午節
+    "tuen ng": "端午節",
+    "dragon boat": "端午節",
+    "duanwu": "端午節",
+    "端午": "端午節",
+    "端午節": "端午節",
+    "端午节": "端午節",
     
-    # HKSAR Establishment Day
-    "hksar": "HKSAR",
-    "establishment day": "HKSAR",
-    "hong kong establishment": "HKSAR",
-    "回歸": "HKSAR",
-    "回归": "HKSAR",
-    "回歸紀念日": "HKSAR",
-    "回归纪念日": "HKSAR",
-    "香港特別行政區成立紀念日": "HKSAR",
-    "香港特别行政区成立纪念日": "HKSAR",
+    # HKSAR Establishment Day -> 香港特別行政區成立紀念日
+    "hksar": "香港特別行政區成立紀念日",
+    "establishment day": "香港特別行政區成立紀念日",
+    "hong kong establishment": "香港特別行政區成立紀念日",
+    "回歸": "香港特別行政區成立紀念日",
+    "回归": "香港特別行政區成立紀念日",
+    "回歸紀念日": "香港特別行政區成立紀念日",
+    "回归纪念日": "香港特別行政區成立紀念日",
+    "香港特別行政區成立紀念日": "香港特別行政區成立紀念日",
+    "香港特别行政区成立纪念日": "香港特別行政區成立紀念日",
+    "七一": "香港特別行政區成立紀念日",
     
-    # National Day
-    "national day": "National Day",
-    "國慶": "National Day",
-    "国庆": "National Day",
-    "國慶日": "National Day",
-    "国庆日": "National Day",
+    # National Day -> 國慶日
+    "national day": "國慶日",
+    "國慶": "國慶日",
+    "国庆": "國慶日",
+    "國慶日": "國慶日",
+    "国庆日": "國慶日",
+    "十一": "國慶日",
     
-    # Mid-Autumn Festival and following day
-    "mid-autumn": "Mid-Autumn",
-    "mid autumn": "Mid-Autumn",
-    "moon festival": "Mid-Autumn",
-    "中秋": "Mid-Autumn",
-    "中秋節": "Mid-Autumn",
-    "中秋节": "Mid-Autumn",
+    # Mid-Autumn Festival and following day -> 中秋節翌日
+    "mid-autumn": "中秋節",
+    "mid autumn": "中秋節",
+    "moon festival": "中秋節",
+    "中秋": "中秋節",
+    "中秋節": "中秋節",
+    "中秋节": "中秋節",
     
-    # Chung Yeung Festival
-    "chung yeung": "Chung Yeung",
-    "chong yang": "Chung Yeung",
-    "double ninth": "Chung Yeung",
-    "重陽": "Chung Yeung",
-    "重阳": "Chung Yeung",
-    "重陽節": "Chung Yeung",
-    "重阳节": "Chung Yeung",
+    # Chung Yeung Festival -> 重陽節
+    "chung yeung": "重陽節",
+    "chong yang": "重陽節",
+    "double ninth": "重陽節",
+    "重陽": "重陽節",
+    "重阳": "重陽節",
+    "重陽節": "重陽節",
+    "重阳节": "重陽節",
     
-    # Christmas
-    "christmas": "Christmas",
-    "xmas": "Christmas",
-    "聖誕": "Christmas",
-    "圣诞": "Christmas",
-    "聖誕節": "Christmas",
-    "圣诞节": "Christmas",
+    # Christmas -> 聖誕節
+    "christmas": "聖誕節",
+    "xmas": "聖誕節",
+    "聖誕": "聖誕節",
+    "圣诞": "聖誕節",
+    "聖誕節": "聖誕節",
+    "圣诞节": "聖誕節",
 }
 
 def _fmt_time(t: time) -> str:
@@ -211,9 +214,9 @@ def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[date
         return None
     mlow = (message or "").lower()
     target_kw = None
-    for k, en_kw in _HOLIDAY_KEYWORDS.items():
+    for k, ch_name in _HOLIDAY_KEYWORDS.items():
         if k in mlow or k in (message or ""):
-            target_kw = en_kw.lower()
+            target_kw = ch_name
             break
     if not target_kw:
         return None
@@ -222,7 +225,9 @@ def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[date
         if not cal:
             return None
         for dt, name in cal.items():
-            if target_kw in str(name).lower():
+            # Match against the Chinese name from holidays library
+            # Support partial match since we might have "農曆年初" matching "農曆年初一/初二/初三"
+            if target_kw in str(name) or str(name) in target_kw:
                 dt_hk = HK_TZ.localize(datetime(yr, dt.month, dt.day, 12, 0))
                 return dt_hk, str(name)
         return None
@@ -415,42 +420,59 @@ def _next_open_window(start: datetime) -> Tuple[datetime, time, time]:
     next_mon = start + timedelta(days=(7 - start.weekday()) % 7)
     return next_mon, WEEKDAY_OPEN, WEEKDAY_CLOSE
 
-def _localize_holiday_name(name_en: str, L: str) -> str:
-    name = (name_en or "").strip()
-    if L == "zh-HK":
-        mapping = {
-            "Ching Ming": "清明節",
-            "Chung Yeung": "重陽節",
-            "Mid-Autumn": "中秋節",
-            "Tuen Ng": "端午節",
-            "Buddha": "佛誕",
-            "National Day": "國慶日",
-            "Christmas": "聖誕節",
-            "Easter": "復活節",
-            "The day following the Chinese Mid-Autumn Festival": "中秋節翌日",
-            "The first weekday after Christmas Day": "聖誕節後首個工作天",
-        }
-        for k, v in mapping.items():
-            if k.lower() in name.lower():
-                return v
-        return name
+def _localize_holiday_name(name_zh: str, L: str) -> str:
+    """
+    The holidays library returns Chinese names by default.
+    Convert to appropriate language if needed, or return as-is for Chinese locales.
+    """
+    name = (name_zh or "").strip()
+    
+    # For Chinese locales, convert traditional/simplified as needed
     if L == "zh-CN":
+        # Convert traditional to simplified for common holiday names
         mapping = {
-            "Ching Ming": "清明节",
-            "Chung Yeung": "重阳节",
-            "Mid-Autumn": "中秋节",
-            "Tuen Ng": "端午节",
-            "Buddha": "佛诞",
-            "National Day": "国庆日",
-            "Christmas": "圣诞节",
-            "Easter": "复活节",
-            "The day following the Chinese Mid-Autumn Festival": "中秋节翌日",
-            "The first weekday after Christmas Day": "圣诞节后第一个工作日",
+            "農曆年初": "农历年初",
+            "清明節": "清明节",
+            "勞動節": "劳动节",
+            "佛誕": "佛诞",
+            "端午節": "端午节",
+            "香港特別行政區成立紀念日": "香港特别行政区成立纪念日",
+            "國慶日": "国庆日",
+            "中秋節": "中秋节",
+            "中秋節翌日": "中秋节翌日",
+            "重陽節": "重阳节",
+            "聖誕節": "圣诞节",
+            "聖誕節後": "圣诞节后",
         }
-        for k, v in mapping.items():
-            if k.lower() in name.lower():
-                return v
+        for trad, simp in mapping.items():
+            if trad in name:
+                name = name.replace(trad, simp)
         return name
+    
+    if L == "en":
+        # Convert to English
+        mapping = {
+            "一月一日": "New Year's Day",
+            "農曆年初一": "Lunar New Year's Day",
+            "農曆年初二": "The second day of Lunar New Year",
+            "農曆年初三": "The third day of Lunar New Year",
+            "清明節": "Ching Ming Festival",
+            "勞動節": "Labour Day",
+            "佛誕": "Buddha's Birthday",
+            "端午節": "Tuen Ng Festival",
+            "香港特別行政區成立紀念日": "HKSAR Establishment Day",
+            "國慶日": "National Day",
+            "中秋節翌日": "The day following the Chinese Mid-Autumn Festival",
+            "重陽節": "Chung Yeung Festival",
+            "聖誕節": "Christmas Day",
+            "聖誕節後第一個周日": "The first weekday after Christmas Day",
+        }
+        for zh, en in mapping.items():
+            if zh in name:
+                return en
+        return name
+    
+    # For zh-HK, return as-is (already in traditional Chinese)
     return name
 
 def _contains_time_of_day(message: str) -> bool:
