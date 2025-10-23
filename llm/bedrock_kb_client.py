@@ -146,7 +146,7 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
     else:
         _maybe_log("prompt_preview", input_text[:200] + ("…" if len(input_text) > 200 else ""))
 
-    vec_cfg: Dict = {"numberOfResults": 8}
+    vec_cfg: Dict = {"numberOfResults": 12}
     if not SETTINGS.kb_disable_lang_filter:
         vec_cfg["filter"] = {"equals": {"key": "language", "value": lang}}
 
