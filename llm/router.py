@@ -35,18 +35,19 @@ def _maybe_answer_opening_hours(message: str, lang: str) -> Optional[str]:
     is_intent, dbg = detect_opening_hours_intent(message, lang, SETTINGS.opening_hours_use_llm_intent)
     if not is_intent:
         return None
-    ans = compute_opening_answer(message, lang)
+    # Use brief phrasing to avoid verbosity
+    ans = compute_opening_answer(message, lang, brief=True)
     if not ans:
         return None
-    # Append a short severe-weather policy pointer if weather terms are mentioned
+    # Optionally append a one-liner severe-weather pointer only if user mentions weather
     try:
         if mentions_weather and mentions_weather(message or ""):
             if lang.lower().startswith("zh-hk"):
-                ans += "\n注意：惡劣天氣安排視乎當時信號。黑雨或八號風球停課；其他情況照常。如有需要請聯絡職員。"
+                ans += "\n注意：惡劣天氣安排視乎當時信號（黑雨／八號暫停）。"
             elif lang.lower().startswith("zh-cn") or lang.lower() == "zh":
-                ans += "\n注意：恶劣天气安排取决于当时信号。黑雨或八号风球停课；其他情况照常。如有需要请联系职员。"
+                ans += "\n注意：恶劣天气安排视当时信号（黑雨／八号暂停）。"
             else:
-                ans += "\nNote: Severe-weather arrangements depend on actual signals. Classes are suspended under Black Rain or Typhoon Signal No. 8; otherwise we operate. Contact us if needed."
+                ans += "\nNote: Severe-weather arrangements depend on the signal (Black Rain/T8 suspended)."
     except Exception:
         pass
     return ans
@@ -65,7 +66,7 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
     if req.session_id and lang:
         remember_session_language(req.session_id, lang)
 
-    # Try opening-hours tool, but DO NOT block KB
+    # Try opening-hours tool, but DO NOT append it to final output; only inject or fallback
     tool_answer = _maybe_answer_opening_hours(req.message, lang)
 
     # Send tool context to the LLM as additional prompt material
@@ -74,21 +75,9 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
     )
     answer = answer or ""
 
-    # If LLM had no answer but tool did, fall back to tool’s deterministic answer
-    appended_tool = False
+    # If LLM had no answer but tool did, fall back to the tool’s concise answer
     if not answer and tool_answer:
         answer = tool_answer
-        appended_tool = True
-    elif answer and tool_answer:
-        # Append a short localized note so users see both
-        if lang.lower().startswith("zh-hk"):
-            note_hdr = "（營業時間／上課安排提示）"
-        elif lang.lower().startswith("zh-cn") or lang.lower() == "zh":
-            note_hdr = "（营业时间／上课安排提示）"
-        else:
-            note_hdr = "(Opening-hours / class-arrangement note)"
-        answer = f"{answer}\n\n{note_hdr}\n{tool_answer}"
-        appended_tool = True
 
     # Attach detected language and tool flags to debug payload if present
     if debug_info is not None:
@@ -96,7 +85,8 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
         debug_info["detected_language"] = lang
         if tool_answer:
             debug_info["opening_hours_tool"] = True
-            debug_info["tool_appended_or_fallback"] = appended_tool
+            debug_info["tool_injected"] = True
+            debug_info["fallback_used"] = (answer == tool_answer)
 
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
 
@@ -109,7 +99,6 @@ class RetrieveDebugRequest(BaseModel):
 def debug_retrieve(req: RetrieveDebugRequest, request: Request) -> Dict[str, Any]:
     if not SETTINGS.debug_kb:
         raise HTTPException(status_code=403, detail="DEBUG_KB is disabled.")
-    # Same language selection path as chat()
     lang = req.language or (get_session_language(req.session_id) if req.session_id else None)
     if not lang:
         lang = detect_language(req.message, accept_language=request.headers.get("accept-language"))

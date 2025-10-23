@@ -26,7 +26,7 @@ INSTRUCTIONS = {
     "zh-CN": f"仅按检索内容作答。用精简要点。若内容不足或无关，请输出 {NO_CONTEXT_TOKEN}。"
 }
 
-# Keep staff as a post-processing footer (not in the prompt)
+# Optional staff footer (disabled by default; see SETTINGS.kb_append_staff_footer)
 STAFF = {
     "en": "If needed, contact our staff: +852 2537 9519 (Call), +852 5118 2819 (WhatsApp), info@decoders-ls.com",
     "zh-HK": "如需協助，請聯絡職員：+852 2537 9519（致電）、+852 5118 2819（WhatsApp）、info@decoders-ls.com",
@@ -197,8 +197,8 @@ def chat_with_kb(
             if not reason2 and answer2:
                 answer, parsed, reason = answer2, parsed2, None
 
-        # Append staff footer to valid answers (outside the prompt)
-        if answer and not reason:
+        # Append staff footer only if explicitly enabled
+        if answer and not reason and SETTINGS.kb_append_staff_footer:
             footer = STAFF.get(L, STAFF["en"])
             answer = f"{answer}\n\n{footer}"
 
@@ -214,64 +214,3 @@ def chat_with_kb(
     except Exception as e:
         debug_info["error"] = f"{type(e).__name__}: {e}"
         return "", [], (debug_info if debug else {})
-
-def debug_retrieve_only(message: str, language: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Lightweight retrieval/debug helper for /chat/_debug_retrieve.
-    Uses the same vectorSearchConfiguration and language filter, but keeps generation minimal.
-    Returns parsed citations and request diagnostics.
-    """
-    L = _lang_label(language)
-    info: Dict[str, Any] = {
-        "region": SETTINGS.aws_region,
-        "kb_id": SETTINGS.kb_id[:12] + "…" if SETTINGS.kb_id else "",
-        "model": SETTINGS.kb_model_arn.split("/")[-1] if SETTINGS.kb_model_arn else "",
-        "lang_filter_enabled": not SETTINGS.kb_disable_lang_filter,
-        "message_chars": len(message or ""),
-        "latency_ms": None,
-        "error": None,
-        "citations": [],
-    }
-    if not SETTINGS.kb_id or not SETTINGS.kb_model_arn:
-        info["error"] = "KB_ID or KB_MODEL_ARN not configured"
-        return info
-
-    t0 = time.time()
-    prefix = _prompt_prefix(L)
-    input_text = prefix + "User: " + (message or "")
-
-    vec_cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
-    if not SETTINGS.kb_disable_lang_filter:
-        vec_cfg["filter"] = {"equals": {"key": "language", "value": L}}
-
-    req: Dict = {
-        "input": {"text": input_text},
-        "retrieveAndGenerateConfiguration": {
-            "type": "KNOWLEDGE_BASE",
-            "knowledgeBaseConfiguration": {
-                "knowledgeBaseId": SETTINGS.kb_id,
-                "modelArn": SETTINGS.kb_model_arn,
-                "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
-                "generationConfiguration": {
-                    "inferenceConfig": {
-                        "textInferenceConfig": {
-                            "maxTokens": 1,
-                            "temperature": 0.0,
-                            "topP": 0.9,
-                        }
-                    }
-                },
-            }
-        },
-    }
-
-    try:
-        resp = rag.retrieve_and_generate(**req)
-        raw_cits = resp.get("citations", []) or []
-        info["citations"] = _parse_citations(raw_cits)
-        info["latency_ms"] = int((time.time() - t0) * 1000)
-        return info
-    except Exception as e:
-        info["error"] = f"{type(e).__name__}: {e}"
-        info["latency_ms"] = int((time.time() - t0) * 1000)
-        return info
