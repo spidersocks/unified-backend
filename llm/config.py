@@ -26,10 +26,9 @@ class Settings:
 
     # Feature flags
     kb_disable_lang_filter: bool = os.environ.get("KB_DISABLE_LANG_FILTER", "false").lower() in ("1","true","yes")
-    # IMPORTANT: default to not requiring citations so answers aren’t silenced
     kb_require_citation: bool = os.environ.get("KB_REQUIRE_CITATION", "false").lower() in ("1","true","yes")
-    # Only silence “apology” answers if explicitly enabled
     kb_silence_apology: bool = os.environ.get("KB_SILENCE_APOLOGY", "false").lower() in ("1","true","yes")
+    kb_append_staff_footer: bool = os.environ.get("KB_APPEND_STAFF_FOOTER", "false").lower() in ("1","true","yes")
 
     # Bedrock client timeouts (seconds)
     kb_rag_connect_timeout_secs: int = int(os.environ.get("KB_RAG_CONNECT_TIMEOUT", "5"))
