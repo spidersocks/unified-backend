@@ -4,6 +4,7 @@ from typing import List, Dict, Optional, Any
 from llm.bedrock_kb_client import chat_with_kb  # only import the required symbol
 from llm.config import SETTINGS
 from llm.lang import detect_language, remember_session_language, get_session_language
+from llm import tags_index
 
 # Optional raw-retrieval helper (prefer ingest_bedrock_kb implementation)
 try:
@@ -114,15 +115,27 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
 
 @router.get("/debug-retrieve")
-def debug_retrieve(message: str, language: Optional[str] = None):
+def debug_retrieve(
+    message: str,
+    language: Optional[str] = None,
+    canonical: Optional[str] = Query(None, description="Optional canonical filter, e.g. opening_hours"),
+    doc_type: Optional[str] = Query(None, description="Optional type filter: policy | faq | institution | course | marketing"),
+    nofilter: bool = Query(False, description="Ignore all metadata filters (language/type/canonical)"),
+):
     """
-    Admin probe: return raw citations from Bedrock RAG for a message, without generation.
+    Admin probe: return parsed citations from Bedrock RAG for a message, with optional filters.
     """
     if not language:
-        # Minimal language detection just like /chat
         language = detect_language(message)
     if not _kb_debug_retrieve_only:
         raise HTTPException(status_code=501, detail="debug_retrieve_only not available in this build")
-    info = _kb_debug_retrieve_only(message, language)
+    info = _kb_debug_retrieve_only(message, language, canonical=canonical, doc_type=doc_type, nofilter=nofilter)
     info["detected_language"] = language
     return info
+
+@router.get("/tags-debug")
+def tags_debug():
+    """
+    Returns counts of loaded alias tokens per language so you can confirm the tags index is built.
+    """
+    return {"token_counts": tags_index.debug_snapshot()}

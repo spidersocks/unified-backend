@@ -246,7 +246,7 @@ def chat_with_kb(
         debug_info["error"] = f"{type(e).__name__}: {e}"
         return "", [], (debug_info if debug else {})
 
-def debug_retrieve_only(message: str, language: Optional[str] = None) -> Dict[str, Any]:
+def debug_retrieve_only(message: str, language: Optional[str] = None, canonical: Optional[str] = None, doc_type: Optional[str] = None, nofilter: bool = False) -> Dict[str, Any]:
     L = _lang_label(language)
     info: Dict[str, Any] = {
         "region": SETTINGS.aws_region,
@@ -257,18 +257,30 @@ def debug_retrieve_only(message: str, language: Optional[str] = None) -> Dict[st
         "latency_ms": None,
         "error": None,
         "citations": [],
+        "retrieval_config": None,
     }
     if not SETTINGS.kb_id or not SETTINGS.kb_model_arn:
         info["error"] = "KB_ID or KB_MODEL_ARN not configured"
         return info
 
     t0 = time.time()
-    prefix = _prompt_prefix(L)
-    input_text = prefix + "User: " + (message or "")
+    input_text = _prompt_prefix(L) + "User: " + (message or "")
+
+    # Build optional filter
+    f = None
+    if not nofilter and not SETTINGS.kb_disable_lang_filter:
+        f = {"equals": {"key": "language", "value": L}}
+    if doc_type:
+        tfil = {"equals": {"key": "type", "value": doc_type}}
+        f = {"andAll": [f, tfil]} if f else tfil
+    if canonical:
+        cfil = {"equals": {"key": "canonical", "value": canonical}}
+        f = {"andAll": [f, cfil]} if f else cfil
 
     vec_cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
-    if not SETTINGS.kb_disable_lang_filter:
-        vec_cfg["filter"] = {"equals": {"key": "language", "value": L}}
+    if f:
+        vec_cfg["filter"] = f
+    info["retrieval_config"] = vec_cfg
 
     req: Dict = {
         "input": {"text": input_text},

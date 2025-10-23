@@ -252,7 +252,8 @@ def chat_with_kb(
 
     # General attempt (no canonical hint)
     vec_cfg = make_vec_cfg(meta_filter)
-    debug_info["retrieval_config"] = vec_cfg
+    debug_info["first_attempt_retrieval_config"] = dict(vec_cfg)  # snapshot before mutation
+    debug_info["retrieval_config"] = vec_cfg  # may be mutated by retry
 
     base_req: Dict = {
         "input": {"text": input_text},
