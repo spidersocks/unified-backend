@@ -58,16 +58,69 @@ _REL_ZH = {
 }
 _REL_EN = {"today": 0, "tomorrow": 1, "day after tomorrow": 2}
 
-# Holiday keyword hints (unchanged)
+# Expanded Holiday keyword hints (English + HK/CN, including common variants)
 _HOLIDAY_KEYWORDS = {
-    "ching ming": "Ching Ming", "清明": "Ching Ming",
-    "chung yeung": "Chung Yeung", "重陽": "Chung Yeung", "重阳": "Chung Yeung",
-    "mid-autumn": "Mid-Autumn", "mid autumn": "Mid-Autumn", "中秋": "Mid-Autumn",
-    "tuen ng": "Tuen Ng", "dragon boat": "Tuen Ng", "端午": "Tuen Ng",
-    "buddha": "Buddha", "佛誕": "Buddha", "佛诞": "Buddha",
-    "national day": "National Day", "國慶": "National Day", "国庆": "National Day",
-    "christmas": "Christmas", "聖誕": "Christmas", "圣诞": "Christmas",
-    "easter": "Easter", "復活": "Easter", "复活": "Easter",
+    # Lunar New Year and related days
+    "lunar new year": "Lunar New Year",
+    "chinese new year": "Lunar New Year",
+    "the first day of lunar new year": "Lunar New Year",
+    "the second day of lunar new year": "Second Day of Lunar New Year",
+    "the third day of lunar new year": "Third Day of Lunar New Year",
+    "年初一": "Lunar New Year",
+    "年初二": "Second Day of Lunar New Year",
+    "年初三": "Third Day of Lunar New Year",
+    "農曆新年": "Lunar New Year", "农历新年": "Lunar New Year",
+
+    # Ching Ming
+    "ching ming": "Ching Ming Festival",
+    "tomb-sweeping": "Ching Ming Festival",
+    "清明": "Ching Ming Festival", "清明節": "Ching Ming Festival", "清明节": "Ching Ming Festival",
+
+    # Chung Yeung
+    "chung yeung": "Chung Yeung Festival",
+    "重陽": "Chung Yeung Festival", "重阳": "Chung Yeung Festival", "重陽節": "Chung Yeung Festival", "重阳节": "Chung Yeung Festival",
+
+    # Tuen Ng / Dragon Boat
+    "tuen ng": "Tuen Ng Festival",
+    "dragon boat": "Tuen Ng Festival",
+    "端午": "Tuen Ng Festival", "端午節": "Tuen Ng Festival", "端午节": "Tuen Ng Festival",
+
+    # Mid-Autumn
+    "mid-autumn": "Mid-Autumn Festival", "mid autumn": "Mid-Autumn Festival",
+    "the day following the chinese mid-autumn festival": "The day following the Chinese Mid-Autumn Festival",
+    "中秋": "Mid-Autumn Festival", "中秋節": "Mid-Autumn Festival", "中秋节": "Mid-Autumn Festival",
+    "中秋節翌日": "The day following the Chinese Mid-Autumn Festival", "中秋节翌日": "The day following the Chinese Mid-Autumn Festival",
+
+    # Buddha's Birthday
+    "buddha": "Buddha's Birthday", "buddha's birthday": "Buddha's Birthday",
+    "佛誕": "Buddha's Birthday", "佛诞": "Buddha's Birthday",
+
+    # National Day
+    "national day": "National Day",
+    "國慶": "National Day", "国庆": "National Day", "國慶日": "National Day", "国庆日": "National Day",
+
+    # Labour Day
+    "labour day": "Labour Day", "labor day": "Labour Day",
+    "勞動節": "Labour Day", "劳动节": "Labour Day",
+
+    # HKSAR Establishment Day
+    "establishment day": "HKSAR Establishment Day", "hksar establishment": "HKSAR Establishment Day",
+    "回歸": "HKSAR Establishment Day", "回归": "HKSAR Establishment Day",
+    "香港特別行政區成立紀念日": "HKSAR Establishment Day", "香港特别行政区成立纪念日": "HKSAR Establishment Day",
+
+    # Good Friday / Easter Monday
+    "good friday": "Good Friday",
+    "easter monday": "Easter Monday",
+    "耶穌受難日": "Good Friday", "耶稣受难日": "Good Friday",
+    "復活節星期一": "Easter Monday", "复活节星期一": "Easter Monday",
+
+    # Christmas day + first weekday after
+    "christmas": "Christmas Day", "christmas day": "Christmas Day",
+    "the first weekday after christmas day": "The first weekday after Christmas Day",
+    "聖誕": "Christmas Day", "圣诞": "Christmas Day",
+    "聖誕節": "Christmas Day", "圣诞节": "Christmas Day",
+    "聖誕節後首個工作天": "The first weekday after Christmas Day",
+    "圣诞节后第一个工作日": "The first weekday after Christmas Day",
 }
 
 def _fmt_time(t: time) -> str:
@@ -148,7 +201,7 @@ _ORD_DAY_PAT = re.compile(r"\b(?:(?:the\s+)?)((?:[12]?\d|3[01]))(?:st|nd|rd|th)?
 # IMPORTANT: tighten time regex so plain integers (like in "10月") are NOT treated as times.
 _TIME_PAT = re.compile(r"\b(\d{1,2}):(\d{2})\b|\b(\d{1,2})\s*(am|pm)\b", re.I)
 
-_ZH_NUM = {"零":0,"〇":0,"一":1,"二":2,"两":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}
+_ZH_NUM = {"零":0,"〇":0,"一":1,"二":1,"两":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}
 _ZH_TIME_PAT = re.compile(r"(上午|早上|中午|下午|晚上)?\s*([一二两三四五六七八九十〇零\d]{1,3})\s*(点|點|时|時)(半)?", re.IGNORECASE)
 
 def _zh_num_to_int(s: str) -> Optional[int]:
@@ -374,6 +427,7 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
     Deterministic opening-hours answer:
     - Uses explicit relative-day words (zh/en) and never inherits current clock time unless a time was given.
     - Weather hint is appended only when severe (Black Rain / Typhoon Signal No. 8+), and only if enabled.
+    - Avoids mentioning “not a public holiday” unless asked; only mention holidays when applicable.
     """
     L = _normalize_lang(lang)
     now = datetime.now(HK_TZ)
@@ -444,12 +498,15 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
     # Sunday
     if is_sunday:
         if brief:
+            # Add a simple reopen hint
+            base_next = dt + timedelta(days=1)
+            nxt_day, n_open, n_close = _next_open_window(base_next)
             if L == "zh-HK":
-                base = f"{date_h}逢星期日休息，課堂暫停。"
+                base = f"{date_h}逢星期日休息。下次開放：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}。"
             elif L == "zh-CN":
-                base = f"{date_h}周日休息，课程暂停。"
+                base = f"{date_h}周日休息。下次开放：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}。"
             else:
-                base = f"Closed on {date_h} (Sunday). Classes are suspended."
+                base = f"Closed on {date_h} (Sunday). Reopens {_fmt_date_human(nxt_day, L)} at {_fmt_time(n_open)}."
             hint = maybe_weather_hint()
             return base if not hint else f"{base}\n{hint}"
         base_next = dt + timedelta(days=1)
@@ -469,7 +526,12 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
         within = (open_t <= t.replace(tzinfo=None) <= close_t)
         if brief:
             if within:
-                base = f"{date_h} {dt.strftime('%H:%M')} 照常上課。" if L == "zh-HK" else (f"{date_h} {dt.strftime('%H:%M')} 照常上课。" if L == "zh-CN" else f"Open on {date_h} at {dt.strftime('%H:%M')}.")
+                if L == "zh-HK":
+                    base = f"{date_h} {dt.strftime('%H:%M')} 照常上課。"
+                elif L == "zh-CN":
+                    base = f"{date_h} {dt.strftime('%H:%M')} 照常上课。"
+                else:
+                    base = f"Open on {date_h} at {dt.strftime('%H:%M')}. Classes proceed as usual."
             else:
                 if dt.time() < open_t:
                     nxt_day, n_open, n_close = dt, open_t, close_t
@@ -487,11 +549,11 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
 
         if within:
             if L == "zh-HK":
-                base = f"{date_h} {dt.strftime('%H:%M')} 為開放時段內（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。課堂如常進行。非香港公眾假期."
+                base = f"{date_h} {dt.strftime('%H:%M')} 為開放時段內（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。課堂如常進行。"
             elif L == "zh-CN":
-                base = f"{date_h} {dt.strftime('%H:%M')} 在开放时段内（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。课程如常进行。非香港公众假期。"
+                base = f"{date_h} {dt.strftime('%H:%M')} 在开放时段内（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。课程如常进行。"
             else:
-                base = f"Open on {date_h} at {dt.strftime('%H:%M')} (within {_fmt_time(open_t)}–{_fmt_time(close_t)}). Classes proceed as usual. Not a Hong Kong public holiday."
+                base = f"Open on {date_h} at {dt.strftime('%H:%M')} (within {_fmt_time(open_t)}–{_fmt_time(close_t)}). Classes proceed as usual."
         else:
             if dt.time() < open_t:
                 nxt_day, n_open, n_close = dt, open_t, close_t
@@ -510,18 +572,18 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
     # Day-level (no specific time)
     if brief:
         if L == "zh-HK":
-            base = f"{date_h}中心開放（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。"
+            base = f"{date_h}中心開放（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。課堂如常進行。"
         elif L == "zh-CN":
-            base = f"{date_h}中心开放（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。"
+            base = f"{date_h}中心开放（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。课程如常进行。"
         else:
-            base = f"Open on {date_h} ({_fmt_time(open_t)}–{_fmt_time(close_t)})."
+            base = f"Open on {date_h} ({_fmt_time(open_t)}–{_fmt_time(close_t)}). Classes proceed as usual."
         hint = maybe_weather_hint()
         return base if not hint else f"{base}\n{hint}"
     if L == "zh-HK":
-        base = f"{date_h}中心開放（時段：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。課堂如常進行。非香港公眾假期。\n{canonical_line()}"
+        base = f"{date_h}中心開放（時段：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。課堂如常進行。\n{canonical_line()}"
     elif L == "zh-CN":
-        base = f"{date_h}中心开放（时段：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。课程如常进行。非香港公众假期。\n{canonical_line()}"
+        base = f"{date_h}中心开放（时段：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。课程如常进行。\n{canonical_line()}"
     else:
-        base = f"Open on {date_h} (window: {_fmt_time(open_t)}–{_fmt_time(close_t)}). Classes proceed as usual. Not a Hong Kong public holiday.\n{canonical_line()}"
+        base = f"Open on {date_h} (window: {_fmt_time(open_t)}–{_fmt_time(close_t)}). Classes proceed as usual.\n{canonical_line()}"
     hint = maybe_weather_hint()
     return base if not hint else f"{base}\n{hint}"

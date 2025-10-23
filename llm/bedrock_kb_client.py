@@ -4,6 +4,7 @@ Optimized for latency: fewer retrieved chunks, smaller max tokens, no unconditio
 """
 import os
 import time
+import re
 import boto3
 from botocore.config import Config
 from typing import Optional, Tuple, List, Dict, Any
@@ -27,11 +28,23 @@ INSTRUCTIONS = {
     "zh-CN": f"仅按检索内容作答。用精简要点。若内容不足或无关，请输出 {NO_CONTEXT_TOKEN}。"
 }
 
-# Opening-hours specific guardrail to suppress weather mentions unless severe and relevant
+# Opening-hours specific guardrails
 OPENING_HOURS_WEATHER_GUARDRAIL = {
     "en": "Important: Do NOT reference any weather information or weather policy unless the user asked about weather, or there is an active Black Rainstorm Signal or Typhoon Signal No. 8 (or above).",
     "zh-HK": "重要：除非用戶主動詢問天氣，或當前正生效黑雨或八號（或以上）風球，否則不要提及任何天氣資訊或天氣政策文件。",
     "zh-CN": "重要：除非用户主动询问天气，或当前正生效黑雨或八号（及以上）台风信号，否则不要引用任何天气信息或天气政策文档。",
+}
+OPENING_HOURS_HOLIDAY_GUARDRAIL = {
+    "en": "Also: Do NOT mention public holidays unless the user asked about holidays, or the resolved date is a Hong Kong public holiday.",
+    "zh-HK": "同時：除非用戶主動詢問或所涉日期是香港公眾假期，否則不要提及公眾假期。",
+    "zh-CN": "同时：除非用户主动询问或所涉日期为香港公众假期，否则不要提及公众假期。",
+}
+
+# Contact-answer guardrail: return only phone and email by default
+CONTACT_MINIMAL_GUARDRAIL = {
+    "en": "If the user is asking for contact details, reply with ONLY phone and email on separate lines. Do not include address, map, or social links unless explicitly requested.",
+    "zh-HK": "如用戶詢問聯絡方式，只回覆電話及電郵，各佔一行。除非用戶明確要求，請不要加入地址、地圖或社交連結。",
+    "zh-CN": "如用户询问联系方式，只回复电话和电邮，各占一行。除非用户明确要求，请不要加入地址、地图或社交链接。",
 }
 
 # Optional staff footer (disabled by default; see SETTINGS.kb_append_staff_footer)
@@ -61,6 +74,16 @@ def _lang_label(lang: Optional[str]) -> str:
 
 def _prompt_prefix(lang: str) -> str:
     return f"{INSTRUCTIONS.get(lang, INSTRUCTIONS['en'])}\n\n"
+
+def _is_contact_query(message: str, lang: Optional[str]) -> bool:
+    m = (message or "").lower()
+    if not m:
+        return False
+    if lang and str(lang).lower().startswith("zh-hk"):
+        return bool(re.search(r"聯絡|聯絡資料|電話|致電|電郵|whatsapp|联系|联系方式", m, flags=re.IGNORECASE))
+    if lang and (str(lang).lower().startswith("zh-cn") or str(lang).lower() == "zh"):
+        return bool(re.search(r"联系|联系方式|电话|致电|电邮|邮箱|whatsapp", m, flags=re.IGNORECASE))
+    return bool(re.search(r"\b(contact|phone|call|email|e-?mail|whatsapp)\b", m, flags=re.IGNORECASE))
 
 def _norm_uri(loc: Dict) -> Optional[str]:
     s3 = loc.get("s3Location") or loc.get("S3Location") or {}
@@ -155,12 +178,20 @@ def chat_with_kb(
     t0 = time.time()
     prefix = _prompt_prefix(L)
 
-    # Opening-hours guardrail (suppresses weather mentions unless severe/asked)
+    # Opening-hours guardrails (suppress weather mentions unless severe/asked; avoid holiday mentions unless relevant)
     if hint_canonical and hint_canonical.lower() == "opening_hours":
-        guard = OPENING_HOURS_WEATHER_GUARDRAIL.get(L, OPENING_HOURS_WEATHER_GUARDRAIL["en"])
-        prefix = f"{prefix}{guard}\n\n"
+        guard_w = OPENING_HOURS_WEATHER_GUARDRAIL.get(L, OPENING_HOURS_WEATHER_GUARDRAIL["en"])
+        guard_h = OPENING_HOURS_HOLIDAY_GUARDRAIL.get(L, OPENING_HOURS_HOLIDAY_GUARDRAIL["en"])
+        prefix = f"{prefix}{guard_w}\n{guard_h}\n\n"
         if debug:
             debug_info["opening_hours_guardrail"] = True
+
+    # Contact guardrail (minimal response)
+    if _is_contact_query(message or "", L):
+        cg = CONTACT_MINIMAL_GUARDRAIL.get(L, CONTACT_MINIMAL_GUARDRAIL["en"])
+        prefix = f"{prefix}{cg}\n\n"
+        if debug:
+            debug_info["contact_guardrail"] = True
 
     # 1) Tag-aware query expansion
     matched_tags = tags_index.find_matching_tags(message or "", L, limit=12) if message else []

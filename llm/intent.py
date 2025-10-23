@@ -42,6 +42,47 @@ _TIME_HINTS = [
     r"[上下]午", r"\d點|\d点",
 ]
 
+# Holiday name patterns (EN / zh-HK / zh-CN)
+_HOLIDAY_EN = [
+    r"\blunar new year\b", r"\bchinese new year\b", r"\bsecond day of lunar new year\b", r"\bthird day of lunar new year\b",
+    r"\bching ming\b", r"\btomb-?sweeping\b",
+    r"\bchung yeung\b",
+    r"\btuen ng\b", r"\bdragon boat\b",
+    r"\bmid[- ]autumn\b", r"\bthe day following the chinese mid[- ]autumn festival\b",
+    r"\bbuddha(?:'s)? birthday\b",
+    r"\bnational day\b",
+    r"\blabou?r day\b",
+    r"\bhksar establishment day\b|\bestablishment day\b",
+    r"\bgood friday\b", r"\beaster monday\b",
+    r"\bchristmas\b|\bfirst weekday after christmas\b",
+]
+_HOLIDAY_ZH_HK = [
+    r"農曆新年|年初[一二三]|新年",
+    r"清明|清明節",
+    r"重陽|重陽節",
+    r"端午|端午節",
+    r"中秋|中秋節|中秋節翌日",
+    r"佛誕",
+    r"國慶|國慶日",
+    r"勞動節",
+    r"回歸|香港特別行政區成立紀念日",
+    r"耶穌受難日|復活節星期一",
+    r"聖誕|聖誕節|聖誕節後首個工作天",
+]
+_HOLIDAY_ZH_CN = [
+    r"农历新年|年初[一二三]|新年",
+    r"清明|清明节",
+    r"重阳|重阳节",
+    r"端午|端午节",
+    r"中秋|中秋节|中秋节翌日",
+    r"佛诞",
+    r"国庆|国庆日",
+    r"劳动节",
+    r"回归|香港特别行政区成立纪念日",
+    r"耶稣受难日|复活节星期一",
+    r"圣诞|圣诞节|圣诞节后第一个工作日",
+]
+
 # Negative markers: if present, do NOT classify as opening-hours
 _NEG_EN = [r"\b(tuition|fee|fees|price|cost)\b", r"\bclass\s*size\b"]
 _NEG_ZH_HK = [r"學費|收費|費用|價錢|價格|班級人數|人數"]
@@ -62,21 +103,24 @@ def detect_opening_hours_intent(message: str, lang: str, use_llm: bool = True) -
     if L.startswith("zh-hk"):
         base_terms = _ZH_HK_TERMS
         neg_terms = _NEG_ZH_HK
+        holiday_terms = _HOLIDAY_ZH_HK
     elif L.startswith("zh-cn") or L == "zh":
         base_terms = _ZH_CN_TERMS
         neg_terms = _NEG_ZH_CN
+        holiday_terms = _HOLIDAY_ZH_CN
     else:
         base_terms = _EN_TERMS
         neg_terms = _NEG_EN
+        holiday_terms = _HOLIDAY_EN
 
     base_score, base_hits = _score_regex(m, base_terms)
     time_score, time_hits = _score_regex(m, _TIME_HINTS)
     weather_score, weather_hits = _score_regex(m, _WEATHER_MARKERS)
+    holiday_score, holiday_hits = _score_regex(m, holiday_terms)
     neg_score, neg_hits = _score_regex(m, neg_terms)
 
-    # Extremely permissive before, now require at least one real signal (base/time/weekday/holiday),
-    # and suppress if negative (tuition/class-size) terms are present.
-    score = base_score + (1 if time_score else 0)
+    # Require at least one real signal (base/time/holiday), and suppress if negative terms are present.
+    score = base_score + (1 if time_score else 0) + (1 if holiday_score else 0)
     is_intent = score >= 1 and neg_score == 0
 
     debug = {
@@ -84,6 +128,7 @@ def detect_opening_hours_intent(message: str, lang: str, use_llm: bool = True) -
         "base_hits": base_hits,
         "time_hits": time_hits,
         "weather_hits": weather_hits,
+        "holiday_hits": holiday_hits,
         "neg_hits": neg_hits,
         "used_llm": False,
         "llm_confidence": None,

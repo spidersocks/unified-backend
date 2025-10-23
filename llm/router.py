@@ -78,7 +78,8 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
                 if intent_debug is None:
                     intent_debug = {"forced_by_markers": True}
             if is_intent:
-                tool_answer = compute_opening_answer(req.message, lang)
+                # Use brief=True for concise, human answers
+                tool_answer = compute_opening_answer(req.message, lang, brief=True)
     except Exception:
         tool_answer = None
 
