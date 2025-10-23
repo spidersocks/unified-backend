@@ -6,6 +6,4 @@ folder: marketing
 ---
 # Success Stories
 
-Success stories:
-- ChineseDepartment: nan
-- EnglishDepartment: nan
+(Coming soon)

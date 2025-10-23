@@ -6,4 +6,4 @@ folder: marketing
 ---
 # Promotions & Events
 
-nan
+(Coming soon)

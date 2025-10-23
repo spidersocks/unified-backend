@@ -1,8 +1,8 @@
 ---
 language: en
-type: policies
+type: policy
 canonical: enrollment
-folder: courses
+folder: policies
 ---
 # Enrollment Procedure (報名程序 (Enrollment Procedure))
 
