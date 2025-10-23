@@ -72,7 +72,7 @@ def _norm_uri(loc: Dict) -> Optional[str]:
         if bucket and isinstance(bucket, str) and "arn:aws:s3:::" in bucket:
             bucket = bucket.split(":::")[-1]
         if bucket and key:
-            return s3://{bucket}/{key}
+            return f"s3://{bucket}/{key}"
     if loc.get("type") == "S3":
         bucket = loc.get("bucketName") or loc.get("bucket")
         key = loc.get("key") or loc.get("objectKey")
