@@ -3,6 +3,7 @@ language: en
 type: course
 canonical: MandarinPinyin
 folder: courses
+aliases: Hanyu Pinyin; Mandarin pinyin; pinyin; romanization
 ---
 # Mandarin Pinyin (魔法拼音班)
 

@@ -3,6 +3,7 @@ language: zh-CN
 type: course
 canonical: Clevercal
 folder: courses
+aliases: 数学班; 数学; Clevercal; 解题; 运算
 ---
 # 数学班 (Clevercal) (Clevercal Math)
 

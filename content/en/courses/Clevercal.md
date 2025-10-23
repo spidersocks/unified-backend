@@ -3,6 +3,7 @@ language: en
 type: course
 canonical: Clevercal
 folder: courses
+aliases: Clevercal; math; maths; mathematics; numeracy; problem solving
 ---
 # Clevercal Math (數學班 (Clevercal))
 

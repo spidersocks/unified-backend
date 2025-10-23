@@ -3,6 +3,7 @@ language: zh-CN
 type: course
 canonical: ToddlerCharRecognition
 folder: courses
+aliases: 认字; 早期识字; 汉字; 宝宝爱认字
 ---
 # 宝宝爱认字 (Chinese Character Recognition)
 

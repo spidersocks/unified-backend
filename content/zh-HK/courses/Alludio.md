@@ -3,6 +3,7 @@ language: zh-HK
 type: course
 canonical: Alludio
 folder: courses
+aliases: 教育遊戲; Alludio; 聽覺學習; 聽力; 詞彙; 故事; 音樂
 ---
 # 教育遊戲 (Alludio) (Alludio Educational Games)
 

@@ -3,6 +3,7 @@ language: zh-CN
 type: policy
 canonical: absence_makeup
 folder: policies
+aliases: 补课; 请假; 配额; 行政费; 100; 医生证明; 病假; 通知
 ---
 # 补课与请假政策
 

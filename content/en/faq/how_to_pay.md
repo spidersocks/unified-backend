@@ -3,6 +3,7 @@ language: en
 type: faq
 canonical: how-to-pay
 folder: faq
+aliases: payment; pay; tuition; fees; bank transfer; FPS; FPS ID; account number; bank code; deposit slip
 ---
 # How to Pay?
 

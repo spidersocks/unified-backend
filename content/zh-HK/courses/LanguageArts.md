@@ -3,6 +3,7 @@ language: zh-HK
 type: course
 canonical: LanguageArts
 folder: courses
+aliases: 英語語文; 英文寫作; 文法; 閱讀理解; 寫作班
 ---
 # 英語語文課 (Language Arts)
 

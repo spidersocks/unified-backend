@@ -3,6 +3,7 @@ language: zh-HK
 type: course
 canonical: Playgroups
 folder: courses
+aliases: 幼兒班; playgroup; PN; 嬰幼兒; 感覺統合; 社交
 ---
 # 幼兒班 (Playgroups)
 

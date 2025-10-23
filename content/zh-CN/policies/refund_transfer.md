@@ -3,6 +3,7 @@ language: zh-CN
 type: policy
 canonical: refund_transfer
 folder: policies
+aliases: 退款; 退学; 转班; 升班; 通知期; 不退款
 ---
 # 退款与转班政策
 

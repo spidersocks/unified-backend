@@ -3,6 +3,7 @@ language: zh-HK
 type: faq
 canonical: how-to-pay
 folder: faq
+aliases: 付款; 學費; 收費; 入數; 銀行轉帳; 轉數快; FPS; FPS 帳戶; 戶口編號; 銀行代碼; 入數紙
 ---
 # 如何付款？
 

@@ -3,6 +3,7 @@ language: en
 type: course
 canonical: LanguageArts
 folder: courses
+aliases: English language arts; ELA; composition; grammar; reading comprehension; writing class
 ---
 # Language Arts (英語語文課)
 

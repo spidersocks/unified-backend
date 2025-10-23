@@ -3,6 +3,7 @@ language: en
 type: course
 canonical: ToddlerCharRecognition
 folder: courses
+aliases: Chinese character recognition; early literacy; characters; reading
 ---
 # Chinese Character Recognition (寶寶愛認字)
 

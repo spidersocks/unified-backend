@@ -3,6 +3,7 @@ language: zh-CN
 type: course
 canonical: ChineseLanguageArts
 folder: courses
+aliases: 中文语文; 中文写作; 阅读理解; 古文; 文化
 ---
 # 中文语文课 (Chinese Language Arts)
 

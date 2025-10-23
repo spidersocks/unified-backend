@@ -3,6 +3,7 @@ language: zh-CN
 type: course
 canonical: PrivateClass
 folder: courses
+aliases:  私人课; 一对一; 1对1; 私教
 ---
 # 私人课 (Private Class)
 

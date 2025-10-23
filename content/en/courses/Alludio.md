@@ -3,6 +3,7 @@ language: en
 type: course
 canonical: Alludio
 folder: courses
+aliases: Alludio; educational games; auditory learning; listening; storytelling; music; vocabulary
 ---
 # Alludio Educational Games (教育遊戲 (Alludio))
 

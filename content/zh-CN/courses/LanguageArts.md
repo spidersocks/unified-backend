@@ -3,6 +3,7 @@ language: zh-CN
 type: course
 canonical: LanguageArts
 folder: courses
+aliases: 英语语文; 英文写作; 语法; 阅读理解; 写作班
 ---
 # 英语语文课 (Language Arts)
 

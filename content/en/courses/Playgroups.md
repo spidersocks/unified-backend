@@ -3,6 +3,7 @@ language: en
 type: course
 canonical: Playgroups
 folder: courses
+aliases: playgroup; PN; toddler class; 18–28 months; sensory; social skills
 ---
 # Playgroups (幼兒班)
 

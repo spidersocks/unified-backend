@@ -3,6 +3,7 @@ language: zh-HK
 type: policy
 canonical: absence_makeup
 folder: policies
+aliases: 補課; 補堂; 請假; 配額; 行政費; 一百; 醫生紙; 病假; 通知
 ---
 # 補課與請假政策
 

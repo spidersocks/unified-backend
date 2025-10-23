@@ -3,6 +3,7 @@ language: en
 type: policy
 canonical: refund_transfer
 folder: policies
+aliases: refund; withdrawal; class transfer; promotion; notice period; no refund
 ---
 # Refund & Class Transfer Policy
 

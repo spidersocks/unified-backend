@@ -3,6 +3,7 @@ language: zh-CN
 type: faq
 canonical: how-to-pay
 folder: faq
+aliases: 付款; 学费; 收费; 银行转账; FPS; FPS 账号; 账户号码; 银行代码; 存款凭证
 ---
 # 如何付款？
 

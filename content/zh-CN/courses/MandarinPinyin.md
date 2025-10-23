@@ -3,6 +3,7 @@ language: zh-CN
 type: course
 canonical: MandarinPinyin
 folder: courses
+aliases: 汉语拼音; 拼音; 普通话拼音
 ---
 # 魔法拼音班 (Mandarin Pinyin)
 
