@@ -28,15 +28,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_STARTED = False
+
 @app.on_event("startup")
 def startup_event():
+    global _STARTED
     print("[INFO] Main app startup: Loading assets for all submodules...", flush=True)
     load_pokemon_assets()
+    _STARTED = True
     print("[INFO] All assets loaded.", flush=True)
 
 @app.get("/")
 def read_root():
     return {"status": "ok", "message": "Unified Portfolio Backend is running!"}
+
+@app.get("/healthz")
+def healthz():
+    # Minimal check: process is alive and app constructed
+    return {"ok": True, "started": _STARTED}
 
 app.include_router(pokemon_router)
 app.include_router(news_router)

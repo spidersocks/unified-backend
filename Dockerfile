@@ -13,5 +13,5 @@ WORKDIR /app
 COPY --from=builder /app/.venv .venv/
 COPY . .
 
-# Ensure the app listens on 0.0.0.0:8000 inside the container
-CMD ["/app/.venv/bin/gunicorn", "-w", "3", "-k", "uvicorn.workers.UvicornWorker", "--keep-alive", "120", "--timeout", "180", "--bind", "0.0.0.0:8000", "main:app"]
+# Loud logging so startup/import errors are visible in fly logs
+CMD ["/app/.venv/bin/gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "--keep-alive", "120", "--timeout", "180", "--bind", "0.0.0.0:8000", "main:app"]
