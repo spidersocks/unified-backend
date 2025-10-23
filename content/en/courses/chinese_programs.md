@@ -9,6 +9,9 @@ folder: courses
 ### Overview  
 A comprehensive curriculum for students aged 2-12, focusing on language comprehension, expression, reading development, and writing skills. Each course emphasizes progressive learning aligned with traditional values.
 
+Note: Targets below are typical and will be adjusted for each child after a short diagnostic assessment.  
+Course language: Putonghua (Mandarin). Cantonese available by arrangement.
+
 ### Age Groups and Course Objectives  
 #### **2-3 Years Old (PN Course: Yi - Righteousness)**  
 **Listen**: Learn basic commands (e.g., "circle," "connect," "sit") through multimedia and in-class activities.  
