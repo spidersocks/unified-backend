@@ -5,9 +5,9 @@ from llm.bedrock_kb_client import chat_with_kb  # only import the required symbo
 from llm.config import SETTINGS
 from llm.lang import detect_language, remember_session_language, get_session_language
 
-# Try to import the optional debug helper; tolerate older builds that don't have it
+# Optional raw-retrieval helper (prefer ingest_bedrock_kb implementation)
 try:
-    from llm.bedrock_kb_client import debug_retrieve_only as _kb_debug_retrieve_only  # type: ignore
+    from llm.ingest_bedrock_kb import debug_retrieve_only as _kb_debug_retrieve_only  # type: ignore
 except Exception:
     _kb_debug_retrieve_only = None
 
@@ -90,3 +90,17 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
             debug_info["tool_appended_or_fallback"] = appended_tool
 
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
+
+@router.get("/debug-retrieve")
+def debug_retrieve(message: str, language: Optional[str] = None):
+    """
+    Admin probe: return raw citations from Bedrock RAG for a message, without generation.
+    """
+    if not language:
+        # Minimal language detection just like /chat
+        language = detect_language(message)
+    if not _kb_debug_retrieve_only:
+        raise HTTPException(status_code=501, detail="debug_retrieve_only not available in this build")
+    info = _kb_debug_retrieve_only(message, language)
+    info["detected_language"] = language
+    return info

@@ -160,10 +160,8 @@ def chat_with_kb(
 
     # 1) Tag-aware query expansion
     matched_tags = tags_index.find_matching_tags(message or "", L, limit=12) if message else []
-    keywords_line = ""
-    if matched_tags:
-        keywords_line = "Keywords: " + "; ".join(matched_tags) + "\n"
-        debug_info["matched_tags"] = matched_tags
+    debug_info["matched_tags"] = matched_tags or []  # always include
+    keywords_line = "Keywords: " + "; ".join(matched_tags) + "\n" if matched_tags else ""
 
     # 2) Optional extra verified tool context
     injected = ""
@@ -190,6 +188,9 @@ def chat_with_kb(
     if meta_filter:
         vec_cfg["filter"] = meta_filter
 
+    # Snapshot retrieval config for debugging
+    debug_info["retrieval_config"] = vec_cfg
+
     base_req: Dict = {
         "input": {"text": input_text},
         "retrieveAndGenerateConfiguration": {
@@ -215,10 +216,14 @@ def chat_with_kb(
 
     try:
         resp = rag.retrieve_and_generate(**base_req)
-        # Parse answer (handle typical structure)
+        # Parse answer
         answer = ((resp.get("output") or {}).get("text") or "").strip()
         raw_cits = resp.get("citations", []) or []
         parsed = _parse_citations(raw_cits)
+
+        # NEW: expose raw citations in debug to see shape from Bedrock
+        if debug:
+            debug_info["raw_citations"] = raw_cits
 
         # Post-filters
         answer = _filter_refusal(answer)
@@ -232,6 +237,8 @@ def chat_with_kb(
             answer2 = ((resp2.get("output") or {}).get("text") or "").strip()
             raw2 = resp2.get("citations", []) or []
             parsed2 = _parse_citations(raw2)
+            if debug:
+                debug_info.setdefault("retry", {})["raw_citations"] = raw2
             answer2 = _filter_refusal(answer2)
             reason2 = _silence_reason(answer2, len(parsed2))
             if not reason2 and answer2:
