@@ -8,6 +8,7 @@ content/
     - LanguageArts.md
   - institution/
     - contact.md
+    - opening_hours.md
   - policies/
     - refund_transfer.md
   - marketing/
@@ -19,6 +20,7 @@ content/
     - ChineseLanguageArts.md
   - institution/
     - contact.md
+    - opening_hours.md
   - policies/
     - absence_makeup.md
   - marketing/
@@ -28,6 +30,7 @@ content/
 - zh-CN/
   - courses/
   - institution/
+    - opening_hours.md
   - policies/
   - marketing/
   - faq/
@@ -60,11 +63,9 @@ Drive structure (optional, same shape)
         ChineseLanguageArts (Google Doc)
       institution/
         contact (Google Doc)
+        opening_hours (Google Doc)
       faq/
         example (Google Doc)
-- The sync tool exports Google Docs to Markdown and infers metadata from:
-  - Frontmatter (if present in the document body), otherwise
-  - Folder path (language and type) + filename (canonical)
 
 Sync flows
 - Local → S3:

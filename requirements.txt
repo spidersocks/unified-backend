@@ -46,3 +46,6 @@ tzdata==2025.2
 urllib3==2.5.0
 uvicorn==0.34.3
 opencc==1.1.7
+# NEW deps for opening-hours tool
+dateparser==1.1.8
+holidays==0.56
