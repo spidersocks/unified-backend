@@ -27,6 +27,13 @@ INSTRUCTIONS = {
     "zh-CN": f"仅按检索内容作答。用精简要点。若内容不足或无关，请输出 {NO_CONTEXT_TOKEN}。"
 }
 
+# Opening-hours specific guardrail to suppress weather mentions unless severe and relevant
+OPENING_HOURS_WEATHER_GUARDRAIL = {
+    "en": "Important: Do NOT reference any weather information or weather policy unless the user asked about weather, or there is an active Black Rainstorm Signal or Typhoon Signal No. 8 (or above).",
+    "zh-HK": "重要：除非用戶主動詢問天氣，或當前正生效黑雨或八號（或以上）風球，否則不要提及任何天氣資訊或天氣政策文件。",
+    "zh-CN": "重要：除非用户主动询问天气，或当前正生效黑雨或八号（及以上）台风信号，否则不要引用任何天气信息或天气政策文档。",
+}
+
 # Optional staff footer (disabled by default; see SETTINGS.kb_append_staff_footer)
 STAFF = {
     "en": "If needed, contact our staff: +852 2537 9519 (Call), +852 5118 2819 (WhatsApp), info@decoders-ls.com",
@@ -65,7 +72,7 @@ def _norm_uri(loc: Dict) -> Optional[str]:
         if bucket and isinstance(bucket, str) and "arn:aws:s3:::" in bucket:
             bucket = bucket.split(":::")[-1]
         if bucket and key:
-            return f"s3://{bucket}/{key}"
+            return s3://{bucket}/{key}
     if loc.get("type") == "S3":
         bucket = loc.get("bucketName") or loc.get("bucket")
         key = loc.get("key") or loc.get("objectKey")
@@ -147,6 +154,13 @@ def chat_with_kb(
 
     t0 = time.time()
     prefix = _prompt_prefix(L)
+
+    # Opening-hours guardrail (suppresses weather mentions unless severe/asked)
+    if hint_canonical and hint_canonical.lower() == "opening_hours":
+        guard = OPENING_HOURS_WEATHER_GUARDRAIL.get(L, OPENING_HOURS_WEATHER_GUARDRAIL["en"])
+        prefix = f"{prefix}{guard}\n\n"
+        if debug:
+            debug_info["opening_hours_guardrail"] = True
 
     # 1) Tag-aware query expansion
     matched_tags = tags_index.find_matching_tags(message or "", L, limit=12) if message else []
