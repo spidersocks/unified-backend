@@ -139,6 +139,60 @@ def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[date
 
 _ORD_DAY_PAT = re.compile(r"\b(?:(?:the\s+)?)((?:[12]?\d|3[01]))(?:st|nd|rd|th)?\b", re.I)
 _TIME_PAT = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", re.I)
+# NEW: Chinese numeral time like “三点”, “下午三点半”, “晚上7点”
+_ZH_NUM = {"零":0,"〇":0,"一":1,"二":2,"两":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}
+_ZH_TIME_PAT = re.compile(r"(上午|早上|中午|下午|晚上)?\s*([一二两三四五六七八九十〇零\d]{1,3})\s*(点|點|时|時)(半)?", re.IGNORECASE)
+
+def _zh_num_to_int(s: str) -> Optional[int]:
+    s = s.strip()
+    if not s:
+        return None
+    if s.isdigit():
+        v = int(s)
+        return v if 0 <= v <= 23 else None
+    # Parse up to 23 with simple 十X / X十[Y]
+    total = 0
+    if "十" in s:
+        parts = s.split("十")
+        if parts[0] == "":
+            tens = 1
+        else:
+            tens = _ZH_NUM.get(parts[0], -100)
+        ones = _ZH_NUM.get(parts[1], 0) if len(parts) > 1 and parts[1] != "" else 0
+        if tens < 0:
+            return None
+        total = tens * 10 + ones
+    else:
+        total = _ZH_NUM.get(s, -100)
+    if 0 <= total <= 23:
+        return total
+    return None
+
+def _parse_time_zh(msg: str) -> Optional[time]:
+    m = _ZH_TIME_PAT.search(msg or "")
+    if not m:
+        return None
+    period = (m.group(1) or "").strip()
+    hour_raw = (m.group(2) or "").strip()
+    half = bool(m.group(4))
+    hh = _zh_num_to_int(hour_raw)
+    if hh is None:
+        return None
+    # Period adjustment
+    # 上午/早上: 0-11 as-is, 12 => 0
+    # 中午: treat 12 as 12
+    # 下午/晚上: add 12 if 1-11
+    if period in ("下午", "晚上"):
+        if 1 <= hh <= 11:
+            hh += 12
+    elif period in ("上午", "早上"):
+        if hh == 12:
+            hh = 0
+    # “中午三点” rare; leave as-is
+    mm = 30 if half else 0
+    if 0 <= hh <= 23 and 0 <= mm <= 59:
+        return time(hh, mm)
+    return None
 
 def _extract_day_of_month(msg: str) -> Optional[int]:
     m = _ORD_DAY_PAT.search(msg or "")
@@ -166,20 +220,21 @@ def _extract_weekday(msg: str, L: str) -> Optional[int]:
     return _WD_MAP_ZH.get(ch)
 
 def _parse_time(msg: str) -> Optional[time]:
+    # Try Arabic digits
     m = _TIME_PAT.search(msg or "")
-    if not m:
-        return None
-    hh = int(m.group(1))
-    mm = int(m.group(2) or "0")
-    ap = (m.group(3) or "").lower()
-    if ap:
-        if hh == 12:
-            hh = 0
-        if ap == "pm":
-            hh += 12
-    if 0 <= hh <= 23 and 0 <= mm <= 59:
-        return time(hh, mm)
-    return None
+    if m:
+        hh = int(m.group(1))
+        mm = int(m.group(2) or "0")
+        ap = (m.group(3) or "").lower()
+        if ap:
+            if hh == 12:
+                hh = 0
+            if ap == "pm":
+                hh += 12
+        if 0 <= hh <= 23 and 0 <= mm <= 59:
+            return time(hh, mm)
+    # Try Chinese numerals like “三点/下午三点半”
+    return _parse_time_zh(msg or "")
 
 def _parse_datetime(message: str, now: datetime, L: str) -> Optional[datetime]:
     if dateparser:
@@ -270,7 +325,9 @@ def _localize_holiday_name(name_en: str, L: str) -> str:
     return name
 
 def _contains_time_of_day(message: str) -> bool:
-    return bool(re.search(r"\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(am|pm)\b|\d\s*點|\d\s*点", message, flags=re.IGNORECASE))
+    # Arabic digits (e.g., 3pm, 15:00) or Chinese numerals (e.g., 三点/三點)
+    return bool(re.search(r"\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(am|pm)\b", message, flags=re.IGNORECASE) or
+                re.search(r"[一二两三四五六七八九十〇零]{1,3}\s*(点|點|时|時)", message))
 
 def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool = False) -> Optional[str]:
     """
@@ -313,6 +370,7 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
             return "营业时间：周一至周五 09:00–18:00；周六 09:00–16:00；香港公众假期休息。"
         return "Hours: Mon–Fri 09:00–18:00; Sat 09:00–16:00; closed on Hong Kong public holidays."
 
+    # ... rest of function unchanged ...
     # Holiday
     if holiday_reason:
         hol_local = _localize_holiday_name(holiday_reason, L)

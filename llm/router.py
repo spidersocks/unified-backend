@@ -33,24 +33,22 @@ class ChatResponse(BaseModel):
     citations: List[Dict[str, Any]] = []
     debug: Optional[Dict[str, Any]] = None
 
-def _maybe_answer_opening_hours(message: str, lang: str) -> Optional[str]:
-    if not SETTINGS.opening_hours_enabled:
-        return None
-    if not compute_opening_answer or not detect_opening_hours_intent:
-        return None
-    is_intent, _ = detect_opening_hours_intent(message, lang, SETTINGS.opening_hours_use_llm_intent)
-    if not is_intent:
-        return None
-    # Compute deterministic answer. Weather hint (if any) is appended inside.
-    return compute_opening_answer(message, lang)
-
 def _opening_hours_keywords(lang: str) -> List[str]:
     L = (lang or "en").lower()
     if L.startswith("zh-hk"):
         return ["營業時間","開放時間","有冇開","星期日","公眾假期","上堂","上課","安排","颱風","黑雨","八號風球","明天","聽日"]
     if L.startswith("zh-cn") or L == "zh":
-        return ["营业时间","开放时间","开门","周日","公众假期","上课","安排","台风","黑雨","八号风球","明天"]
-    return ["opening hours","hours","open","closed","Sunday","public holiday","tomorrow","typhoon","rainstorm"]
+        return ["营业时间","开放时间","开门","几点","周日","公众假期","上课","安排","台风","黑雨","八号风球","明天","下午","今天"]
+    return ["opening hours","hours","open","closed","Sunday","public holiday","tomorrow","afternoon","typhoon","rainstorm"]
+
+def _has_opening_markers(message: str, lang: str) -> bool:
+    m = (message or "")
+    L = (lang or "en").lower()
+    if L.startswith("zh-hk"):
+        return any(x in m for x in ["營業","開放","開門","幾點","上課","聽日","星期","周日","公眾假期"])
+    if L.startswith("zh-cn") or L == "zh":
+        return any(x in m for x in ["营业","开放","开门","几点","上课","明天","星期","周日","公众假期"])
+    return any(w in m.lower() for w in ["open","opening","hours","closed","sunday","public holiday","tomorrow"])
 
 @router.post("", response_model=ChatResponse)
 def chat(req: ChatRequest, request: Request) -> ChatResponse:
@@ -66,13 +64,28 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
     if req.session_id and lang:
         remember_session_language(req.session_id, lang)
 
-    # Try opening-hours tool; do NOT block KB
-    tool_answer = _maybe_answer_opening_hours(req.message, lang)
+    # Opening-hours: robust trigger + debug
+    tool_answer = None
+    intent_debug: Optional[Dict[str, Any]] = None
+    try:
+        if SETTINGS.opening_hours_enabled and compute_opening_answer:
+            is_intent = False
+            if detect_opening_hours_intent:
+                is_intent, intent_debug = detect_opening_hours_intent(req.message, lang, SETTINGS.opening_hours_use_llm_intent)
+            # Safety net: if strong markers are present, treat as intent
+            if not is_intent and _has_opening_markers(req.message, lang or ""):
+                is_intent = True
+                if intent_debug is None:
+                    intent_debug = {"forced_by_markers": True}
+            if is_intent:
+                tool_answer = compute_opening_answer(req.message, lang)
+    except Exception:
+        tool_answer = None
 
     # If the intent is opening-hours, inject strong keywords and a canonical hint to boost recall
     extra_keywords: Optional[List[str]] = None
     hint_canonical: Optional[str] = None
-    if tool_answer:
+    if tool_answer or (req.message and _has_opening_markers(req.message, lang or "")):
         extra_keywords = _opening_hours_keywords(lang or "")
         hint_canonical = "opening_hours"
 
@@ -107,35 +120,11 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
     if debug_info is not None:
         debug_info = dict(debug_info)
         debug_info["detected_language"] = lang
+        if intent_debug is not None:
+            debug_info["opening_intent_debug"] = intent_debug
         if tool_answer:
             debug_info["opening_hours_tool"] = True
             debug_info["tool_appended_or_fallback"] = appended_tool
             debug_info["opening_hours_keywords_injected"] = True
 
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
-
-@router.get("/debug-retrieve")
-def debug_retrieve(
-    message: str,
-    language: Optional[str] = None,
-    canonical: Optional[str] = Query(None, description="Optional canonical filter, e.g. opening_hours"),
-    doc_type: Optional[str] = Query(None, description="Optional type filter: policy | faq | institution | course | marketing"),
-    nofilter: bool = Query(False, description="Ignore all metadata filters (language/type/canonical)"),
-):
-    """
-    Admin probe: return parsed citations from Bedrock RAG for a message, with optional filters.
-    """
-    if not language:
-        language = detect_language(message)
-    if not _kb_debug_retrieve_only:
-        raise HTTPException(status_code=501, detail="debug_retrieve_only not available in this build")
-    info = _kb_debug_retrieve_only(message, language, canonical=canonical, doc_type=doc_type, nofilter=nofilter)
-    info["detected_language"] = language
-    return info
-
-@router.get("/tags-debug")
-def tags_debug():
-    """
-    Returns counts of loaded alias tokens per language so you can confirm the tags index is built.
-    """
-    return {"token_counts": tags_index.debug_snapshot()}
