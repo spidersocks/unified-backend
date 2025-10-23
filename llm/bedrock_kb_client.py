@@ -4,12 +4,11 @@ Optimized for latency: fewer retrieved chunks, smaller max tokens, no unconditio
 """
 import os
 import time
-import re
 import boto3
 from botocore.config import Config
 from typing import Optional, Tuple, List, Dict, Any
 from llm.config import SETTINGS
-from llm import tags_index  # NEW: runtime tag index for query expansion
+from llm import tags_index  # runtime tag index for query expansion
 
 # Configure Bedrock client timeouts + limited retries to reduce tail latency
 _boto_cfg = Config(
@@ -42,17 +41,6 @@ APOLOGY_MARKERS = [
     # generic “no info” markers to force silence
     "無提供相關信息","沒有相關信息","沒有資料","沒有相关资料","暂无相关信息","暂无资料",
 ]
-
-# Heuristic policy-query detectors (very lightweight). Used to nudge filters to type=policy.
-_POLICY_PATTERNS = {
-    "en": re.compile(r"\b(refund|withdrawal|make[\s-]?up|absence|policy|transfer)\b", re.I),
-    "zh-HK": re.compile(r"(退款|轉班|補課|請假|政策|配額|收費|行政費)"),
-    "zh-CN": re.compile(r"(退款|转班|补课|请假|政策|配额|收费|行政费)"),
-}
-
-def _looks_like_policy_query(msg: str, L: str) -> bool:
-    pat = _POLICY_PATTERNS.get(L) or _POLICY_PATTERNS["en"]
-    return bool(pat.search(msg or ""))
 
 # Tiny in-memory response cache to avoid double work on repeated/duplicate messages
 _CACHE: Dict[Tuple[str,str], Tuple[float, str, List[Dict], Dict[str,Any]]] = {}
@@ -131,7 +119,7 @@ def chat_with_kb(
     debug: bool = False,
     extra_context: Optional[str] = None,          # optional tool/context injection (non-retrieved)
     extra_keywords: Optional[List[str]] = None,   # optional query-boost keywords
-    hint_canonical: Optional[str] = None,         # optional narrow-by-canonical (first try), with fallback
+    hint_canonical: Optional[str] = None,         # optional hint (added as keyword; no metadata filter)
 ) -> Tuple[str, List[Dict], Dict[str, Any]]:
     # Serve from cache if available
     L = _lang_label(language)
@@ -168,7 +156,15 @@ def chat_with_kb(
             k = (kw or "").strip()
             if k and k.lower() not in [m.lower() for m in matched_tags]:
                 matched_tags.append(k)
-    debug_info["matched_tags"] = matched_tags or []  # always include
+    # Add canonical hint as a soft keyword (no metadata filter)
+    if hint_canonical:
+        if hint_canonical.lower() not in [m.lower() for m in matched_tags]:
+            matched_tags.append(hint_canonical)
+        if f"canonical:{hint_canonical}".lower() not in [m.lower() for m in matched_tags]:
+            matched_tags.append(f"canonical:{hint_canonical}")
+        debug_info["hint_canonical"] = hint_canonical
+
+    debug_info["matched_tags"] = matched_tags or []
     keywords_line = "Keywords: " + "; ".join(matched_tags) + "\n" if matched_tags else ""
 
     # 2) Optional extra verified tool context
@@ -190,70 +186,11 @@ def chat_with_kb(
             return None
         return {"equals": {"key": "language", "value": L}}
 
-    # Policy biasing
+    # Language-only metadata filter (no type/canonical bias)
     lang_filter = make_lang_filter()
-    meta_filter = lang_filter
-    if _looks_like_policy_query(message or "", L):
-        pol = {"equals": {"key": "type", "value": "policy"}}
-        meta_filter = {"andAll": [meta_filter, pol]} if meta_filter else pol
-        debug_info["applied_policy_filter"] = True
-    else:
-        debug_info["applied_policy_filter"] = False
-
-    # Optional canonical hint (first try only)
-    used_hint = False
-    if hint_canonical:
-        can = {"equals": {"key": "canonical", "value": hint_canonical}}
-        meta_with_can = {"andAll": [meta_filter, can]} if meta_filter else can
-        vec_cfg = make_vec_cfg(meta_with_can)
-        debug_info["hint_canonical"] = hint_canonical
-
-        base_req: Dict = {
-            "input": {"text": input_text},
-            "retrieveAndGenerateConfiguration": {
-                "type": "KNOWLEDGE_BASE",
-                "knowledgeBaseConfiguration": {
-                    "knowledgeBaseId": SETTINGS.kb_id,
-                    "modelArn": SETTINGS.kb_model_arn,
-                    "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
-                    "generationConfiguration": {
-                        "inferenceConfig": {
-                            "textInferenceConfig": {
-                                "maxTokens": SETTINGS.gen_max_tokens,
-                                "temperature": SETTINGS.gen_temperature,
-                                "topP": SETTINGS.gen_top_p,
-                            }
-                        }
-                    },
-                }
-            },
-        }
-        if session_id:
-            base_req["sessionId"] = session_id
-
-        try:
-            resp0 = rag.retrieve_and_generate(**base_req)
-            ans0 = ((resp0.get("output") or {}).get("text") or "").strip()
-            raw0 = resp0.get("citations", []) or []
-            parsed0 = _parse_citations(raw0)
-            if debug:
-                debug_info.setdefault("attempts", []).append({"stage": "hint_canonical", "raw_citations": raw0})
-            ans0 = _filter_refusal(ans0)
-            reason0 = _silence_reason(ans0, len(parsed0))
-            if not reason0 and ans0:
-                debug_info["latency_ms"] = int((time.time() - t0) * 1000)
-                _cache_set(L, message or "", ans0, parsed0, debug_info)
-                return ans0, parsed0, (debug_info if debug else {})
-            used_hint = True
-        except Exception as e:
-            # Swallow and continue to general path
-            if debug:
-                debug_info.setdefault("attempts", []).append({"stage": "hint_canonical_error", "error": f"{type(e).__name__}: {e}"})
-
-    # General attempt (no canonical hint)
-    vec_cfg = make_vec_cfg(meta_filter)
-    debug_info["first_attempt_retrieval_config"] = dict(vec_cfg)  # snapshot before mutation
-    debug_info["retrieval_config"] = vec_cfg  # may be mutated by retry
+    vec_cfg = make_vec_cfg(lang_filter)
+    debug_info["first_attempt_retrieval_config"] = dict(vec_cfg)
+    debug_info["retrieval_config"] = vec_cfg  # may be mutated for retry
 
     base_req: Dict = {
         "input": {"text": input_text},
@@ -293,10 +230,12 @@ def chat_with_kb(
         answer = _filter_refusal(answer)
         reason = _silence_reason(answer, len(parsed))
 
-        # Optional retry without filters to recover recall if configured
+        # Optional retry: keep language filter; just drop nothing else (since we don't add others)
         if (reason or not answer) and (not SETTINGS.kb_disable_lang_filter) and SETTINGS.kb_retry_nofilter:
             kb_conf = base_req["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"]
-            kb_conf["retrievalConfiguration"]["vectorSearchConfiguration"].pop("filter", None)
+            vec = kb_conf["retrievalConfiguration"]["vectorSearchConfiguration"]
+            # Ensure we KEEP language filter on retry (no cross-language jump)
+            vec["filter"] = make_lang_filter() or vec.get("filter")
             resp2 = rag.retrieve_and_generate(**base_req)
             answer2 = ((resp2.get("output") or {}).get("text") or "").strip()
             raw2 = resp2.get("citations", []) or []
