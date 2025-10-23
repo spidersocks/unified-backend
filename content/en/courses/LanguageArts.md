@@ -13,8 +13,8 @@ Comprehensive program covering grammar, composition, reading comprehension, and 
 6 years old – 12 years old (P1 - P6)
 
 ### Class size
-Small group class size, maximum 8 students
+Small group class size, 4-6 students per class
 
 ### Tuition
-$5,200/ 8×45m; $7,500–$8,500/ 10×1h
+$4,500/ 8×45m; $7,500–$8,500/ 10×1h
 

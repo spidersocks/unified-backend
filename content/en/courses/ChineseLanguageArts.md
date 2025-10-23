@@ -16,5 +16,4 @@ Advanced Chinese curriculum covering classical texts, advanced composition, and 
 Small group class size, 4-6 students per class
 
 ### Tuition
-$3,200/ 8×45m; $4,500/ 10×1h,
-
+$3,200/ 8×45m; $4,500/ 10×1h
