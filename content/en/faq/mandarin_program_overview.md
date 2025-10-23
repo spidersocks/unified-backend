@@ -9,7 +9,7 @@ aliases: Mandarin program; Chinese program; course content; feedback; homework; 
 
 - Experience and curriculum: Many years of Chinese teaching with a well-structured curriculum; students from both local and international schools.
 - Teachers and credentials: Native Mandarin teachers holding the PSC (Putonghua Proficiency Test) certificate; experienced instructors.
-- What we teach (varies by unit): Vocabulary usage, pinyin (when applicable), sentence structure, reading practice, and writing training. Children may join our “Chinese Reading & Joy” units depending on their stage.
+- What we teach (varies by unit): Core components include character recognition (字詞認讀), character writing (漢字書寫), grammar knowledge (文法知識), writing practice (作文練習), reading comprehension exercises (閱讀理解練習), and pinyin learning (拼音學習, applicable to Putonghua). Children may join our "Chinese Reading & Joy" units depending on their stage.
 - Feedback and homework: Regular progress feedback; homework is reviewed with comments so parents can track progress via worksheets and notes.
 - Simplified-character option: Available upon request and suitability.
 - Entry and placement: A short diagnostic assessment determines the best class/unit.
