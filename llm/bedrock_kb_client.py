@@ -36,7 +36,12 @@ STAFF = {
 }
 
 REFUSAL_PHRASES = [NO_CONTEXT_TOKEN.lower()]
-APOLOGY_MARKERS = ["sorry","i am unable","i'm unable","i cannot","i can't","抱歉","很抱歉","對不起","对不起"]
+APOLOGY_MARKERS = [
+    "sorry","i am unable","i'm unable","i cannot","i can't",
+    "抱歉","很抱歉","對不起","对不起",
+    # NEW: generic “no info” markers to force silence
+    "無提供相關信息","沒有相關信息","沒有資料","沒有相关资料","暂无相关信息","暂无资料",
+]
 
 # Heuristic policy-query detectors (very lightweight). Used to nudge filters to type=policy.
 _POLICY_PATTERNS = {

@@ -14,6 +14,7 @@ except Exception:
     holidays = None
 
 from functools import lru_cache
+from llm.hko import get_weather_hint_for_opening  # NEW
 
 HK_TZ = pytz.timezone("Asia/Hong_Kong")
 
@@ -88,6 +89,7 @@ def _dow_window(dow: int) -> Tuple[Optional[time], Optional[time]]:
         return SAT_OPEN, SAT_CLOSE
     return None, None  # Sunday closed
 
+from functools import lru_cache
 @lru_cache(maxsize=8)
 def _hk_calendar(start_year: int, end_year: int):
     if not holidays:
@@ -274,6 +276,7 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
     """
     Returns a localized answer string or None if we can't parse.
     If brief=True, return compact phrasing without boilerplate.
+    Automatically appends a live HKO weather hint (if severe/relevant) at the end.
     """
     L = _normalize_lang(lang)
     now = datetime.now(HK_TZ)
@@ -315,33 +318,45 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
         hol_local = _localize_holiday_name(holiday_reason, L)
         if brief:
             if L == "zh-HK":
-                return f"{date_h}因香港公眾假期（{hol_local}）休息。課堂暫停。"
-            if L == "zh-CN":
-                return f"{date_h}因香港公众假期（{hol_local}）休息。课程暂停。"
-            return f"Closed on {date_h} for Hong Kong public holiday: {hol_local}. Classes are suspended."
+                base = f"{date_h}因香港公眾假期（{hol_local}）休息。課堂暫停。"
+            elif L == "zh-CN":
+                base = f"{date_h}因香港公众假期（{hol_local}）休息。课程暂停。"
+            else:
+                base = f"Closed on {date_h} for Hong Kong public holiday: {hol_local}. Classes are suspended."
+            hint = get_weather_hint_for_opening(L)
+            return base if not hint else f"{base}\n{hint}"
         base_next = dt.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
         nxt_day, n_open, n_close = _next_open_window(base_next)
         if L == "zh-HK":
-            return f"{date_h}為香港公眾假期（{hol_local}），中心休息。課堂暫停。\n下一個開放時段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
-        if L == "zh-CN":
-            return f"{date_h}为香港公众假期（{hol_local}），中心休息。课程暂停。\n下一个开放时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
-        return f"Closed on {date_h} due to Hong Kong public holiday: {hol_local}. Classes are suspended.\nNext open window: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}.\n{canonical_line()}"
+            base = f"{date_h}為香港公眾假期（{hol_local}），中心休息。課堂暫停。\n下一個開放時段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
+        elif L == "zh-CN":
+            base = f"{date_h}为香港公众假期（{hol_local}），中心休息。课程暂停。\n下一个开放时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
+        else:
+            base = f"Closed on {date_h} due to Hong Kong public holiday: {hol_local}. Classes are suspended.\nNext open window: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}.\n{canonical_line()}"
+        hint = get_weather_hint_for_opening(L)
+        return base if not hint else f"{base}\n{hint}"
 
     # Sunday
     if is_sunday:
         if brief:
             if L == "zh-HK":
-                return f"{date_h}逢星期日休息，課堂暫停。"
-            if L == "zh-CN":
-                return f"{date_h}周日休息，课程暂停。"
-            return f"Closed on {date_h} (Sunday). Classes are suspended."
+                base = f"{date_h}逢星期日休息，課堂暫停。"
+            elif L == "zh-CN":
+                base = f"{date_h}周日休息，课程暂停。"
+            else:
+                base = f"Closed on {date_h} (Sunday). Classes are suspended."
+            hint = get_weather_hint_for_opening(L)
+            return base if not hint else f"{base}\n{hint}"
         base_next = dt + timedelta(days=1)
         nxt_day, n_open, n_close = _next_open_window(base_next)
         if L == "zh-HK":
-            return f"{date_h}逢星期日休息，課堂暫停。\n下一個開放時段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
-        if L == "zh-CN":
-            return f"{date_h}周日休息，课程暂停。\n下一个开放时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
-        return f"Closed on {date_h} (Sunday). Classes are suspended.\nNext open window: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}.\n{canonical_line()}"
+            base = f"{date_h}逢星期日休息，課堂暫停。\n下一個開放時段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
+        elif L == "zh-CN":
+            base = f"{date_h}周日休息，课程暂停。\n下一个开放时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
+        else:
+            base = f"Closed on {date_h} (Sunday). Classes are suspended.\nNext open window: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}.\n{canonical_line()}"
+        hint = get_weather_hint_for_opening(L)
+        return base if not hint else f"{base}\n{hint}"
 
     # Open day
     if asked_specific_time:
@@ -350,10 +365,11 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
         if brief:
             if within:
                 if L == "zh-HK":
-                    return f"{date_h} {dt.strftime('%H:%M')} 照常上課。"
-                if L == "zh-CN":
-                    return f"{date_h} {dt.strftime('%H:%M')} 照常上课。"
-                return f"Open on {date_h} at {dt.strftime('%H:%M')}."
+                    base = f"{date_h} {dt.strftime('%H:%M')} 照常上課。"
+                elif L == "zh-CN":
+                    base = f"{date_h} {dt.strftime('%H:%M')} 照常上课。"
+                else:
+                    base = f"Open on {date_h} at {dt.strftime('%H:%M')}."
             else:
                 if dt.time() < open_t:
                     nxt_day, n_open, n_close = dt, open_t, close_t
@@ -361,17 +377,21 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
                     base_next = dt + timedelta(days=1)
                     nxt_day, n_open, n_close = _next_open_window(base_next)
                 if L == "zh-HK":
-                    return f"{date_h} {dt.strftime('%H:%M')} 非開放時段。下一時段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。"
-                if L == "zh-CN":
-                    return f"{date_h} {dt.strftime('%H:%M')} 非开放时段。下一时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。"
-                return f"Closed at {dt.strftime('%H:%M')} on {date_h}. Next open: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}."
+                    base = f"{date_h} {dt.strftime('%H:%M')} 非開放時段。下一時段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。"
+                elif L == "zh-CN":
+                    base = f"{date_h} {dt.strftime('%H:%M')} 非开放时段。下一时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。"
+                else:
+                    base = f"Closed at {dt.strftime('%H:%M')} on {date_h}. Next open: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}."
+            hint = get_weather_hint_for_opening(L)
+            return base if not hint else f"{base}\n{hint}"
         # verbose path
         if within:
             if L == "zh-HK":
-                return f"{date_h} {dt.strftime('%H:%M')} 為開放時段內（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。課堂如常進行。非香港公眾假期."
-            if L == "zh-CN":
-                return f"{date_h} {dt.strftime('%H:%M')} 在开放时段内（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。课程如常进行。非香港公众假期。"
-            return f"Open on {date_h} at {dt.strftime('%H:%M')} (within {_fmt_time(open_t)}–{_fmt_time(close_t)}). Classes proceed as usual. Not a Hong Kong public holiday."
+                base = f"{date_h} {dt.strftime('%H:%M')} 為開放時段內（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。課堂如常進行。非香港公眾假期."
+            elif L == "zh-CN":
+                base = f"{date_h} {dt.strftime('%H:%M')} 在开放时段内（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。课程如常进行。非香港公众假期。"
+            else:
+                base = f"Open on {date_h} at {dt.strftime('%H:%M')} (within {_fmt_time(open_t)}–{_fmt_time(close_t)}). Classes proceed as usual. Not a Hong Kong public holiday."
         else:
             if dt.time() < open_t:
                 nxt_day, n_open, n_close = dt, open_t, close_t
@@ -379,20 +399,29 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
                 base_next = dt + timedelta(days=1)
                 nxt_day, n_open, n_close = _next_open_window(base_next)
             if L == "zh-HK":
-                return f"{date_h} {dt.strftime('%H:%M')} 不在開放時段內（當日：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。該時段不設課堂。下一個開放時段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
-            if L == "zh-CN":
-                return f"{date_h} {dt.strftime('%H:%M')} 不在开放时段内（当日：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。该时段不设课程。下一个开放时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
-            return f"Closed at {dt.strftime('%H:%M')} on {date_h} (day window: {_fmt_time(open_t)}–{_fmt_time(close_t)}). No classes at that time. Next open window: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}.\n{canonical_line()}"
+                base = f"{date_h} {dt.strftime('%H:%M')} 不在開放時段內（當日：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。該時段不設課堂。下一個開放時段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
+            elif L == "zh-CN":
+                base = f"{date_h} {dt.strftime('%H:%M')} 不在开放时段内（当日：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。该时段不设课程。下一个开放时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
+            else:
+                base = f"Closed at {dt.strftime('%H:%M')} on {date_h} (day window: {_fmt_time(open_t)}–{_fmt_time(close_t)}). No classes at that time. Next open window: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}.\n{canonical_line()}"
+        hint = get_weather_hint_for_opening(L)
+        return base if not hint else f"{base}\n{hint}"
 
     # Day-level (no specific time)
     if brief:
         if L == "zh-HK":
-            return f"{date_h}中心開放（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。"
-        if L == "zh-CN":
-            return f"{date_h}中心开放（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。"
-        return f"Open on {date_h} ({_fmt_time(open_t)}–{_fmt_time(close_t)})."
+            base = f"{date_h}中心開放（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。"
+        elif L == "zh-CN":
+            base = f"{date_h}中心开放（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。"
+        else:
+            base = f"Open on {date_h} ({_fmt_time(open_t)}–{_fmt_time(close_t)})."
+        hint = get_weather_hint_for_opening(L)
+        return base if not hint else f"{base}\n{hint}"
     if L == "zh-HK":
-        return f"{date_h}中心開放（時段：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。課堂如常進行。非香港公眾假期。\n{canonical_line()}"
-    if L == "zh-CN":
-        return f"{date_h}中心开放（时段：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。课程如常进行。非香港公众假期。\n{canonical_line()}"
-    return f"Open on {date_h} (window: {_fmt_time(open_t)}–{_fmt_time(close_t)}). Classes proceed as usual. Not a Hong Kong public holiday.\n{canonical_line()}"
+        base = f"{date_h}中心開放（時段：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。課堂如常進行。非香港公眾假期。\n{canonical_line()}"
+    elif L == "zh-CN":
+        base = f"{date_h}中心开放（时段：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。课程如常进行。非香港公众假期。\n{canonical_line()}"
+    else:
+        base = f"Open on {date_h} (window: {_fmt_time(open_t)}–{_fmt_time(close_t)}). Classes proceed as usual. Not a Hong Kong public holiday.\n{canonical_line()}"
+    hint = get_weather_hint_for_opening(L)
+    return base if not hint else f"{base}\n{hint}"

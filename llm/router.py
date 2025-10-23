@@ -11,13 +11,12 @@ try:
 except Exception:
     _kb_debug_retrieve_only = None
 
-# NEW: Opening-hours intent and tool
+# Opening-hours intent and tool
 try:
-    from llm.intent import detect_opening_hours_intent, mentions_weather
+    from llm.intent import detect_opening_hours_intent
     from llm.opening_hours import compute_opening_answer
 except Exception:
     detect_opening_hours_intent = None
-    mentions_weather = None
     compute_opening_answer = None
 
 router = APIRouter(prefix="/chat", tags=["LLM Chat (Bedrock KB)"])
@@ -38,24 +37,11 @@ def _maybe_answer_opening_hours(message: str, lang: str) -> Optional[str]:
         return None
     if not compute_opening_answer or not detect_opening_hours_intent:
         return None
-    is_intent, dbg = detect_opening_hours_intent(message, lang, SETTINGS.opening_hours_use_llm_intent)
+    is_intent, _ = detect_opening_hours_intent(message, lang, SETTINGS.opening_hours_use_llm_intent)
     if not is_intent:
         return None
-    ans = compute_opening_answer(message, lang)
-    if not ans:
-        return None
-    # Append a short severe-weather policy pointer if weather terms are mentioned
-    try:
-        if mentions_weather and mentions_weather(message or ""):
-            if lang.lower().startswith("zh-hk"):
-                ans += "\n注意：惡劣天氣安排視乎當時信號。黑雨或八號風球停課；其他情況照常。如有需要請聯絡職員。"
-            elif lang.lower().startswith("zh-cn") or lang.lower() == "zh":
-                ans += "\n注意：恶劣天气安排取决于当时信号。黑雨或八号风球停课；其他情况照常。如有需要请联系职员。"
-            else:
-                ans += "\nNote: Severe-weather arrangements depend on actual signals. Classes are suspended under Black Rain or Typhoon Signal No. 8; otherwise we operate. Contact us if needed."
-    except Exception:
-        pass
-    return ans
+    # Compute deterministic answer. Weather hint (if any) is appended inside.
+    return compute_opening_answer(message, lang)
 
 @router.post("", response_model=ChatResponse)
 def chat(req: ChatRequest, request: Request) -> ChatResponse:
@@ -71,7 +57,7 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
     if req.session_id and lang:
         remember_session_language(req.session_id, lang)
 
-    # Try opening-hours tool, but DO NOT block KB
+    # Try opening-hours tool; do NOT block KB
     tool_answer = _maybe_answer_opening_hours(req.message, lang)
 
     # Send tool context to the LLM as additional prompt material
@@ -88,15 +74,14 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
     elif answer and tool_answer:
         # Append a short localized note so users see both
         if lang.lower().startswith("zh-hk"):
-            note_hdr = "（營業時間／上課安排提示）"
+            note_hdr = "（營業時間／上課安排）"
         elif lang.lower().startswith("zh-cn") or lang.lower() == "zh":
-            note_hdr = "（营业时间／上课安排提示）"
+            note_hdr = "（营业时间／上课安排）"
         else:
-            note_hdr = "(Opening-hours / class-arrangement note)"
+            note_hdr = "(Opening hours / class arrangement)"
         answer = f"{answer}\n\n{note_hdr}\n{tool_answer}"
         appended_tool = True
 
-    # Attach detected language and tool flags to debug payload if present
     if debug_info is not None:
         debug_info = dict(debug_info)
         debug_info["detected_language"] = lang
@@ -105,29 +90,3 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
             debug_info["tool_appended_or_fallback"] = appended_tool
 
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
-
-class RetrieveDebugRequest(BaseModel):
-    message: str
-    language: Optional[str] = None
-    session_id: Optional[str] = None
-
-@router.post("/_debug_retrieve")
-def debug_retrieve(req: RetrieveDebugRequest, request: Request) -> Dict[str, Any]:
-    if not SETTINGS.debug_kb:
-        raise HTTPException(status_code=403, detail="DEBUG_KB is disabled.")
-    if _kb_debug_retrieve_only is None:
-        # Older runtime without debug helper; avoid breaking the app.
-        raise HTTPException(status_code=501, detail="debug_retrieve_only is not available in this build.")
-    # Same language selection path as chat()
-    lang = req.language or (get_session_language(req.session_id) if req.session_id else None)
-    if not lang:
-        lang = detect_language(req.message, accept_language=request.headers.get("accept-language"))
-    info = _kb_debug_retrieve_only(req.message, lang)  # type: ignore
-    return {
-        "region": SETTINGS.aws_region,
-        "kb_id": SETTINGS.kb_id,
-        "lang_filter_enabled": not SETTINGS.kb_disable_lang_filter,
-        "query": req.message,
-        "detected_language": lang,
-        "retrieve": info,
-    }
