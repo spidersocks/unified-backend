@@ -39,6 +39,11 @@ class Settings:
     opening_hours_enabled: bool = os.environ.get("OPENING_HOURS_ENABLED", "true").lower() in ("1","true","yes")
     opening_hours_use_llm_intent: bool = os.environ.get("OPENING_HOURS_USE_LLM_INTENT", "true").lower() in ("1","true","yes")
 
+    # Weather hints for opening hours
+    # Only append hint when severe (Black Rain or Typhoon Signal No. 8+)
+    opening_hours_weather_enabled: bool = os.environ.get("OPENING_HOURS_WEATHER_ENABLED", "true").lower() in ("1","true","yes")
+    opening_hours_weather_only_severe: bool = os.environ.get("OPENING_HOURS_WEATHER_ONLY_SEVERE", "true").lower() in ("1","true","yes")
+
     # Debugging
     debug_kb: bool = os.environ.get("DEBUG_KB", "false").lower() in ("1","true","yes")
     debug_kb_log_prompt: bool = os.environ.get("DEBUG_KB_LOG_PROMPT", "false").lower() in ("1","true","yes")

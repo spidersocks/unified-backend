@@ -14,7 +14,8 @@ except Exception:
     holidays = None
 
 from functools import lru_cache
-from llm.hko import get_weather_hint_for_opening  # NEW
+from llm.hko import get_weather_hint_for_opening
+from llm.config import SETTINGS  # NEW
 
 HK_TZ = pytz.timezone("Asia/Hong_Kong")
 
@@ -32,7 +33,7 @@ def _normalize_lang(lang: Optional[str]) -> str:
         return "zh-CN"
     return "en"
 
-# Weekday detection (English)
+# Weekday patterns (unchanged)
 _WD_PAT_EN = re.compile(
     r"\b(mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:rs|rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\b",
     re.IGNORECASE,
@@ -46,12 +47,18 @@ _WD_MAP_EN = {
     "sat": 5, "saturday": 5,
     "sun": 6, "sunday": 6,
 }
-
-# Weekday detection (Chinese; supports 星期/周/週/礼拜/禮拜)
 _WD_PAT_ZH_HK = re.compile(r"(星期[一二三四五六日天]|周[一二三四五六日天]|週[一二三四五六日天]|礼拜[一二三四五六日天]|禮拜[一二三四五六日天])")
 _WD_MAP_ZH = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6}
 
-# Holiday keyword hints -> English name substrings used by holidays.HK names
+# Relative day hints
+_REL_ZH = {
+    "今天": 0, "今日": 0,
+    "明天": 1, "聽日": 1,
+    "后天": 2, "後日": 2,
+}
+_REL_EN = {"today": 0, "tomorrow": 1, "day after tomorrow": 2}
+
+# Holiday keyword hints (unchanged)
 _HOLIDAY_KEYWORDS = {
     "ching ming": "Ching Ming", "清明": "Ching Ming",
     "chung yeung": "Chung Yeung", "重陽": "Chung Yeung", "重阳": "Chung Yeung",
@@ -89,7 +96,6 @@ def _dow_window(dow: int) -> Tuple[Optional[time], Optional[time]]:
         return SAT_OPEN, SAT_CLOSE
     return None, None  # Sunday closed
 
-from functools import lru_cache
 @lru_cache(maxsize=8)
 def _hk_calendar(start_year: int, end_year: int):
     if not holidays:
@@ -138,8 +144,10 @@ def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[date
     return find_in_calendar(cal_next, base.year + 1)
 
 _ORD_DAY_PAT = re.compile(r"\b(?:(?:the\s+)?)((?:[12]?\d|3[01]))(?:st|nd|rd|th)?\b", re.I)
-_TIME_PAT = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", re.I)
-# NEW: Chinese numeral time like “三点”, “下午三点半”, “晚上7点”
+
+# IMPORTANT: tighten time regex so plain integers (like in "10月") are NOT treated as times.
+_TIME_PAT = re.compile(r"\b(\d{1,2}):(\d{2})\b|\b(\d{1,2})\s*(am|pm)\b", re.I)
+
 _ZH_NUM = {"零":0,"〇":0,"一":1,"二":2,"两":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}
 _ZH_TIME_PAT = re.compile(r"(上午|早上|中午|下午|晚上)?\s*([一二两三四五六七八九十〇零\d]{1,3})\s*(点|點|时|時)(半)?", re.IGNORECASE)
 
@@ -150,14 +158,10 @@ def _zh_num_to_int(s: str) -> Optional[int]:
     if s.isdigit():
         v = int(s)
         return v if 0 <= v <= 23 else None
-    # Parse up to 23 with simple 十X / X十[Y]
     total = 0
     if "十" in s:
         parts = s.split("十")
-        if parts[0] == "":
-            tens = 1
-        else:
-            tens = _ZH_NUM.get(parts[0], -100)
+        tens = 1 if parts[0] == "" else _ZH_NUM.get(parts[0], -100)
         ones = _ZH_NUM.get(parts[1], 0) if len(parts) > 1 and parts[1] != "" else 0
         if tens < 0:
             return None
@@ -178,17 +182,12 @@ def _parse_time_zh(msg: str) -> Optional[time]:
     hh = _zh_num_to_int(hour_raw)
     if hh is None:
         return None
-    # Period adjustment
-    # 上午/早上: 0-11 as-is, 12 => 0
-    # 中午: treat 12 as 12
-    # 下午/晚上: add 12 if 1-11
     if period in ("下午", "晚上"):
         if 1 <= hh <= 11:
             hh += 12
     elif period in ("上午", "早上"):
         if hh == 12:
             hh = 0
-    # “中午三点” rare; leave as-is
     mm = 30 if half else 0
     if 0 <= hh <= 23 and 0 <= mm <= 59:
         return time(hh, mm)
@@ -220,29 +219,54 @@ def _extract_weekday(msg: str, L: str) -> Optional[int]:
     return _WD_MAP_ZH.get(ch)
 
 def _parse_time(msg: str) -> Optional[time]:
-    # Try Arabic digits
     m = _TIME_PAT.search(msg or "")
     if m:
-        hh = int(m.group(1))
-        mm = int(m.group(2) or "0")
-        ap = (m.group(3) or "").lower()
-        if ap:
-            if hh == 12:
-                hh = 0
-            if ap == "pm":
-                hh += 12
+        if m.group(1) and m.group(2):
+            hh = int(m.group(1)); mm = int(m.group(2))
+        else:
+            hh = int(m.group(3)); mm = 0
+            ap = (m.group(4) or "").lower()
+            if ap:
+                if hh == 12:
+                    hh = 0
+                if ap == "pm":
+                    hh += 12
         if 0 <= hh <= 23 and 0 <= mm <= 59:
             return time(hh, mm)
-    # Try Chinese numerals like “三点/下午三点半”
     return _parse_time_zh(msg or "")
+
+def _relative_offset(message: str, L: str) -> Optional[int]:
+    m = message or ""
+    if L == "en":
+        for k, off in _REL_EN.items():
+            if k in m.lower():
+                return off
+    else:
+        for k, off in _REL_ZH.items():
+            if k in m:
+                return off
+    return None
 
 def _parse_datetime(message: str, now: datetime, L: str) -> Optional[datetime]:
     """
     Parse a datetime in HK timezone.
-    - If dateparser yields a date but no explicit time in the message, normalize time to 12:00
-      to avoid leaking RELATIVE_BASE hours.
-    - If the message contains an explicit time (e.g., 下午三点), overlay that time onto the parsed date.
+    Priority:
+      1) Explicit relative-day words (今天/明天/后天/聽日/後日 | today/tomorrow/day after tomorrow), noon by default.
+      2) dateparser (if available); overlay explicit time if present; otherwise set to noon (12:00).
+      3) Fallback via weekday or day-of-month heuristics; default time noon.
     """
+    # 1) Relative-day words first (most reliable for zh)
+    rel = _relative_offset(message or "", L)
+    if rel is not None:
+        base = (now + timedelta(days=rel)).astimezone(HK_TZ)
+        t = _parse_time(message or "")
+        if t:
+            base = base.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
+        else:
+            base = base.replace(hour=12, minute=0, second=0, microsecond=0)
+        return base
+
+    # 2) dateparser
     if dateparser:
         settings = {
             "TIMEZONE": "Asia/Hong_Kong",
@@ -255,20 +279,18 @@ def _parse_datetime(message: str, now: datetime, L: str) -> Optional[datetime]:
         langs = ["en"] if L == "en" else ["zh"]
         dt = dateparser.parse(message, settings=settings, languages=langs)
         if dt:
-            # Ensure HK timezone
             if not dt.tzinfo:
                 dt = HK_TZ.localize(dt)
             else:
                 dt = dt.astimezone(HK_TZ)
-            # Overlay explicit time if present
             t = _parse_time(message or "")
             if t:
                 dt = dt.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
             else:
-                # No explicit time in message: normalize to noon to avoid odd carry-over times
                 dt = dt.replace(hour=12, minute=0, second=0, microsecond=0)
             return dt
 
+    # 3) Heuristics by weekday or day-of-month
     dom = _extract_day_of_month(message or "")
     wd = _extract_weekday(message or "", L)
     t = _parse_time(message or "")
@@ -343,15 +365,15 @@ def _localize_holiday_name(name_en: str, L: str) -> str:
     return name
 
 def _contains_time_of_day(message: str) -> bool:
-    # Arabic digits (e.g., 3pm, 15:00) or Chinese numerals (e.g., 三点/三點)
+    # Only treat as specific time if there is an explicit time (hh:mm, 3pm, 三点/三點).
     return bool(re.search(r"\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(am|pm)\b", message, flags=re.IGNORECASE) or
                 re.search(r"[一二两三四五六七八九十〇零]{1,3}\s*(点|點|时|時)", message))
 
 def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool = False) -> Optional[str]:
     """
-    Returns a localized answer string or None if we can't parse.
-    If brief=True, return compact phrasing without boilerplate.
-    Automatically appends a live HKO weather hint (if severe/relevant) at the end.
+    Deterministic opening-hours answer:
+    - Uses explicit relative-day words (zh/en) and never inherits current clock time unless a time was given.
+    - Weather hint is appended only when severe (Black Rain / Typhoon Signal No. 8+), and only if enabled.
     """
     L = _normalize_lang(lang)
     now = datetime.now(HK_TZ)
@@ -365,7 +387,8 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
         dt = _parse_datetime(message or "", now, L)
 
     if not dt:
-        dt = now
+        # Could not parse a date; answer day-level about "today"
+        dt = now.replace(hour=12, minute=0, second=0, microsecond=0)
 
     if not dt.tzinfo:
         dt = HK_TZ.localize(dt)
@@ -388,6 +411,13 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
             return "营业时间：周一至周五 09:00–18:00；周六 09:00–16:00；香港公众假期休息。"
         return "Hours: Mon–Fri 09:00–18:00; Sat 09:00–16:00; closed on Hong Kong public holidays."
 
+    def maybe_weather_hint() -> Optional[str]:
+        if not SETTINGS.opening_hours_weather_enabled:
+            return None
+        # hko.get_weather_hint_for_opening already filters to severe only;
+        # the flag allows global on/off control.
+        return get_weather_hint_for_opening(L)
+
     # Holiday
     if holiday_reason:
         hol_local = _localize_holiday_name(holiday_reason, L)
@@ -398,7 +428,7 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
                 base = f"{date_h}因香港公众假期（{hol_local}）休息。课程暂停。"
             else:
                 base = f"Closed on {date_h} for Hong Kong public holiday: {hol_local}. Classes are suspended."
-            hint = get_weather_hint_for_opening(L)
+            hint = maybe_weather_hint()
             return base if not hint else f"{base}\n{hint}"
         base_next = dt.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
         nxt_day, n_open, n_close = _next_open_window(base_next)
@@ -408,7 +438,7 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
             base = f"{date_h}为香港公众假期（{hol_local}），中心休息。课程暂停。\n下一个开放时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
         else:
             base = f"Closed on {date_h} due to Hong Kong public holiday: {hol_local}. Classes are suspended.\nNext open window: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}.\n{canonical_line()}"
-        hint = get_weather_hint_for_opening(L)
+        hint = maybe_weather_hint()
         return base if not hint else f"{base}\n{hint}"
 
     # Sunday
@@ -420,7 +450,7 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
                 base = f"{date_h}周日休息，课程暂停。"
             else:
                 base = f"Closed on {date_h} (Sunday). Classes are suspended."
-            hint = get_weather_hint_for_opening(L)
+            hint = maybe_weather_hint()
             return base if not hint else f"{base}\n{hint}"
         base_next = dt + timedelta(days=1)
         nxt_day, n_open, n_close = _next_open_window(base_next)
@@ -430,7 +460,7 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
             base = f"{date_h}周日休息，课程暂停。\n下一个开放时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
         else:
             base = f"Closed on {date_h} (Sunday). Classes are suspended.\nNext open window: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}.\n{canonical_line()}"
-        hint = get_weather_hint_for_opening(L)
+        hint = maybe_weather_hint()
         return base if not hint else f"{base}\n{hint}"
 
     # Open day
@@ -439,12 +469,7 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
         within = (open_t <= t.replace(tzinfo=None) <= close_t)
         if brief:
             if within:
-                if L == "zh-HK":
-                    base = f"{date_h} {dt.strftime('%H:%M')} 照常上課。"
-                elif L == "zh-CN":
-                    base = f"{date_h} {dt.strftime('%H:%M')} 照常上课。"
-                else:
-                    base = f"Open on {date_h} at {dt.strftime('%H:%M')}."
+                base = f"{date_h} {dt.strftime('%H:%M')} 照常上課。" if L == "zh-HK" else (f"{date_h} {dt.strftime('%H:%M')} 照常上课。" if L == "zh-CN" else f"Open on {date_h} at {dt.strftime('%H:%M')}.")
             else:
                 if dt.time() < open_t:
                     nxt_day, n_open, n_close = dt, open_t, close_t
@@ -457,9 +482,9 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
                     base = f"{date_h} {dt.strftime('%H:%M')} 非开放时段。下一时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。"
                 else:
                     base = f"Closed at {dt.strftime('%H:%M')} on {date_h}. Next open: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}."
-            hint = get_weather_hint_for_opening(L)
+            hint = maybe_weather_hint()
             return base if not hint else f"{base}\n{hint}"
-        # verbose path
+
         if within:
             if L == "zh-HK":
                 base = f"{date_h} {dt.strftime('%H:%M')} 為開放時段內（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。課堂如常進行。非香港公眾假期."
@@ -479,7 +504,7 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
                 base = f"{date_h} {dt.strftime('%H:%M')} 不在开放时段内（当日：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。该时段不设课程。下一个开放时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。\n{canonical_line()}"
             else:
                 base = f"Closed at {dt.strftime('%H:%M')} on {date_h} (day window: {_fmt_time(open_t)}–{_fmt_time(close_t)}). No classes at that time. Next open window: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}.\n{canonical_line()}"
-        hint = get_weather_hint_for_opening(L)
+        hint = maybe_weather_hint()
         return base if not hint else f"{base}\n{hint}"
 
     # Day-level (no specific time)
@@ -490,7 +515,7 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
             base = f"{date_h}中心开放（{_fmt_time(open_t)}–{_fmt_time(close_t)}）。"
         else:
             base = f"Open on {date_h} ({_fmt_time(open_t)}–{_fmt_time(close_t)})."
-        hint = get_weather_hint_for_opening(L)
+        hint = maybe_weather_hint()
         return base if not hint else f"{base}\n{hint}"
     if L == "zh-HK":
         base = f"{date_h}中心開放（時段：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。課堂如常進行。非香港公眾假期。\n{canonical_line()}"
@@ -498,5 +523,5 @@ def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool
         base = f"{date_h}中心开放（时段：{_fmt_time(open_t)}–{_fmt_time(close_t)}）。课程如常进行。非香港公众假期。\n{canonical_line()}"
     else:
         base = f"Open on {date_h} (window: {_fmt_time(open_t)}–{_fmt_time(close_t)}). Classes proceed as usual. Not a Hong Kong public holiday.\n{canonical_line()}"
-    hint = get_weather_hint_for_opening(L)
+    hint = maybe_weather_hint()
     return base if not hint else f"{base}\n{hint}"
