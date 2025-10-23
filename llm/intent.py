@@ -5,6 +5,7 @@ from typing import Tuple, Dict, Any
 # Supports English, zh-HK (Traditional), zh-CN (Simplified)
 
 # NOTE: Keep terms focused on hours/closed/weekday/holiday/time. Avoid generic "class/lesson".
+# Holiday names are also considered opening-hours signals
 _EN_TERMS = [
     r"\bopen(?:ing)?\b", r"\bhours?\b", r"\bclosed?\b", r"\bbusiness hours?\b",
     r"\battend(?:ing)?\s+(?:class|lesson)\b",
@@ -12,6 +13,19 @@ _EN_TERMS = [
     r"\b(?:next|this)\s+(?:week|mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
     r"\b(mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
     r"\bpublic holiday\b", r"\bholiday\b",
+    # Holiday names (English)
+    r"\blunar new year\b", r"\bchinese new year\b", r"\bspring festival\b",
+    r"\bching ming\b", r"\bqingming\b",
+    r"\bgood friday\b",
+    r"\beaster\s*(?:monday)?\b",
+    r"\blabou?r day\b",
+    r"\bbuddha(?:'s)?\s*(?:birthday)?\b",
+    r"\btuen ng\b", r"\bdragon boat\b", r"\bduanwu\b",
+    r"\bhksar\b", r"\bestablishment day\b",
+    r"\bnational day\b",
+    r"\bmid[- ]?autumn\b", r"\bmoon festival\b",
+    r"\bchung yeung\b", r"\bchong yang\b", r"\bdouble ninth\b",
+    r"\bchristmas\b", r"\bxmas\b",
 ]
 
 _ZH_HK_TERMS = [
@@ -20,6 +34,19 @@ _ZH_HK_TERMS = [
     r"安排|改期",
     r"今日|聽日|後日|下周|下星期|星期[一二三四五六日天]|周[一二三四五六日天]",
     r"公眾假期|假期",
+    # Holiday names (Traditional Chinese)
+    r"新年|農曆新年|春節",
+    r"清明(?:節)?",
+    r"耶穌受難節|受難節",
+    r"復活節(?:星期一)?",
+    r"勞動節",
+    r"佛誕(?:日)?",
+    r"端午(?:節)?",
+    r"回歸(?:紀念日)?|香港特別行政區成立紀念日",
+    r"國慶(?:日)?",
+    r"中秋(?:節)?",
+    r"重陽(?:節)?",
+    r"聖誕(?:節)?",
 ]
 
 _ZH_CN_TERMS = [
@@ -28,6 +55,19 @@ _ZH_CN_TERMS = [
     r"安排|改期",
     r"今天|明天|后天|下周|星期[一二三四五六日天]|周[一二三四五六日天]",
     r"公众假期|公休日|假期",
+    # Holiday names (Simplified Chinese)
+    r"新年|农历新年|春节",
+    r"清明(?:节)?",
+    r"耶稣受难日|受难节",
+    r"复活节(?:星期一)?",
+    r"劳动节",
+    r"佛诞(?:日)?",
+    r"端午(?:节)?",
+    r"回归(?:纪念日)?|香港特别行政区成立纪念日",
+    r"国庆(?:日)?",
+    r"中秋(?:节)?",
+    r"重阳(?:节)?",
+    r"圣诞(?:节)?",
 ]
 
 # Weather markers for adding the policy note

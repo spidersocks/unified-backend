@@ -34,6 +34,20 @@ OPENING_HOURS_WEATHER_GUARDRAIL = {
     "zh-CN": "重要：除非用户主动询问天气，或当前正生效黑雨或八号（及以上）台风信号，否则不要引用任何天气信息或天气政策文档。",
 }
 
+# Opening-hours holiday guardrail to suppress public holiday mentions unless relevant
+OPENING_HOURS_HOLIDAY_GUARDRAIL = {
+    "en": "Important: Do NOT mention public holidays unless the user explicitly asked about holidays, or the resolved date IS a Hong Kong public holiday.",
+    "zh-HK": "重要：除非用戶明確詢問假期，或查詢的日期確實為香港公眾假期，否則不要提及公眾假期。",
+    "zh-CN": "重要：除非用户明确询问假期，或查询的日期确实为香港公众假期，否则不要提及公众假期。",
+}
+
+# Contact minimal guardrail: return only phone and email by default
+CONTACT_MINIMAL_GUARDRAIL = {
+    "en": "Important: For contact queries, provide ONLY Phone and Email. Do NOT include address, social media, or other details unless explicitly requested.",
+    "zh-HK": "重要：對於聯絡查詢，只提供電話及電郵。除非用戶明確要求，否則不要提供地址、社交媒體或其他詳情。",
+    "zh-CN": "重要：对于联系查询，仅提供电话和电邮。除非用户明确要求，否则不要提供地址、社交媒体或其他详情。",
+}
+
 # Optional staff footer (disabled by default; see SETTINGS.kb_append_staff_footer)
 STAFF = {
     "en": "If needed, contact our staff: +852 2537 9519 (Call), +852 5118 2819 (WhatsApp), info@decoders-ls.com",
@@ -105,6 +119,19 @@ def _silence_reason(answer: str, parsed_count: int) -> Optional[str]:
     if SETTINGS.kb_silence_apology and any(m in lower for m in APOLOGY_MARKERS): return "apology_marker"
     return None
 
+def _is_contact_query(message: str, lang: str) -> bool:
+    """Detect if user is asking for contact information."""
+    m = (message or "").lower()
+    L = (lang or "en").lower()
+    
+    if L.startswith("zh-hk"):
+        return any(kw in message for kw in ["聯絡", "聯繫", "電話", "電郵", "地址", "WhatsApp", "聯絡方式"])
+    elif L.startswith("zh-cn") or L == "zh":
+        return any(kw in message for kw in ["联络", "联系", "电话", "电邮", "地址", "WhatsApp", "联系方式"])
+    else:
+        return any(kw in m for kw in ["contact", "phone", "email", "address", "whatsapp", "reach you", "get in touch"])
+
+
 def _cache_get(lang: str, message: str):
     key = (lang, message.strip())
     now = time.time()
@@ -155,12 +182,25 @@ def chat_with_kb(
     t0 = time.time()
     prefix = _prompt_prefix(L)
 
-    # Opening-hours guardrail (suppresses weather mentions unless severe/asked)
+    # Opening-hours guardrails
     if hint_canonical and hint_canonical.lower() == "opening_hours":
-        guard = OPENING_HOURS_WEATHER_GUARDRAIL.get(L, OPENING_HOURS_WEATHER_GUARDRAIL["en"])
-        prefix = f"{prefix}{guard}\n\n"
+        # Weather guardrail (suppress weather mentions unless severe/asked)
+        guard_weather = OPENING_HOURS_WEATHER_GUARDRAIL.get(L, OPENING_HOURS_WEATHER_GUARDRAIL["en"])
+        prefix = f"{prefix}{guard_weather}\n\n"
+        
+        # Holiday guardrail (suppress public holiday mentions unless relevant)
+        guard_holiday = OPENING_HOURS_HOLIDAY_GUARDRAIL.get(L, OPENING_HOURS_HOLIDAY_GUARDRAIL["en"])
+        prefix = f"{prefix}{guard_holiday}\n\n"
+        
         if debug:
             debug_info["opening_hours_guardrail"] = True
+
+    # Contact minimal guardrail
+    if _is_contact_query(message or "", L):
+        guard_contact = CONTACT_MINIMAL_GUARDRAIL.get(L, CONTACT_MINIMAL_GUARDRAIL["en"])
+        prefix = f"{prefix}{guard_contact}\n\n"
+        if debug:
+            debug_info["contact_guardrail"] = True
 
     # 1) Tag-aware query expansion
     matched_tags = tags_index.find_matching_tags(message or "", L, limit=12) if message else []
