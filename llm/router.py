@@ -33,8 +33,8 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
         remember_session_language(req.session_id, lang)
 
     answer, citations, debug_info = chat_with_kb(req.message, lang, req.session_id, debug=bool(req.debug))
-    if not answer:
-        answer = "Sorry, I am unable to assist you with this request."
+    # IMPORTANT: Do NOT replace empty answers. Empty means: emit nothing (admin will answer).
+    answer = answer or ""
 
     # Attach detected language to debug payload if present
     if debug_info is not None:

@@ -16,7 +16,7 @@ NO_CONTEXT_TOKEN = "[NO_CONTEXT]"
 
 INSTRUCTIONS = {
     # Instruction changed to output the specific token instead of an empty string
-    "en": f"Strictly answer ONLY using the retrieved context. Be concise (use lists/bullets). If the context is insufficient, you MUST output the single token: {NO_CONTEXT_TOKEN}. DO NOT apologize, explain lack of information, or ramble.",
+    "en": f"Strictly answer ONLY using the retrieved context. Be concise (use lists/bullets). If the context is insufficient, or if the question is irrelevant, you MUST output the single token: {NO_CONTEXT_TOKEN}. DO NOT apologize, explain lack of information, or ramble.",
     "zh-HK": f"請嚴格只根據檢索到的內容回答。請精簡（使用列表/要點）。如果內容不足以回答問題，您必須輸出單一標記: {NO_CONTEXT_TOKEN}。請勿道歉、解釋信息不足或冗長回答。",
     "zh-CN": f"请严格只根据检索到的内容回答。请简洁（使用列表/要点）。如果内容不足以回答问题，您必须输出单一标记: {NO_CONTEXT_TOKEN}。请勿道歉、解释信息不足或冗长回答。"
 }

@@ -8,11 +8,11 @@ This module wires FastAPI `/chat` to Amazon Bedrock Knowledge Bases (RAG). It re
 - Embeddings: Titan Embeddings G1 – Text v2
 - Chunking: 1000 chars, overlap 150
 
-## Model (generator)
+# Model (Generator)
 
-You can use Qwen on Bedrock. Example ARNs:
-- ap-northeast-1: `arn:aws:bedrock:ap-northeast-1::foundation-model/qwen.qwen3-32b-v1:0`
-- us-east-1: `arn:aws:bedrock:us-east-1::foundation-model/qwen.qwen3-32b-v1:0`
+You can use **Meta** on Bedrock. Example ARNs:  
+- `ap-northeast-1`: `arn:aws:bedrock:ap-northeast-1::foundation-model/meta.llama3-70b-instruct-v1:0`  
+- `us-east-1`: `arn:aws:bedrock:us-east-1::foundation-model/meta.llama3-70b-instruct-v1:0`  
 
 Set via env: `KB_MODEL_ARN`.
 
@@ -60,3 +60,9 @@ curl -X POST https://<your-domain>/chat \
 
 - Separate docs by language (en, zh-HK, zh-CN) and filter retrieval by `language` metadata.
 - The client auto-retries without the filter if your KB doesn’t expose S3 tags to filters.
+
+## Silence on insufficient context
+
+- The model is instructed to output the stop token `[NO_CONTEXT]` when the KB doesn’t provide sufficient context.
+- The backend drops that token and returns an empty `answer` string.
+- The router no longer fills in a fallback apology. An empty `answer` means “send nothing; admin will respond.”
