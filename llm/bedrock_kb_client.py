@@ -2,6 +2,7 @@
 Thin client for Bedrock Knowledge Base RetrieveAndGenerate.
 Optimized for latency: fewer retrieved chunks, smaller max tokens, no unconditional retry.
 """
+import os
 import time
 import boto3
 from typing import Optional, Tuple, List, Dict, Any
@@ -30,7 +31,7 @@ APOLOGY_MARKERS = ["sorry","i am unable","i'm unable","i cannot","i can't","抱�
 
 # Tiny in-memory response cache to avoid double work on repeated/duplicate messages
 _CACHE: Dict[Tuple[str,str], Tuple[float, str, List[Dict], Dict[str,Any]]] = {}
-_CACHE_TTL_SECS = int( os.environ.get("KB_RESPONSE_CACHE_TTL_SECS", "120") )
+_CACHE_TTL_SECS = int(os.environ.get("KB_RESPONSE_CACHE_TTL_SECS", "120"))
 
 def _lang_label(lang: Optional[str]) -> str:
     l = (lang or "").lower()
@@ -192,3 +193,61 @@ def chat_with_kb(message: str, language: Optional[str] = None, session_id: Optio
     except Exception as e:
         debug_info["error"] = f"{type(e).__name__}: {e}"
         return "", [], (debug_info if debug else {})
+
+def debug_retrieve_only(message: str, language: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Lightweight retrieval/debug helper for /chat/_debug_retrieve.
+    Uses the same vectorSearchConfiguration and language filter, but keeps generation minimal.
+    Returns parsed citations and request diagnostics.
+    """
+    L = _lang_label(language)
+    info: Dict[str, Any] = {
+        "region": SETTINGS.aws_region,
+        "kb_id": SETTINGS.kb_id[:12] + "…" if SETTINGS.kb_id else "",
+        "model": SETTINGS.kb_model_arn.split("/")[-1] if SETTINGS.kb_model_arn else "",
+        "lang_filter_enabled": not SETTINGS.kb_disable_lang_filter,
+        "message_chars": len(message or ""),
+        "latency_ms": None,
+        "error": None,
+        "citations": [],
+    }
+    if not SETTINGS.kb_id or not SETTINGS.kb_model_arn:
+        info["error"] = "KB_ID or KB_MODEL_ARN not configured"
+        return info
+
+    t0 = time.time()
+    prefix = _prompt_prefix(L)
+    input_text = prefix + "User: " + (message or "")
+
+    vec_cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
+    if not SETTINGS.kb_disable_lang_filter:
+        vec_cfg["filter"] = {"equals": {"key": "language", "value": L}}
+
+    req: Dict = {
+        "input": {"text": input_text},
+        "retrieveAndGenerateConfiguration": {
+            "type": "KNOWLEDGE_BASE",
+            "knowledgeBaseConfiguration": {
+                "knowledgeBaseId": SETTINGS.kb_id,
+                "modelArn": SETTINGS.kb_model_arn,
+                "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
+                "generationConfiguration": {
+                    "maxTokens": 1,        # keep tiny to minimize latency
+                    "temperature": 0.0,
+                    "topP": 0.9,
+                },
+            }
+        },
+        "responseConfiguration": {"type": "TEXT"},
+    }
+
+    try:
+        resp = rag.retrieve_and_generate(**req)
+        raw_cits = resp.get("citations", []) or []
+        info["citations"] = _parse_citations(raw_cits)
+        info["latency_ms"] = int((time.time() - t0) * 1000)
+        return info
+    except Exception as e:
+        info["error"] = f"{type(e).__name__}: {e}"
+        info["latency_ms"] = int((time.time() - t0) * 1000)
+        return info
