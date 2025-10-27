@@ -3,28 +3,102 @@ language: en
 type: faq
 canonical: GAPSK
 folder: faq
-aliases: GAPSK; Putonghua exam; Putonghua assessment; 普通話基礎能力評估; 普通話水平測試
+aliases: GAPSK; Putonghua exam; Putonghua assessment; 普通话; 普通話; GAPSK levels; GAPSK beginner; GAPSK intermediate; GAPSK advanced; Mandarin assessment; kindergarten Mandarin; primary Mandarin; interview prep
 ---
-# GAPSK (Putonghua)
+# GAPSK (Putonghua) — Overview & Course Guide
 
-### What is GAPSK?
-- GAPSK is a Putonghua (Mandarin) assessment widely used by kindergartens and primary schools in Hong Kong.
-- It evaluates listening comprehension, pronunciation/tones, vocabulary, and basic speaking skills.
+## 1) General — What is GAPSK?
+GAPSK is a Putonghua (Mandarin) assessment commonly used in Hong Kong for kindergarten and early primary levels. It evaluates listening comprehension, pronunciation, vocabulary and spoken expression.  
+At Little Scholars we follow the official GAPSK standards while emphasising practical language use and spoken confidence so children can both perform in exams and use Mandarin naturally in class and school.
 
-### Levels and suitable ages
-- Common levels: K1–K3 (kindergarten) and P1–P3 (junior primary).
-- Schools may specify which level/stream they expect.
+## 2) How are your GAPSK courses structured (levels)?
+We provide three aligned stages that map to common GAPSK expectations:
+- Beginner (K1–K2): pronunciation and listening/speaking foundations.  
+- Intermediate (K2–K3): stronger expressive skills + character recognition/reading practice.  
+- Advanced (K2–P1+): longer reading passages, logical expression, and higher character vocabulary.
 
-### Test format (typical)
-- Picture-based listening and speaking tasks
-- Tone discrimination, syllable reading, and short responses
-- Duration: ~10–20 minutes (varies by level)
+Students are placed by assessment or by the exam level they intend to take.
 
-### Registration and results
-- Usually coordinated by the school; some sessions are open to the public.
-- Certificates/results are issued by the organizer after the exam period.
+---
 
-### How we can help
-- We can support families with GAPSK-related queries and (if requested) preparation guidance.
-- Please contact our staff for the latest details, schedules, and suitability for your child:
-  - Phone +852 2537 9519; WhatsApp +852 5118 2819; Email info@decoders-ls.com
+# Beginner (GAPSK — 初級)
+
+## Who is this for?
+Suitable for K1–K2 children (≈ 3–5 years) as Mandarin introduction and exam entry.
+
+## What do they learn?
+- Accurate basic pronunciation and tones.  
+- Follow simple spoken instructions (select a picture, do an action).  
+- Answer simple questions with short phrases (e.g., “我看到…”).  
+
+## Class format and goals
+- Activity-based lessons using picture cards and listening games.  
+- Teacher uses Mandarin throughout to build listening habit and natural expression.  
+- Goal: establish pronunciation, listening comprehension and simple spoken responses for the GAPSK beginner level.
+
+---
+
+# Intermediate (GAPSK — 中級)
+
+## Who is this for?
+Suitable for K2–K3 students, especially those who completed the Beginner level.
+
+## Teaching focus
+- Understand and describe pictures; answer WH questions.  
+- Improve listening speed and reaction.  
+- Consolidate pronunciation and intonation.  
+- Begin character recognition and vocabulary expansion; read short sentences independently.
+
+## Why include character recognition?
+The intermediate exam requires reading short sentences; being able to recognise key characters helps students complete reading tasks independently.
+
+## Typical lesson breakdown (≈ 60 minutes)
+- 15 min — listening activities  
+- 15 min — question-and-answer practice based on images  
+- 20 min — sentence/short‑passage reading (recognition practice)  
+- 10 min — self-introduction / spoken practice
+
+---
+
+# Advanced (GAPSK — 高級)
+
+## What are the goals?
+- Respond in full sentences with clear pronunciation.  
+- Read short passages aloud fluently.  
+- Comprehend more complex instructions and perform associated tasks.
+
+## Special requirements
+Advanced level needs stronger character knowledge and sentence-level reading. There are more reading passages and longer spoken responses than lower levels.
+
+## How this helps with primary school interviews
+A good Advanced-level result demonstrates reliable Mandarin ability (pronunciation, reading, expression) which can strengthen a child's profile for school interviews where Mandarin competence is assessed.
+
+## Expected outcome after completion
+Students should be able to:
+- Use complete sentences to answer prompts.  
+- Read short passages independently.  
+- Show clearer, more stable pronunciation and more confident spoken expression.
+
+---
+
+# Common concerns & FAQs
+
+Q: Is GAPSK only an oral test?
+A: No. While spoken expression is central, the exams also assess listening comprehension and, at higher levels, reading (character recognition and sentence reading). Our courses therefore include vocabulary and reading practice, not just speaking drills.
+
+Q: My child already speaks some Mandarin — do they still need lessons?
+A: Many children understand Mandarin but may have non-standard pronunciation or cannot produce full sentences reliably. Our courses refine pronunciation, build vocabulary, and teach how to answer in full sentences with confidence.
+
+Q: How long does it take to complete each stage?
+A: Typical course length is flexible depending on the child’s baseline. We commonly plan 8–15 lessons per stage, adjusted to individual progress. Ongoing assessments during the course determine next steps.
+
+Q: What language do teachers use in class?
+A: Teachers conduct lessons in Mandarin throughout, providing explanations or brief clarifications in Cantonese or English only when necessary for learning support.
+
+---
+
+# Placement & Assessment
+We recommend a short diagnostic assessment to place your child at the appropriate level. Placement ensures lessons match the child's current ability and keeps learning efficient.
+
+If you’d like to schedule an assessment or learn which level suits your child, please contact us.
+- Phone +852 2537 9519; WhatsApp +852 5118 2819; Email info@decoders-ls.com
