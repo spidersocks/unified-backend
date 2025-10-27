@@ -181,6 +181,36 @@ def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[date
             break
     if not target_kw:
         return None
+    
+def is_general_hours_query(message: str, lang: str) -> bool:
+    """
+    Returns True if the message is about opening hours/attendance intent,
+    but does NOT contain any explicit date, weekday, or relative-day marker.
+    Used to distinguish 'What are your opening hours?' from 'Are you open on Sunday?'
+    """
+    from llm.intent import detect_opening_hours_intent
+    from llm.opening_hours import _extract_day_of_month, _extract_weekday, _relative_offset
+    m = message or ""
+    L = lang.lower() if lang else "en"
+    # Check intent first (should be True for general hours Q)
+    is_intent, _ = detect_opening_hours_intent(m, lang, use_llm=True)
+    if not is_intent:
+        return False
+    # If it contains any explicit date/weekday/relative marker, it's not general
+    if _extract_day_of_month(m) is not None:
+        return False
+    if _extract_weekday(m, L) is not None:
+        return False
+    if _relative_offset(m, L) is not None:
+        return False
+    # crude: numbers + 月/日 in zh, or "on <day>" in en
+    if re.search(r"\d{1,2}\s*(月|日|号|號)", m):
+        return False
+    if re.search(r"\b(mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", m, re.I):
+        return False
+    if re.search(r"\b(today|tomorrow|yesterday|next week|this week|下周|下星期|本周|本星期|今日|明天|聽日|後日)\b", m, re.I):
+        return False
+    return True
 
     def find_in_calendar(cal, yr: int):
         if not cal:

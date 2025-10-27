@@ -8,17 +8,24 @@ from llm import tags_index
 
 # Optional raw-retrieval helper (prefer ingest_bedrock_kb implementation)
 try:
-    from llm.ingest_bedrock_kb import debug_retrieve_only as _kb_debug_retrieve_only  # type: ignore
+    from llm.ingest_bedrock_kb import debug_retrieve_only as _kb_debug_retrieve_only
 except Exception:
     _kb_debug_retrieve_only = None
 
 # Opening-hours intent and tool
 try:
     from llm.intent import detect_opening_hours_intent
-    from llm.opening_hours import compute_opening_answer
+    from llm.opening_hours import compute_opening_answer, is_general_hours_query
 except Exception:
     detect_opening_hours_intent = None
     compute_opening_answer = None
+    is_general_hours_query = None
+
+# Canonical doc fetcher
+try:
+    from llm.content_store import STORE
+except Exception:
+    STORE = None
 
 router = APIRouter(prefix="/chat", tags=["LLM Chat (Bedrock KB)"])
 
@@ -52,58 +59,66 @@ def _has_opening_markers(message: str, lang: str) -> bool:
 
 @router.post("", response_model=ChatResponse)
 def chat(req: ChatRequest, request: Request) -> ChatResponse:
-    # 1) explicit override
     lang = req.language
-    # 2) session stickiness
     if not lang and req.session_id:
         lang = get_session_language(req.session_id)
-    # 3) robust detection using Accept-Language header as hint
     if not lang:
         lang = detect_language(req.message, accept_language=request.headers.get("accept-language"))
-    # 4) remember choice for this session
     if req.session_id and lang:
         remember_session_language(req.session_id, lang)
 
-    # Opening-hours: robust trigger + debug
+    # === Opening hours: intent routing with general/specific handling ===
     tool_answer = None
     intent_debug: Optional[Dict[str, Any]] = None
+    use_llm_with_policy = False
+    general_hours_context = None
     try:
-        if SETTINGS.opening_hours_enabled and compute_opening_answer:
+        if SETTINGS.opening_hours_enabled and compute_opening_answer and is_general_hours_query:
             is_intent = False
             if detect_opening_hours_intent:
                 is_intent, intent_debug = detect_opening_hours_intent(req.message, lang, SETTINGS.opening_hours_use_llm_intent)
-            # Safety net: if strong markers are present, treat as intent
+            # Marker safety net
             if not is_intent and _has_opening_markers(req.message, lang or ""):
                 is_intent = True
                 if intent_debug is None:
                     intent_debug = {"forced_by_markers": True}
             if is_intent:
-                # Use brief=True for concise, human answers
-                tool_answer = compute_opening_answer(req.message, lang, brief=True)
+                # Distinguish general vs specific
+                if is_general_hours_query(req.message, lang):
+                    # General query — inject canonical doc as context for LLM
+                    if STORE:
+                        # canonical doc is always 'opening_hours'
+                        general_hours_context = STORE.institution.loc[
+                            (STORE.institution["key"] == "opening_hours") & (STORE.institution.columns.str.contains(lang)), STORE._lang_col(lang)
+                        ].squeeze() if "key" in STORE.institution.columns and not STORE.institution.empty else None
+                        if not general_hours_context:
+                            # fallback to intro/other doc, or static string
+                            general_hours_context = "Hours: Mon–Fri 09:00–18:00; Sat 09:00–16:00; closed on Hong Kong public holidays."
+                    use_llm_with_policy = True
+                else:
+                    # Specific date: use deterministic answer as before
+                    tool_answer = compute_opening_answer(req.message, lang, brief=True)
     except Exception:
         tool_answer = None
 
-    # If the intent is opening-hours, inject strong keywords and a canonical hint to boost recall
+    # Always steer the LLM for opening-hours intent
     extra_keywords: Optional[List[str]] = None
     hint_canonical: Optional[str] = None
-    if tool_answer or (req.message and _has_opening_markers(req.message, lang or "")):
+    if tool_answer or general_hours_context or (req.message and _has_opening_markers(req.message, lang or "")):
         extra_keywords = _opening_hours_keywords(lang or "")
         hint_canonical = "opening_hours"
 
-    # Send tool context + retrieval hints to the LLM
+    # LLM call: inject appropriate context
     answer, citations, debug_info = chat_with_kb(
         req.message,
         lang,
         req.session_id,
         debug=bool(req.debug),
-        extra_context=tool_answer,
+        extra_context=general_hours_context if use_llm_with_policy else tool_answer,
         extra_keywords=extra_keywords,
         hint_canonical=hint_canonical,
     )
     answer = answer or ""
-
-    # Prefer deterministic tool answer to avoid contradictions with the LLM text.
-    # Keep citations from RAG if any.
     appended_tool = False
     if tool_answer:
         answer = tool_answer
@@ -114,30 +129,10 @@ def chat(req: ChatRequest, request: Request) -> ChatResponse:
         debug_info["detected_language"] = lang
         if intent_debug is not None:
             debug_info["opening_intent_debug"] = intent_debug
-        if tool_answer:
-            debug_info["opening_hours_tool"] = True
+        if tool_answer or general_hours_context:
+            debug_info["opening_hours_tool"] = bool(tool_answer)
+            debug_info["opening_hours_policy_context"] = bool(general_hours_context)
             debug_info["tool_appended_or_fallback"] = appended_tool
             debug_info["opening_hours_keywords_injected"] = True
 
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
-
-@router.get("/debug-retrieve")
-def debug_retrieve(
-    message: str = Query(..., description="User query to probe retrieval"),
-    language: str | None = Query(None, description="en | zh-HK | zh-CN"),
-    canonical: str | None = Query(None, description="Optional canonical to bias filter"),
-    doc_type: str | None = Query(None, description="Optional type (institution|course|policy|marketing|faq)"),
-    nofilter: bool = Query(False, description="If true, do not send any metadata filter"),
-):
-    if _kb_debug_retrieve_only is None:
-        raise HTTPException(status_code=501, detail="Debug retrieval not available in this build")
-    try:
-        return _kb_debug_retrieve_only(
-            message=message,
-            language=language,
-            canonical=canonical,
-            doc_type=doc_type,
-            nofilter=nofilter,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
