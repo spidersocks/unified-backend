@@ -186,26 +186,75 @@ def is_general_hours_query(message: str, lang: str) -> bool:
     """
     Returns True if the message is about opening hours/attendance intent,
     but does NOT contain any explicit date, weekday, or relative-day marker.
-    Used to distinguish 'What are your opening hours?' from 'Are you open on Sunday?'
+    Used to distinguish 'What are your opening hours?' from 'Are you open on Sunday?'.
+    For EN, treat 'public holiday' or 'holiday' as general.
     """
     from llm.intent import detect_opening_hours_intent
     from llm.opening_hours import _extract_day_of_month, _extract_weekday, _relative_offset
     m = message or ""
     L = lang.lower() if lang else "en"
-    # Check intent first (should be True for general hours Q)
     is_intent, _ = detect_opening_hours_intent(m, lang, use_llm=True)
     if not is_intent:
         return False
     # If it contains any explicit date/weekday/relative marker, it's not general
     if _extract_day_of_month(m) is not None:
         return False
+    def _extract_full_chinese_date(msg: str) -> Optional[Tuple[int, int]]:
+    """
+    Extracts (month, day) from patterns like '12月25號', '12月25日'
+    """
+    m = re.search(r"(\d{1,2})\s*月\s*(\d{1,2})\s*[日号號]", msg)
+    if m:
+        try:
+            month = int(m.group(1))
+            day = int(m.group(2))
+            if 1 <= month <= 12 and 1 <= day <= 31:
+                return (month, day)
+        except Exception:
+            pass
+    return None
+
+# In _parse_datetime, before fallback:
+    # 3) Heuristics by weekday or day-of-month
+    dom = _extract_day_of_month(message or "")
+    wd = _extract_weekday(message or "", L)
+    t = _parse_time(message or "")
+    # NEW: check for Chinese full date
+    full_date = _extract_full_chinese_date(message or "")
+    if full_date:
+        month, day = full_date
+        base = now
+        year = base.year
+        # If already past, roll to next year
+        try:
+            candidate = HK_TZ.localize(datetime(year, month, day, 12, 0))
+            if candidate < now:
+                candidate = HK_TZ.localize(datetime(year+1, month, day, 12, 0))
+            if t:
+                candidate = candidate.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
+            return candidate
+        except Exception:
+            pass
     if _extract_weekday(m, L) is not None:
         return False
     if _relative_offset(m, L) is not None:
         return False
-    # crude: numbers + 月/日 in zh, or "on <day>" in en
-    if re.search(r"\d{1,2}\s*(月|日|号|號)", m):
+    # crude: numbers + 月/日 in zh, or "<month> <day>" in en
+    if L.startswith("zh") and re.search(r"\d{1,2}\s*(月|日|号|號)", m):
         return False
+    if L == "en":
+        # If message contains an explicit month+day (e.g., Dec 25, 25th December, 12/25), not general
+        if re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*\d{1,2}\b", m, re.I):
+            return False
+        if re.search(r"\b\d{1,2}/\d{1,2}\b", m):
+            return False
+        # If message contains "public holiday" or "holiday" and NOT "on <date>"
+        if re.search(r"\b(public holiday|holiday|holidays?)\b", m, re.I):
+            # But if it also contains "on" + date, treat as specific
+            if re.search(r"\bon\b.*\d{1,2}", m, re.I):
+                return False
+            return True
+    # weekdays and relative days in any language
     if re.search(r"\b(mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", m, re.I):
         return False
     if re.search(r"\b(today|tomorrow|yesterday|next week|this week|下周|下星期|本周|本星期|今日|明天|聽日|後日)\b", m, re.I):
