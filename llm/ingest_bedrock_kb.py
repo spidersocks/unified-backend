@@ -265,25 +265,24 @@ def debug_retrieve_only(message: str, language: Optional[str] = None, canonical:
         return info
 
     t0 = time.time()
-    # USER FIRST
-    input_text = "User: " + (message or "") + "\n\n" + _prompt_prefix(L)
 
-    # Build optional filter
+    # Raw user message only
+    input_text = (message or "")
+
     f = None
-    if not nofilter:
-        if not SETTINGS.kb_disable_lang_filter:
-            f = {"equals": {"key": "language", "value": L}}
-        if doc_type:
-            tfil = {"equals": {"key": "type", "value": doc_type}}
-            f = {"andAll": [f, tfil]} if f else tfil
-        if canonical:
-            cfil = {"equals": {"key": "canonical", "value": canonical}}
-            f = {"andAll": [f, cfil]} if f else cfil
+    if not nofilter and not SETTINGS.kb_disable_lang_filter:
+        f = {"equals": {"key": "language", "value": L}}
+    if not nofilter and doc_type:
+        tfil = {"equals": {"key": "type", "value": doc_type}}
+        f = {"andAll": [f, tfil]} if f else tfil
+    if not nofilter and canonical:
+        cfil = {"equals": {"key": "canonical", "value": canonical}}
+        f = {"andAll": [f, cfil]} if f else cfil
 
     vec_cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
     if f:
         vec_cfg["filter"] = f
-    info["retrieval_config"] = vec_cfg
+    info["retrieval_config"] = dict(vec_cfg)
 
     req: Dict = {
         "input": {"text": input_text},

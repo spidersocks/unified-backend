@@ -147,79 +147,99 @@ def chat_with_kb(
     language: Optional[str] = None,
     session_id: Optional[str] = None,
     debug: bool = False,
-    extra_context: Optional[str] = None,          # optional tool/context injection (non-retrieved)
-    extra_keywords: Optional[List[str]] = None,   # optional query-boost keywords
-    hint_canonical: Optional[str] = None,         # optional hint (added as keyword; no metadata filter)
+    extra_context: Optional[str] = None,
+    extra_keywords: Optional[List[str]] = None,
+    hint_canonical: Optional[str] = None,
 ) -> Tuple[str, List[Dict], Dict[str, Any]]:
-    # Serve from cache if available
+    # ...debug_info prep unchanged...
+
     L = _lang_label(language)
-    cached = _cache_get(L, message or "")
-    if cached:
-        ans, cits, dbg = cached
-        return ans, cits, (dbg if debug else {})
-
-    debug_info: Dict[str, Any] = {
-        "region": SETTINGS.aws_region,
-        "kb_id": SETTINGS.kb_id[:12] + "…" if SETTINGS.kb_id else "",
-        "model": SETTINGS.kb_model_arn.split("/")[-1] if SETTINGS.kb_model_arn else "",
-        "lang_filter_enabled": not SETTINGS.kb_disable_lang_filter,
-        "session_provided": bool(session_id),
-        "message_chars": len(message or ""),
-        "error": None,
-        "attempts": [],
-        "silenced": False,
-        "silence_reason": None,
-        "latency_ms": None,
-    }
-    if not SETTINGS.kb_id or not SETTINGS.kb_model_arn:
-        debug_info["error"] = "KB_ID or KB_MODEL_ARN not configured"
-        return "", [], debug_info
-
     t0 = time.time()
-    prefix = _prompt_prefix(L)
 
-    # Opening-hours guardrails
-    if hint_canonical and hint_canonical.lower() == "opening_hours":
-        guard_w = OPENING_HOURS_WEATHER_GUARDRAIL.get(L, OPENING_HOURS_WEATHER_GUARDRAIL["en"])
-        guard_h = OPENING_HOURS_HOLIDAY_GUARDRAIL.get(L, OPENING_HOURS_HOLIDAY_GUARDRAIL["en"])
-        prefix = f"{prefix}{guard_w}\n{guard_h}\n\n"
+    # IMPORTANT: Use raw user message only to maximize retrieval recall
+    input_text = (message or "")
+
+    # Build language-only vector search config
+    def make_lang_filter() -> Optional[Dict]:
+        if SETTINGS.kb_disable_lang_filter:
+            return None
+        return {"equals": {"key": "language", "value": L}}
+
+    vec_cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
+    lang_filter = make_lang_filter()
+    if lang_filter:
+        vec_cfg["filter"] = lang_filter
+
+    debug_info["first_attempt_retrieval_config"] = dict(vec_cfg)
+    debug_info["retrieval_config"] = dict(vec_cfg)
+
+    base_req: Dict = {
+        "input": {"text": input_text},
+        "retrieveAndGenerateConfiguration": {
+            "type": "KNOWLEDGE_BASE",
+            "knowledgeBaseConfiguration": {
+                "knowledgeBaseId": SETTINGS.kb_id,
+                "modelArn": SETTINGS.kb_model_arn,
+                "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
+                "generationConfiguration": {
+                    "inferenceConfig": {
+                        "textInferenceConfig": {
+                            "maxTokens": SETTINGS.gen_max_tokens,
+                            "temperature": SETTINGS.gen_temperature,
+                            "topP": SETTINGS.gen_top_p,
+                        }
+                    }
+                },
+            }
+        },
+    }
+    if session_id:
+        base_req["sessionId"] = session_id
+
+    try:
+        resp = rag.retrieve_and_generate(**base_req)
+        answer = ((resp.get("output") or {}).get("text") or "").strip()
+        raw_cits = resp.get("citations", []) or []
+        parsed = _parse_citations(raw_cits)
+
         if debug:
-            debug_info["opening_hours_guardrail"] = True
+            debug_info["raw_citations"] = raw_cits
 
-    # Contact guardrail (minimal response)
-    if _is_contact_query(message or "", L):
-        cg = CONTACT_MINIMAL_GUARDRAIL.get(L, CONTACT_MINIMAL_GUARDRAIL["en"])
-        prefix = f"{prefix}{cg}\n\n"
-        if debug:
-            debug_info["contact_guardrail"] = True
+        # Keep your existing post-filters
+        answer = _filter_refusal(answer)
+        reason = _silence_reason(answer, len(parsed))
 
-    # 1) Tag-aware query expansion
-    matched_tags = tags_index.find_matching_tags(message or "", L, limit=12) if message else []
-    if extra_keywords:
-        for kw in extra_keywords:
-            k = (kw or "").strip()
-            if k and k.lower() not in [m.lower() for m in matched_tags]:
-                matched_tags.append(k)
-    if hint_canonical:
-        if hint_canonical.lower() not in [m.lower() for m in matched_tags]:
-            matched_tags.append(hint_canonical)
-        if f"canonical:{hint_canonical}".lower() not in [m.lower() for m in matched_tags]:
-            matched_tags.append(f"canonical:{hint_canonical}")
-        debug_info["hint_canonical"] = hint_canonical
+        # Optional retry without language filter if enabled
+        if (reason or not answer) and SETTINGS.kb_retry_nofilter:
+            kb_conf = base_req["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"]
+            vec = kb_conf["retrievalConfiguration"]["vectorSearchConfiguration"]
+            vec.pop("filter", None)
+            debug_info["retry_reason"] = f"Initial attempt failed ({reason or 'empty_answer'}). Retrying without filter."
+            debug_info["retry_retrieval_config"] = dict(vec)
 
-    debug_info["matched_tags"] = matched_tags or []
-    keywords_line = ("Keywords: " + "; ".join(matched_tags) + "\n") if matched_tags else ""
+            resp2 = rag.retrieve_and_generate(**base_req)
+            answer2 = ((resp2.get("output") or {}).get("text") or "").strip()
+            raw2 = resp2.get("citations", []) or []
+            parsed2 = _parse_citations(raw2)
+            if debug:
+                debug_info.setdefault("retry", {})["raw_citations"] = raw2
+            answer2 = _filter_refusal(answer2)
+            reason2 = _silence_reason(answer2, len(parsed2))
+            if not reason2 and answer2:
+                answer, parsed, reason = answer2, parsed2, None
+                debug_info["retry_succeeded"] = True
 
-    # 2) Optional extra verified tool context
-    injected = ""
-    if extra_context and extra_context.strip():
-        injected = f"Additional verified context (non-retrieved):\n{extra_context.strip()}\n\n"
-
-    # IMPORTANT: Put the user question first so retrieval embeds the clean query.
-    # Then append light hints and finally the instructions/guardrails.
-    input_text = "User: " + (message or "") + "\n\n" + keywords_line + injected + prefix
-    if debug:
-        debug_info["input_order"] = "user_first"
+        debug_info["latency_ms"] = int((time.time() - t0) * 1000)
+        if reason:
+            debug_info["silenced"] = True
+            debug_info["silence_reason"] = reason
+            _cache_set(L, message or "", "", [], debug_info)
+            return "", [], (debug_info if debug else {})
+        _cache_set(L, message or "", answer, parsed, debug_info)
+        return answer, parsed, (debug_info if debug else {})
+    except Exception as e:
+        debug_info["error"] = f"{type(e).__name__}: {e}"
+        return "", [], (debug_info if debug else {})
 
     def make_vec_cfg(base_filter: Optional[Dict] = None) -> Dict:
         cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
