@@ -16,6 +16,36 @@ except ImportError:
 
 router = APIRouter(prefix="/chat", tags=["LLM Chat (Bedrock KB)"])
 
+class ChatRequest(BaseModel):
+    message: str
+    language: Optional[str] = None
+    session_id: Optional[str] = None
+    debug: Optional[bool] = False
+
+class ChatResponse(BaseModel):
+    answer: str
+    citations: List[Dict[str, Any]] = []
+    debug: Optional[Dict[str, Any]] = None
+
+@router.post("", response_model=ChatResponse)
+async def chat(req: ChatRequest, request: Request) -> ChatResponse:
+    lang = req.language
+    if not lang and req.session_id:
+        lang = get_session_language(req.session_id)
+    if not lang:
+        lang = detect_language(req.message, accept_language=request.headers.get("accept-language"))
+    if req.session_id and lang:
+        remember_session_language(req.session_id, lang)
+
+    answer, citations, debug_info = chat_with_kb(
+        req.message,
+        lang,
+        req.session_id,
+        debug=bool(req.debug),
+    )
+    answer = answer or ""
+    return ChatResponse(answer=answer, citations=citations, debug=debug_info if req.debug else None)
+
 @router.get("/debug-retrieve")
 def debug_retrieve(
     message: str = Query(..., description="User query to probe retrieval+generate"),
