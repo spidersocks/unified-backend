@@ -14,28 +14,18 @@ except ImportError:
     debug_retrieve_agent = None
     aws_whoami = None
 
-# Opening-hours intent and tool
-try:
-    from llm.intent import detect_opening_hours_intent
-    from llm.opening_hours import compute_opening_answer
-except Exception:
-    detect_opening_hours_intent = None
-    compute_opening_answer = None
-
 router = APIRouter(prefix="/chat", tags=["LLM Chat (Bedrock KB)"])
-
-# ... existing ChatRequest/ChatResponse and /chat POST unchanged ...
 
 @router.get("/debug-retrieve")
 def debug_retrieve(
-    message: str = Query(..., description="User query to probe retrieval"),
+    message: str = Query(..., description="User query to probe retrieval+generate"),
     language: str | None = Query(None, description="en | zh-HK | zh-CN"),
-    canonical: str | None = Query(None, description="Optional canonical to bias filter"),
-    doc_type: str | None = Query(None, description="Optional type (institution|course|policy|marketing|faq)"),
-    nofilter: bool = Query(False, description="If true, do not send any metadata filter"),
+    canonical: str | None = Query(None),
+    doc_type: str | None = Query(None),
+    nofilter: bool = Query(False),
 ):
     if debug_retrieve_only is None:
-        raise HTTPException(status_code=501, detail="Debug retrieval not available in this build")
+        raise HTTPException(status_code=501, detail="Debug retrieval not available")
     try:
         return debug_retrieve_only(
             message=message,
@@ -56,7 +46,7 @@ def debug_retrieve_agent_endpoint(
     nofilter: bool = Query(False),
 ):
     if debug_retrieve_agent is None:
-        raise HTTPException(status_code=501, detail="Agent retrieve debug not available in this build")
+        raise HTTPException(status_code=501, detail="Agent retrieve debug not available")
     try:
         return debug_retrieve_agent(
             message=message,

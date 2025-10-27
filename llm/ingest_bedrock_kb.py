@@ -1,6 +1,5 @@
 """
 Thin client for Bedrock Knowledge Base RetrieveAndGenerate.
-Optimized for latency: fewer retrieved chunks, smaller max tokens, no unconditional retry.
 """
 import os
 import time
@@ -9,30 +8,17 @@ from botocore.config import Config
 from typing import Optional, Tuple, List, Dict, Any
 from llm.config import SETTINGS
 
-# Configure Bedrock client timeouts + limited retries to reduce tail latency
 _boto_cfg = Config(
     connect_timeout=SETTINGS.kb_rag_connect_timeout_secs,
     read_timeout=SETTINGS.kb_rag_read_timeout_secs,
     retries={"max_attempts": SETTINGS.kb_rag_max_attempts, "mode": "standard"},
 )
+
+# Use the Runtime client for BOTH retrieve and retrieve_and_generate
 rag = boto3.client("bedrock-agent-runtime", region_name=SETTINGS.aws_region, config=_boto_cfg)
-agent = boto3.client("bedrock-agent", region_name=SETTINGS.aws_region, config=_boto_cfg)
 sts = boto3.client("sts", region_name=SETTINGS.aws_region, config=_boto_cfg)
 
 NO_CONTEXT_TOKEN = "[NO_CONTEXT]"
-
-# Known canonical course keys (duplicates llm.content_store.CANONICAL_COURSES without triggering a store load)
-COURSE_KEYS = {
-    "Playgroups","Phonics","LanguageArts","Clevercal","Alludio",
-    "ToddlerCharRecognition","MandarinPinyin","ChineseLanguageArts","PrivateClass",
-}
-
-def _detect_canonical(message: str) -> Optional[str]:
-    m = (message or "").lower()
-    for k in COURSE_KEYS:
-        if k.lower() in m:
-            return k
-    return None
 
 def _lang_label(lang: Optional[str]) -> str:
     l = (lang or "").lower()
@@ -84,18 +70,12 @@ def _build_filter(language: Optional[str], doc_type: Optional[str], canonical: O
         return parts[0]
     return {"andAll": parts}
 
-def chat_with_kb(
-    message: str,
-    language: Optional[str] = None,
-    session_id: Optional[str] = None,
-    debug: bool = False,
-    extra_context: Optional[str] = None,  # optional tool/context injection
-) -> Tuple[str, List[Dict], Dict[str, Any]]:
-    # ... existing implementation unchanged ...
-    # (intentionally omitted here for brevity)
-    ...
+# ========== DEBUG HELPERS ==========
 
 def debug_retrieve_only(message: str, language: Optional[str] = None, canonical: Optional[str] = None, doc_type: Optional[str] = None, nofilter: bool = False) -> Dict[str, Any]:
+    """
+    retrieve_and_generate with minimal wrapping; returns parsed citations.
+    """
     L = _lang_label(language)
     info: Dict[str, Any] = {
         "region": SETTINGS.aws_region,
@@ -115,30 +95,21 @@ def debug_retrieve_only(message: str, language: Optional[str] = None, canonical:
         return info
 
     t0 = time.time()
-
-    # Raw user message only
-    input_text = (message or "")
-
     f = _build_filter(language, doc_type, canonical, nofilter)
-
     vec_cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
     if f:
         vec_cfg["filter"] = f
     info["retrieval_config"] = dict(vec_cfg)
 
+    # Keep body minimal (match AWS CLI style)
     req: Dict = {
-        "input": {"text": input_text},
+        "input": {"text": (message or "")},
         "retrieveAndGenerateConfiguration": {
             "type": "KNOWLEDGE_BASE",
             "knowledgeBaseConfiguration": {
                 "knowledgeBaseId": SETTINGS.kb_id,
                 "modelArn": SETTINGS.kb_model_arn,
                 "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
-                "generationConfiguration": {
-                    "inferenceConfig": {
-                        "textInferenceConfig": {"maxTokens": 1, "temperature": 0.0, "topP": 0.9}
-                    }
-                },
             }
         },
     }
@@ -155,7 +126,7 @@ def debug_retrieve_only(message: str, language: Optional[str] = None, canonical:
 
 def debug_retrieve_agent(message: str, language: Optional[str] = None, canonical: Optional[str] = None, doc_type: Optional[str] = None, nofilter: bool = False) -> Dict[str, Any]:
     """
-    Pure retrieval (no generation) using bedrock-agent retrieve, to isolate search results.
+    Pure retrieval (no generation) using bedrock-agent-runtime.retrieve, to isolate search.
     """
     L = _lang_label(language)
     info: Dict[str, Any] = {
@@ -188,7 +159,7 @@ def debug_retrieve_agent(message: str, language: Optional[str] = None, canonical
         if f:
             req["retrievalConfiguration"]["vectorSearchConfiguration"]["filter"] = f  # type: ignore
 
-        resp = agent.retrieve(**req)
+        resp = rag.retrieve(**req)
         out = []
         for r in resp.get("retrievalResults", []) or []:
             out.append({
@@ -206,9 +177,6 @@ def debug_retrieve_agent(message: str, language: Optional[str] = None, canonical
         return info
 
 def aws_whoami() -> Dict[str, Any]:
-    """
-    Return the effective AWS identity for this process, to confirm account/role at runtime.
-    """
     out: Dict[str, Any] = {"region": SETTINGS.aws_region}
     try:
         ident = sts.get_caller_identity()
