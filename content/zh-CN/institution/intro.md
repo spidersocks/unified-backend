@@ -3,6 +3,7 @@ language: zh-CN
 type: institution
 canonical: intro
 folder: institution
+aliases: 机构介绍; 关于我们; 机构简介; Little Scholars; 迪少; 年龄范围; 师资; 小班制; 课程时长; 入学评估; 进度追踪; 报名流程; 联系方式
 ---
 # 机构介绍
 

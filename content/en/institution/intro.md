@@ -3,6 +3,7 @@ language: en
 type: institution
 canonical: intro
 folder: institution
+aliases: about; about us; institution introduction; why choose us; why choose Little Scholars; Little Scholars intro; overview; contact; hours; courses; programs
 ---
 # Institution Introduction
 

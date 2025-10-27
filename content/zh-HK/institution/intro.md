@@ -3,6 +3,7 @@ language: zh-HK
 type: institution
 canonical: intro
 folder: institution
+aliases: 機構介紹; 關於我們; 機構簡介; Little Scholars; 迪少; 年齡範圍; 師資; 小班制; 課時長度; 入學評估; 進度追蹤; 報名流程; 聯絡資料
 ---
 # 機構介紹
 
