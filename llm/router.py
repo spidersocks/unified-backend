@@ -2,9 +2,10 @@ from fastapi import APIRouter, HTTPException, Request, Query
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 from llm.bedrock_kb_client import chat_with_kb
+from llm.opening_hours import compute_opening_answer
+from llm.intent import detect_opening_hours_intent
 from llm.config import SETTINGS
 from llm.lang import detect_language, remember_session_language, get_session_language
-from llm import tags_index
 
 # Debug helpers
 try:
@@ -37,6 +38,15 @@ async def chat(req: ChatRequest, request: Request) -> ChatResponse:
     if req.session_id and lang:
         remember_session_language(req.session_id, lang)
 
+    # === Opening hours / holiday / severe weather INTENT SHORT-CIRCUIT ===
+    # Only use LLM if this is NOT an opening-hours/holiday/weather question
+    is_oh, intent_debug = detect_opening_hours_intent(req.message, lang)
+    if is_oh and SETTINGS.opening_hours_enabled:
+        opening_answer = compute_opening_answer(req.message, lang)
+        dbg = {"intent_debug": intent_debug}
+        return ChatResponse(answer=opening_answer or "", citations=[], debug=dbg if req.debug else None)
+
+    # Otherwise, default to LLM RAG
     answer, citations, debug_info = chat_with_kb(
         req.message,
         lang,
