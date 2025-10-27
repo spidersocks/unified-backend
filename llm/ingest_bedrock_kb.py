@@ -150,7 +150,7 @@ def debug_retrieve_agent(message: str, language: Optional[str] = None, canonical
         info["retrieval_filter"] = f
 
     t0 = time.time()
-     try:
+    try:
         req = {
             "knowledgeBaseId": SETTINGS.kb_id,
             "retrievalQuery": {"text": (message or "")},
