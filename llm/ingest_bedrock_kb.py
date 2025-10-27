@@ -150,16 +150,15 @@ def debug_retrieve_agent(message: str, language: Optional[str] = None, canonical
         info["retrieval_filter"] = f
 
     t0 = time.time()
-    try:
-        req: Dict[str, Any] = {
+     try:
+        req = {
             "knowledgeBaseId": SETTINGS.kb_id,
             "retrievalQuery": {"text": (message or "")},
             "retrievalConfiguration": {"vectorSearchConfiguration": {"numberOfResults": max(1, SETTINGS.kb_vector_results)}},
         }
         if f:
-            req["retrievalConfiguration"]["vectorSearchConfiguration"]["filter"] = f  # type: ignore
-
-        resp = rag.retrieve(**req)
+            req["retrievalConfiguration"]["vectorSearchConfiguration"]["filter"] = f
+        resp = rag.retrieve(**req)  
         out = []
         for r in resp.get("retrievalResults", []) or []:
             out.append({
