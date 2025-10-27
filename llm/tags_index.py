@@ -24,7 +24,8 @@ def _add_token(lang: str, token: str, canonical: Optional[str] = None):
     # Ignore 1-char tokens (too noisy), except digits/letters combos length>=2
     if len(t_lower) < 2:
         return
-    _TOKENS_BY_LANG.setdefault(lang, set()).add(t_lower)
+    # Store the original token for display, but use lowercase for matching
+    _TOKENS_BY_LANG.setdefault(lang, set()).add(t)
     if canonical:
         _TOKEN_CANONICALS.setdefault(t_lower, []).append((lang, canonical))
 
@@ -107,7 +108,7 @@ def find_matching_tags(message: str, lang: str, limit: int = 12) -> List[str]:
     """
     if not _BUILT:
         build_index()
-    msg = (message or "").lower()
+    msg_lower = (message or "").lower()
     L = "zh-HK" if lang.lower().startswith("zh-hk") else ("zh-CN" if lang.lower().startswith("zh-cn") or lang.lower()=="zh" else "en")
 
     candidates = list(_TOKENS_BY_LANG.get(L, set()))
@@ -120,10 +121,11 @@ def find_matching_tags(message: str, lang: str, limit: int = 12) -> List[str]:
     hits: List[str] = []
     seen = set()
     for tok in candidates:
-        # Simple substring presence for EN and zh; avoids complex segmentation
-        if tok in msg and tok not in seen:
-            hits.append(tok)
-            seen.add(tok)
+        # Simple substring presence for EN and zh; use lowercase for matching
+        tok_lower = tok.lower()
+        if tok_lower in msg_lower and tok_lower not in seen:
+            hits.append(tok) # Append the original token, not the lowercased version
+            seen.add(tok_lower)
             if len(hits) >= limit:
                 break
     return hits

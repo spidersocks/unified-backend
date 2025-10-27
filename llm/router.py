@@ -1,16 +1,16 @@
 from fastapi import APIRouter, HTTPException, Request, Query
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
-from llm.bedrock_kb_client import chat_with_kb  # only import the required symbol
+from llm.bedrock_kb_client import chat_with_kb
 from llm.config import SETTINGS
 from llm.lang import detect_language, remember_session_language, get_session_language
 from llm import tags_index
 
-# Optional raw-retrieval helper (prefer ingest_bedrock_kb implementation)
+# Optional raw-retrieval helper from the corrected module
 try:
-    from llm.ingest_bedrock_kb import debug_retrieve_only as _kb_debug_retrieve_only  # type: ignore
-except Exception:
-    _kb_debug_retrieve_only = None
+    from llm.ingest_bedrock_kb import debug_retrieve_only
+except ImportError:
+    debug_retrieve_only = None
 
 # Opening-hours intent and tool
 try:
@@ -129,10 +129,11 @@ def debug_retrieve(
     doc_type: str | None = Query(None, description="Optional type (institution|course|policy|marketing|faq)"),
     nofilter: bool = Query(False, description="If true, do not send any metadata filter"),
 ):
-    if _kb_debug_retrieve_only is None:
+    if debug_retrieve_only is None:
         raise HTTPException(status_code=501, detail="Debug retrieval not available in this build")
     try:
-        return _kb_debug_retrieve_only(
+        # Use the correctly imported function
+        return debug_retrieve_only(
             message=message,
             language=language,
             canonical=canonical,
