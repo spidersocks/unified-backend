@@ -178,7 +178,7 @@ def chat_with_kb(
     t0 = time.time()
     prefix = _prompt_prefix(L)
 
-    # Opening-hours guardrails (suppress weather mentions unless severe/asked; avoid holiday mentions unless relevant)
+    # Opening-hours guardrails
     if hint_canonical and hint_canonical.lower() == "opening_hours":
         guard_w = OPENING_HOURS_WEATHER_GUARDRAIL.get(L, OPENING_HOURS_WEATHER_GUARDRAIL["en"])
         guard_h = OPENING_HOURS_HOLIDAY_GUARDRAIL.get(L, OPENING_HOURS_HOLIDAY_GUARDRAIL["en"])
@@ -195,13 +195,11 @@ def chat_with_kb(
 
     # 1) Tag-aware query expansion
     matched_tags = tags_index.find_matching_tags(message or "", L, limit=12) if message else []
-    # Merge in extra_keywords (de-dup)
     if extra_keywords:
         for kw in extra_keywords:
             k = (kw or "").strip()
             if k and k.lower() not in [m.lower() for m in matched_tags]:
                 matched_tags.append(k)
-    # Add canonical hint as a soft keyword (no metadata filter)
     if hint_canonical:
         if hint_canonical.lower() not in [m.lower() for m in matched_tags]:
             matched_tags.append(hint_canonical)
@@ -210,15 +208,18 @@ def chat_with_kb(
         debug_info["hint_canonical"] = hint_canonical
 
     debug_info["matched_tags"] = matched_tags or []
-    keywords_line = "Keywords: " + "; ".join(matched_tags) + "\n" if matched_tags else ""
+    keywords_line = ("Keywords: " + "; ".join(matched_tags) + "\n") if matched_tags else ""
 
     # 2) Optional extra verified tool context
     injected = ""
     if extra_context and extra_context.strip():
         injected = f"Additional verified context (non-retrieved):\n{extra_context.strip()}\n\n"
 
-    # Build the final input text — put keywords ahead of the user text to steer retrieval
-    input_text = prefix + keywords_line + injected + "User: " + (message or "")
+    # IMPORTANT: Put the user question first so retrieval embeds the clean query.
+    # Then append light hints and finally the instructions/guardrails.
+    input_text = "User: " + (message or "") + "\n\n" + keywords_line + injected + prefix
+    if debug:
+        debug_info["input_order"] = "user_first"
 
     def make_vec_cfg(base_filter: Optional[Dict] = None) -> Dict:
         cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
@@ -267,7 +268,6 @@ def chat_with_kb(
         raw_cits = resp.get("citations", []) or []
         parsed = _parse_citations(raw_cits)
 
-        # Expose raw citations in debug to see shape from Bedrock
         if debug:
             debug_info["raw_citations"] = raw_cits
 
@@ -275,12 +275,14 @@ def chat_with_kb(
         answer = _filter_refusal(answer)
         reason = _silence_reason(answer, len(parsed))
 
-        # Optional retry: keep language filter; just drop nothing else (since we don't add others)
-        if (reason or not answer) and (not SETTINGS.kb_disable_lang_filter) and SETTINGS.kb_retry_nofilter:
+        # Optional retry: if enabled, truly drop ALL filters to diagnose retrieval blockage.
+        if (reason or not answer) and SETTINGS.kb_retry_nofilter:
             kb_conf = base_req["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"]
             vec = kb_conf["retrievalConfiguration"]["vectorSearchConfiguration"]
-            # Ensure we KEEP language filter on retry (no cross-language jump)
-            vec["filter"] = make_lang_filter() or vec.get("filter")
+            vec.pop("filter", None)  # drop filter entirely
+            debug_info["retry_reason"] = f"Initial attempt failed ({reason or 'empty_answer'}). Retrying without filter."
+            debug_info["retry_retrieval_config"] = dict(vec)
+
             resp2 = rag.retrieve_and_generate(**base_req)
             answer2 = ((resp2.get("output") or {}).get("text") or "").strip()
             raw2 = resp2.get("citations", []) or []
@@ -291,6 +293,7 @@ def chat_with_kb(
             reason2 = _silence_reason(answer2, len(parsed2))
             if not reason2 and answer2:
                 answer, parsed, reason = answer2, parsed2, None
+                debug_info["retry_succeeded"] = True
 
         # Append staff footer only if explicitly enabled
         if answer and not reason and SETTINGS.kb_append_staff_footer:

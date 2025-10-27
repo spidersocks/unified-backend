@@ -265,7 +265,8 @@ def debug_retrieve_only(message: str, language: Optional[str] = None, canonical:
         return info
 
     t0 = time.time()
-    input_text = _prompt_prefix(L) + "User: " + (message or "")
+    # USER FIRST
+    input_text = "User: " + (message or "") + "\n\n" + _prompt_prefix(L)
 
     # Build optional filter
     f = None
