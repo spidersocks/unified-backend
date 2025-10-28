@@ -182,7 +182,7 @@ NOINFO_PHRASES = [
     "not explicitly stated", "not specified", "not mentioned", "no information", "not provided", "no details",
     "not found", "please contact", "refer to tuition listing", "contact our staff", "contact us",
     "up-to-date fees", "available time slots", "no answer available", "unable to find", "unable to provide",
-    "no details available", "please refer to",
+    "no details available", "please refer to", "no specific information", "the search results do not specify", "no start date mentioned"
 ]
 def contains_apology_or_noinfo(answer: str) -> bool:
     a = (answer or "").lower()
@@ -291,7 +291,13 @@ def chat(req: ChatRequest, request: Request):
     if not citations or contains_apology_or_noinfo(answer):
         _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
         answer = ""
-    if ("tuition" in rag_query.lower() or "fee" in rag_query.lower() or "price" in rag_query.lower() or "cost" in rag_query.lower()) and not likely_contains_fee(answer):
+    fee_words = ["tuition", "fee", "price", "cost"]
+    payment_words = ["how to pay", "payment", "pay", "bank transfer", "fps", "account", "method"]
+    if (
+        any(word in rag_query.lower() for word in fee_words)
+        and not any(word in rag_query.lower() for word in payment_words)
+        and not likely_contains_fee(answer)
+    ):
         _log("Answer does not contain a fee amount for a tuition/fee query, silencing.")
         answer = ""
 

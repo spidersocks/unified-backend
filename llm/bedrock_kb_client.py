@@ -22,17 +22,17 @@ NO_CONTEXT_TOKEN = "[NO_CONTEXT]"
 
 INSTRUCTIONS = {
     "en": (
-        f"Answer ONLY from the retrieved context. Use short bullets. If context is insufficient or irrelevant, output {NO_CONTEXT_TOKEN} exactly.\n\n"
+        f"Answer ONLY from the retrieved context. Use short bullets. If context is irrelevant, or insufficient to answer the user's question in full and with high confidence, output {NO_CONTEXT_TOKEN} exactly.\n\n"
         "IMPORTANT: If the retrieved context describes sending an enrollment form, ALWAYS append the marker [SEND_ENROLLMENT_FORM] on its own line at the end of your answer.\n"
         "If the context describes sending Blooket instructions or the online game, ALWAYS append the marker [SEND_BLOOKET_PDF] on its own line at the end of your answer."
     ),
     "zh-HK": (
-        f"只可根據檢索內容作答。用精簡要點。若內容不足或無關，請輸出 {NO_CONTEXT_TOKEN}。\n\n"
+        f"只可根據檢索內容作答。用精簡要點。若內容不足或無關，無法完整且有把握地回答用戶問題，請輸出 {NO_CONTEXT_TOKEN}。\n\n"
         "重要：如檢索內容涉及發送入學表格，請務必在答案最後另起一行加上此標記：[SEND_ENROLLMENT_FORM]\n"
         "如涉及發送 Blooket 指引或網上遊戲說明，請務必在答案最後另起一行加上此標記：[SEND_BLOOKET_PDF]"
     ),
     "zh-CN": (
-        f"仅按检索内容作答。用精简要点。若内容不足或无关，请输出 {NO_CONTEXT_TOKEN}。\n\n"
+        f"仅按检索内容作答。用精简要点。若内容不足或无关，无法完整且有把握地回答用户问题，请输出 {NO_CONTEXT_TOKEN}。\n\n"
         "重要：如检索内容涉及发送入学表格，请务必在答案末尾另起一行加上此标记：[SEND_ENROLLMENT_FORM]\n"
         "如涉及发送 Blooket 指南或在线游戏说明，请务必在答案末尾另起一行加上此标记：[SEND_BLOOKET_PDF]"
     )
