@@ -29,7 +29,7 @@ class ChatResponse(BaseModel):
     debug: Optional[Dict[str, Any]] = None
 
 def extract_and_strip_marker(answer: str, marker: str) -> (str, bool):
-    pattern = re.compile(rf"\s*\{re.escape(marker)}\s*$", re.IGNORECASE)
+    pattern = re.compile(rf"\s*{re.escape(marker)}\s*$", re.IGNORECASE)
     if answer and pattern.search(answer):
         answer = pattern.sub("", answer)
         return answer.rstrip(), True
