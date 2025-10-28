@@ -180,7 +180,7 @@ def is_followup_message(msg: str) -> bool:
 
 NOINFO_PHRASES = [
     "not explicitly stated", "not specified", "not mentioned", "no information", "not provided", "no details",
-    "not found", "please contact", "refer to tuition listing", "contact our staff", "contact us",
+    "not found", "refer to tuition listing",
     "up-to-date fees", "available time slots", "no answer available", "unable to find", "unable to provide",
     "no details available", "please refer to", "no specific information", "the search results do not specify", "no start date mentioned"
 ]
