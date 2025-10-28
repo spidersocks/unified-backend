@@ -7,8 +7,8 @@ from llm.lang import detect_language
 from llm import tags_index
 from llm.chat_history import save_message, get_recent_history, prune_history, build_context_string
 
-from llm.intent import detect_opening_hours_intent
-from llm.opening_hours import compute_opening_answer
+from llm.intent import detect_opening_hours_intent, is_general_hours_query
+from llm.opening_hours import compute_opening_answer, extract_opening_context
 
 import httpx
 import json
@@ -264,12 +264,19 @@ def chat(req: ChatRequest, request: Request):
     lang = req.language or detect_language(req.message, accept_language=request.headers.get("accept-language"))
     _log(f"Detected language: {lang!r}")
 
-    # --- PATCH: Opening hours intent routing ---
+    # --- PATCH: Opening hours intent routing with general/specific distinction ---
     is_hours_intent, debug_intent = detect_opening_hours_intent(req.message, lang)
     opening_context = None
+    hint_canonical = None
     if is_hours_intent:
-        opening_context = extract_opening_context(req.message, lang)
-        _log(f"Opening hours intent detected. Structured context for LLM:\n{opening_context}")
+        if is_general_hours_query(req.message, lang):
+            opening_context = None
+            hint_canonical = "opening_hours"
+            _log("Opening hours intent detected as GENERAL. No system context injected; LLM will answer from policy docs.")
+        else:
+            opening_context = extract_opening_context(req.message, lang)
+            hint_canonical = "opening_hours"
+            _log(f"Opening hours intent detected as SPECIFIC. Structured context for LLM:\n{opening_context}")
 
     use_history = (req.session_id is not None and not req.session_id.startswith("web:"))
     if use_history:
@@ -301,8 +308,8 @@ def chat(req: ChatRequest, request: Request):
             lang,
             session_id,
             debug=bool(req.debug),
-            extra_context=opening_context if is_hours_intent else None,
-            hint_canonical="opening_hours" if is_hours_intent else None,
+            extra_context=opening_context,
+            hint_canonical=hint_canonical,
         )
     except Exception as e:
         _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
@@ -414,12 +421,19 @@ async def whatsapp_webhook_handler(request: Request):
                                 lang = detect_language(message_body)
                                 _log(f"Detected language: {lang}")
 
-                                # --- PATCH: Opening hours intent routing ---
+                                # --- PATCH: Opening hours intent routing with general/specific distinction ---
                                 is_hours_intent, debug_intent = detect_opening_hours_intent(message_body, lang)
                                 opening_context = None
+                                hint_canonical = None
                                 if is_hours_intent:
-                                    opening_context = extract_opening_context(message_body, lang)
-                                    _log(f"Opening hours intent detected. Structured context for LLM:\n{opening_context}")
+                                    if is_general_hours_query(message_body, lang):
+                                        opening_context = None
+                                        hint_canonical = "opening_hours"
+                                        _log("Opening hours intent detected as GENERAL. No system context injected; LLM will answer from policy docs.")
+                                    else:
+                                        opening_context = extract_opening_context(message_body, lang)
+                                        hint_canonical = "opening_hours"
+                                        _log(f"Opening hours intent detected as SPECIFIC. Structured context for LLM:\n{opening_context}")
 
                                 try:
                                     history = get_recent_history(from_number, limit=6)
@@ -446,8 +460,8 @@ async def whatsapp_webhook_handler(request: Request):
                                         lang,
                                         session_id=from_number,
                                         debug=True,
-                                        extra_context=opening_context if is_hours_intent else None,
-                                        hint_canonical="opening_hours" if is_hours_intent else None,
+                                        extra_context=opening_context,
+                                        hint_canonical=hint_canonical,
                                     )
                                 except Exception as e:
                                     _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
