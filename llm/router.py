@@ -217,6 +217,31 @@ BLOOKET_STRONG_PHRASES = {
     "zh-CN": ["blooket", "在线游戏", "布鲁克特", "blooket 指南", "blooket 教程", "blooket pdf"]
 }
 
+# --- PATCH: Structured context injection for opening hours (RAG) ---
+def extract_opening_context(message: str, lang: Optional[str] = None) -> str:
+    """Create system-injected context for opening hours/date/weather queries."""
+    from llm.opening_hours import _normalize_lang, _parse_datetime, _dow_window, _is_public_holiday, HK_TZ, _fmt_time, _fmt_date_human
+    from llm.hko import get_weather_hint_for_opening
+    import datetime as dt
+    L = _normalize_lang(lang)
+    now = dt.datetime.now(HK_TZ)
+    dtval = _parse_datetime(message or "", now, L) or now
+    open_t, close_t = _dow_window(dtval.weekday())
+    is_holiday, holiday_name = _is_public_holiday(dtval)
+    is_sunday = open_t is None or close_t is None
+    weather_hint = get_weather_hint_for_opening(L)
+    parts = []
+    parts.append(f"Resolved date: {dtval.strftime('%Y-%m-%d')} ({_fmt_date_human(dtval, L)})")
+    if is_holiday:
+        parts.append(f"Public holiday: Yes ({holiday_name})")
+    if is_sunday:
+        parts.append("Day: Sunday (center closed)")
+    if open_t and close_t and not is_holiday and not is_sunday:
+        parts.append(f"Open hours: {_fmt_time(open_t)}–{_fmt_time(close_t)}")
+    if weather_hint:
+        parts.append(f"Weather: {weather_hint}")
+    return "\n".join(parts)
+
 # --- FastAPI schemas ---
 class ChatRequest(BaseModel):
     message: str
@@ -241,12 +266,10 @@ def chat(req: ChatRequest, request: Request):
 
     # --- PATCH: Opening hours intent routing ---
     is_hours_intent, debug_intent = detect_opening_hours_intent(req.message, lang)
+    opening_context = None
     if is_hours_intent:
-        answer = compute_opening_answer(req.message, lang)
-        _log(f"Using deterministic opening hours function. Answer: {answer!r}")
-        citations = []
-        debug_info = {"source": "deterministic_opening_hours", "intent_debug": debug_intent}
-        return ChatResponse(answer=answer, citations=citations, debug=debug_info)
+        opening_context = extract_opening_context(req.message, lang)
+        _log(f"Opening hours intent detected. Structured context for LLM:\n{opening_context}")
 
     use_history = (req.session_id is not None and not req.session_id.startswith("web:"))
     if use_history:
@@ -277,10 +300,18 @@ def chat(req: ChatRequest, request: Request):
             rag_query,
             lang,
             session_id,
-            debug=bool(req.debug)
+            debug=bool(req.debug),
+            extra_context=opening_context if is_hours_intent else None,
+            hint_canonical="opening_hours" if is_hours_intent else None,
         )
     except Exception as e:
         _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
+        # Only fallback to deterministic for opening-hours if LLM/RAG fails:
+        if is_hours_intent:
+            answer = compute_opening_answer(req.message, lang)
+            citations = []
+            debug_info = {"source": "deterministic_opening_hours_fallback", "intent_debug": debug_intent}
+            return ChatResponse(answer=answer, citations=citations, debug=debug_info)
         raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
 
     _log(f"LLM raw answer: {answer!r}")
@@ -290,7 +321,13 @@ def chat(req: ChatRequest, request: Request):
 
     if not citations or contains_apology_or_noinfo(answer):
         _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
-        answer = ""
+        # Fallback to deterministic answer for opening-hours queries ONLY:
+        if is_hours_intent:
+            answer = compute_opening_answer(req.message, lang)
+            citations = []
+            debug_info = {"source": "deterministic_opening_hours_fallback", "intent_debug": debug_intent}
+        else:
+            answer = ""
     fee_words = ["tuition", "fee", "price", "cost"]
     payment_words = ["how to pay", "payment", "pay", "bank transfer", "fps", "account", "method"]
     if (
@@ -379,13 +416,10 @@ async def whatsapp_webhook_handler(request: Request):
 
                                 # --- PATCH: Opening hours intent routing ---
                                 is_hours_intent, debug_intent = detect_opening_hours_intent(message_body, lang)
+                                opening_context = None
                                 if is_hours_intent:
-                                    answer = compute_opening_answer(message_body, lang)
-                                    _log(f"Using deterministic opening hours function. Answer: {answer!r}")
-                                    citations = []
-                                    debug_info = {"source": "deterministic_opening_hours", "intent_debug": debug_intent}
-                                    await _send_whatsapp_message(from_number, answer)
-                                    return {"status": "ok", "message": "Sent deterministic opening hours answer"}
+                                    opening_context = extract_opening_context(message_body, lang)
+                                    _log(f"Opening hours intent detected. Structured context for LLM:\n{opening_context}")
 
                                 try:
                                     history = get_recent_history(from_number, limit=6)
@@ -411,16 +445,37 @@ async def whatsapp_webhook_handler(request: Request):
                                         rag_query,
                                         lang,
                                         session_id=from_number,
-                                        debug=True
+                                        debug=True,
+                                        extra_context=opening_context if is_hours_intent else None,
+                                        hint_canonical="opening_hours" if is_hours_intent else None,
                                     )
                                 except Exception as e:
                                     _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
+                                    # Fallback to deterministic answer for opening-hours only:
+                                    if is_hours_intent:
+                                        answer = compute_opening_answer(message_body, lang)
+                                        citations = []
+                                        debug_info = {"source": "deterministic_opening_hours_fallback", "intent_debug": debug_intent}
+                                        await _send_whatsapp_message(from_number, answer)
+                                        return {"status": "ok", "message": "Sent deterministic opening hours answer"}
                                     raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
 
                                 if not citations or contains_apology_or_noinfo(answer):
                                     _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
-                                    answer = ""
-                                if ("tuition" in rag_query.lower() or "fee" in rag_query.lower() or "price" in rag_query.lower() or "cost" in rag_query.lower()) and not likely_contains_fee(answer):
+                                    # Fallback to deterministic answer for opening-hours only:
+                                    if is_hours_intent:
+                                        answer = compute_opening_answer(message_body, lang)
+                                        citations = []
+                                        debug_info = {"source": "deterministic_opening_hours_fallback", "intent_debug": debug_intent}
+                                    else:
+                                        answer = ""
+                                fee_words = ["tuition", "fee", "price", "cost"]
+                                payment_words = ["how to pay", "payment", "pay", "bank transfer", "fps", "account", "method"]
+                                if (
+                                    any(word in rag_query.lower() for word in fee_words)
+                                    and not any(word in rag_query.lower() for word in payment_words)
+                                    and not likely_contains_fee(answer)
+                                ):
                                     _log("Answer does not contain a fee amount for a tuition/fee query, silencing.")
                                     answer = ""
 

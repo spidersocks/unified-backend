@@ -497,6 +497,29 @@ def _localize_holiday_name(name_en: str, L: str) -> str:
         return name
     return name
 
+def extract_opening_context(message: str, lang: Optional[str] = None) -> str:
+    """
+    Returns a context string with resolved attendance facts for the LLM.
+    """
+    L = _normalize_lang(lang)
+    now = datetime.now(HK_TZ)
+    dt = _parse_datetime(message or "", now, L) or now
+    open_t, close_t = _dow_window(dt.weekday())
+    is_holiday, holiday_name = _is_public_holiday(dt)
+    is_sunday = open_t is None or close_t is None
+    weather_hint = get_weather_hint_for_opening(L)
+    context_lines = []
+    context_lines.append(f"Resolved date: {dt.strftime('%Y-%m-%d')} ({_fmt_date_human(dt, L)})")
+    if is_holiday:
+        context_lines.append(f"Public holiday: Yes ({holiday_name})")
+    if is_sunday:
+        context_lines.append("Day: Sunday (center closed)")
+    if open_t and close_t and not is_holiday and not is_sunday:
+        context_lines.append(f"Open hours: {_fmt_time(open_t)}–{_fmt_time(close_t)}")
+    if weather_hint:
+        context_lines.append(f"Weather: {weather_hint}")
+    return "\n".join(context_lines)
+
 def _contains_time_of_day(message: str) -> bool:
     # Only treat as specific time if there is an explicit time (hh:mm, 3pm, 三点/三點).
     return bool(re.search(r"\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(am|pm)\b", message, flags=re.IGNORECASE) or
