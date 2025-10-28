@@ -97,6 +97,47 @@ def _score_regex(message: str, patterns: list[str]) -> Tuple[int, list[str]]:
             score += 1
     return score, hits
 
+def is_general_hours_query(message: str, lang: str) -> bool:
+    """
+    Returns True if the message is about opening hours/attendance intent,
+    but does NOT contain any explicit date, weekday, or relative-day marker.
+    Used to distinguish 'What are your opening hours?' from 'Are you open on Sunday?'.
+    For EN, treat 'public holiday' or 'holiday' as general.
+    """
+    m = message or ""
+    L = lang.lower() if lang else "en"
+    is_intent, _ = detect_opening_hours_intent(m, lang, use_llm=True)
+    if not is_intent:
+        return False
+
+    # Weekday and relative-day markers (in all languages)
+    weekday_patterns = [
+        r"\b(mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+        r"\b(today|tomorrow|yesterday|next week|this week)\b",
+        r"星期[一二三四五六日天]|周[一二三四五六日天]|週[一二三四五六日天]|礼拜[一二三四五六日天]|禮拜[一二三四五六日天]",
+        r"今天|今日|明天|聽日|后天|後日|下周|下星期|本周|本星期"
+    ]
+    for pat in weekday_patterns:
+        if re.search(pat, m, re.I):
+            return False
+
+    # Explicit date markers
+    if re.search(r"\d{1,2}\s*(月|日|号|號)", m):
+        return False
+    if re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*\d{1,2}\b", m, re.I):
+        return False
+    if re.search(r"\b\d{1,2}/\d{1,2}\b", m):
+        return False
+
+    # For EN: treat 'public holiday' or 'holiday' as general unless a date is present
+    if L == "en" and re.search(r"\b(public holiday|holiday|holidays?)\b", m, re.I):
+        # If also contains "on <date>", not general
+        if re.search(r"\bon\b.*\d{1,2}", m, re.I):
+            return False
+        return True
+
+    return True
+
 def detect_opening_hours_intent(message: str, lang: str, use_llm: bool = True) -> Tuple[bool, Dict[str, Any]]:
     m = message or ""
     L = (lang or "en").lower()
