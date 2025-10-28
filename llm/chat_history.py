@@ -4,7 +4,8 @@ from typing import List, Dict, Optional
 import boto3
 
 CHAT_HISTORY_TABLE = os.environ.get("CHAT_HISTORY_TABLE", "ChatHistory")
-dynamodb = boto3.resource("dynamodb")
+region = os.environ.get("AWS_REGION", "us-east-1")
+dynamodb = boto3.resource("dynamodb", region_name=region)
 table = dynamodb.Table(CHAT_HISTORY_TABLE)
 
 def save_message(session_id: str, role: str, message: str, lang: Optional[str] = None, timestamp: Optional[float] = None):
