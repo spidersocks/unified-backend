@@ -147,24 +147,47 @@ def _answer_is_short(answer: str, max_words: int = 40) -> bool:
     words = (answer or "").split()
     return len(words) <= max_words
 
+import re
+
 def is_followup_message(msg: str) -> bool:
     """
-    Returns True if the message is a context-dependent follow-up that should allow context-only LLM answers.
+    Returns True if the message is a context-dependent follow-up
+    (i.e., elliptical, referring to previous chat).
+    Triggers on:
+    - Classic short follow-up phrases ("what about", "and", "which ones", etc.)
+    - Short, vague questions ("?", "more?")
+    - Messages with referential pronouns ("that", "it", "this", "those", "these") AND a query keyword ("tuition", "fee", "cost", "price", "schedule", "age", "time", "when", "how much", "class", etc.)
+    Does NOT trigger for explicit, self-contained questions ("What is the tuition for math?")
     """
     if not msg:
         return False
     msg_lc = msg.strip().lower()
-    followups = [
-        "tell me more", "like what", "which ones", "go on", "what else",
-        "can you elaborate", "can you explain", "for example", "例如", "舉個例",
-        "可以再說說", "举个例", "还有呢", "继续", "more?", "再多一些", "再讲讲", "再說說", "?"
+
+    # 1. Classic follow-up/elliptical patterns (start of string)
+    FOLLOWUP_PATTERNS = [
+        r"^\s*(what about|how about|and|which ones|tell me more|like what|go on|what else|for example|can you elaborate|can you explain|例如|舉個例|可以再說說|举个例|还有呢|继续|再多一些|再讲讲|再說說)\b",
+        r"^[\s\?]*$",  # just "?" or empty
     ]
-    if len(msg_lc.split()) <= 8 or len(msg_lc) <= 35:
-        for phrase in followups:
-            if phrase in msg_lc:
+    if len(msg_lc.split()) <= 7:
+        for pat in FOLLOWUP_PATTERNS:
+            if re.match(pat, msg_lc):
                 return True
-    if len(msg_lc.split()) <= 2 and msg_lc.endswith("?"):
+
+    # 2. Short, vague, ends with question mark and not explicit
+    if len(msg_lc.split()) <= 3 and msg_lc.endswith("?"):
+        if not re.match(r"^\s*(what|how|when|where|who|which|why)\b", msg_lc):
+            return True
+
+    # 3. Referential pronouns + query word (tuition, fee, cost, price, schedule, age, time, class, etc.)
+    PRONOUNS = r"\b(that|it|this|those|these)\b"
+    QUERY_KEYWORDS = r"\b(tuition|fee|cost|price|schedule|age|time|when|how much|class|course|program|subject|writing|math|english|chinese|mandarin|lesson|session)\b"
+    if re.search(PRONOUNS, msg_lc) and re.search(QUERY_KEYWORDS, msg_lc):
         return True
+
+    # 4. Very short, referential commands
+    if msg_lc in {"that", "this", "it", "those", "these"}:
+        return True
+
     return False
 
 async def _send_whatsapp_message(to: str, message_body: str):
