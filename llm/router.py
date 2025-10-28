@@ -11,7 +11,7 @@ import re
 
 router = APIRouter(tags=["LLM Chat (Bedrock KB)"])
 
-ENROLLMENT_FORM_URL = "https://s24.q4cdn.com/216390268/files/doc_downloads/test.pdf"  # <-- Set your form's public URL here
+ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"  # <-- Set your form's public URL here
 ENROLLMENT_FORM_MARKER = "[SEND_ENROLLMENT_FORM]"
 
 class ChatRequest(BaseModel):
