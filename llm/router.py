@@ -5,9 +5,11 @@ from llm.bedrock_kb_client import chat_with_kb
 from llm.config import SETTINGS
 from llm.lang import detect_language, remember_session_language, get_session_language
 from llm import tags_index
+from llm.chat_history import save_message, get_recent_history, prune_history
 import httpx
 import json
 import re
+import time
 
 router = APIRouter(tags=["LLM Chat (Bedrock KB)"])
 
@@ -27,7 +29,6 @@ BLOOKET_DOCS = [
     "/zh-CN/policies/blooket_instructions.md",
 ]
 
-# Phrase triggers for form/game (EN, zh-HK, zh-CN)
 ENROLLMENT_STRONG_PHRASES = {
     "en": [
         "enrollment form", "registration form", "application form",
@@ -66,7 +67,7 @@ def _any_doc_cited(citations, doc_paths: list) -> bool:
     for c in citations:
         uri = c.get("uri", "") or ""
         for doc in doc_paths:
-            if uri.endswith(doc):
+            if uri and uri.endswith(doc):
                 return True
     return False
 
@@ -79,7 +80,6 @@ def _answer_has_strong_phrase(answer: str, lang: str, phrases_by_lang: dict) -> 
     return False
 
 def _answer_is_short(answer: str, max_words: int = 40) -> bool:
-    """Detect if answer is short enough to likely be a direct form response."""
     words = (answer or "").split()
     return len(words) <= max_words
 
@@ -148,12 +148,11 @@ async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "docume
         except Exception as e:
             print(f"[WA] ERROR: Unexpected error in _send_whatsapp_document: {e}")
 
-# ===== /chat endpoint =====
 class ChatRequest(BaseModel):
     message: str
-    language: Optional[str] = None  # "en" | "zh-hk" | "zh-cn"
+    language: Optional[str] = None
     session_id: Optional[str] = None
-    debug: Optional[bool] = False   # return debug object in response
+    debug: Optional[bool] = False
 
 class ChatResponse(BaseModel):
     answer: str
@@ -164,6 +163,7 @@ class ChatResponse(BaseModel):
 def chat(req: ChatRequest, request: Request):
     print(f"[CHAT] /chat called with: message={req.message!r}, language={req.language!r}, session_id={req.session_id!r}, debug={req.debug!r}")
     print(f"[CHAT] Headers: {dict(request.headers)}")
+    session_id = req.session_id or ("web:" + str(hash(request.client.host)))  # fallback to web session
     lang = req.language
     if not lang and req.session_id:
         lang = get_session_language(req.session_id)
@@ -175,13 +175,30 @@ def chat(req: ChatRequest, request: Request):
         remember_session_language(req.session_id, lang)
         print(f"[CHAT] Remembered session language: session_id={req.session_id}, lang={lang}")
 
-    # Call LLM
+    # 1. Retrieve last 6 messages (3 pairs) for context
+    history = get_recent_history(session_id, limit=6)
+    context_lines = []
+    for msg in history:
+        prefix = "Parent:" if msg["role"] == "user" else "Bot:"
+        context_lines.append(f"{prefix} {msg['message']}")
+    context_lines.append(f"Parent: {req.message}")
+    history_context = "\n".join(context_lines)
+
+    # 2. Call LLM with context as extra_context (if supported)
     answer, citations, debug_info = chat_with_kb(
         req.message,
         lang,
-        req.session_id,
-        debug=bool(req.debug)
+        session_id,
+        debug=bool(req.debug),
+        extra_context=history_context
     )
+
+    # 3. Save new user and bot messages, prune to last 6
+    now = time.time()
+    save_message(session_id, "user", req.message, lang, now)
+    save_message(session_id, "bot", answer or "", lang, now + 0.01)
+    prune_history(session_id, keep=6)
+
     print(f"[CHAT] LLM raw answer: {answer!r}")
     print(f"[CHAT] LLM citations: {json.dumps(citations, indent=2)}")
     if debug_info:
@@ -217,8 +234,6 @@ def chat(req: ChatRequest, request: Request):
 
     answer = answer or ""
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
-
-# ========== WhatsApp Webhook Endpoints ==========
 
 @router.get("/whatsapp_webhook")
 async def whatsapp_webhook_verification(request: Request):
@@ -259,24 +274,39 @@ async def whatsapp_webhook_handler(request: Request):
                                 message_body = message["text"].get("body")
                                 print(f"[WA] Text message from {from_number} (Name: {contact.get('profile',{}).get('name')}): '{message_body}'")
 
-                                # Whitelist check
                                 if from_number not in SETTINGS.whatsapp_test_numbers:
                                     print(f"[WA] WARNING: Message from non-whitelisted number {from_number} ignored during testing.")
                                     return {"status": "ignored", "reason": "not in test numbers"}
 
-                                # Detect language
                                 lang = detect_language(message_body)
                                 print(f"[WA] Detected language: {lang}")
                                 remember_session_language(from_number, lang)
                                 print(f"[WA] Remembered session language for {from_number}: {lang}")
 
-                                # Call LLM
+                                # Get last 3 pairs for context
+                                history = get_recent_history(from_number, limit=6)
+                                context_lines = []
+                                for msg in history:
+                                    prefix = "Parent:" if msg["role"] == "user" else "Bot:"
+                                    context_lines.append(f"{prefix} {msg['message']}")
+                                context_lines.append(f"Parent: {message_body}")
+                                history_context = "\n".join(context_lines)
+
+                                # Call LLM with context
                                 answer, citations, debug_info = chat_with_kb(
                                     message_body,
                                     lang,
-                                    session_id=None,
-                                    debug=True
+                                    session_id=from_number,
+                                    debug=True,
+                                    extra_context=history_context
                                 )
+
+                                # Save new user and bot messages, prune to last 6
+                                now = time.time()
+                                save_message(from_number, "user", message_body, lang, now)
+                                save_message(from_number, "bot", answer or "", lang, now + 0.01)
+                                prune_history(from_number, keep=6)
+
                                 print(f"[WA] LLM raw answer: {answer!r}")
                                 print(f"[WA] LLM citations: {json.dumps(citations, indent=2)}")
                                 if debug_info:
@@ -311,7 +341,6 @@ async def whatsapp_webhook_handler(request: Request):
                                     await _send_whatsapp_document(from_number, BLOOKET_PDF_URL, "blooket_instructions.pdf")
                                     sent = True
 
-                                # If any marker or trigger fired, still send any remaining message text
                                 if sent and answer:
                                     await _send_whatsapp_message(from_number, answer)
                                 elif answer:
