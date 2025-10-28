@@ -181,24 +181,6 @@ def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[date
             break
     if not target_kw:
         return None
-    
-def is_general_hours_query(message: str, lang: str) -> bool:
-    """
-    Returns True if the message is about opening hours/attendance intent,
-    but does NOT contain any explicit date, weekday, or relative-day marker.
-    Used to distinguish 'What are your opening hours?' from 'Are you open on Sunday?'.
-    For EN, treat 'public holiday' or 'holiday' as general.
-    """
-    from llm.intent import detect_opening_hours_intent
-    from llm.opening_hours import _extract_day_of_month, _extract_weekday, _relative_offset
-    m = message or ""
-    L = lang.lower() if lang else "en"
-    is_intent, _ = detect_opening_hours_intent(m, lang, use_llm=True)
-    if not is_intent:
-        return False
-    # If it contains any explicit date/weekday/relative marker, it's not general
-    if _extract_day_of_month(m) is not None:
-        return False
 
 def _extract_full_chinese_date(msg: str) -> Optional[Tuple[int, int]]:
     """
