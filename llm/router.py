@@ -11,8 +11,11 @@ import re
 
 router = APIRouter(tags=["LLM Chat (Bedrock KB)"])
 
-ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"  # <-- Set your form's public URL here
+ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"
 ENROLLMENT_FORM_MARKER = "[SEND_ENROLLMENT_FORM]"
+
+BLOOKET_PDF_URL = "https://drive.google.com/uc?export=download&id=18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M"
+BLOOKET_MARKER = "[SEND_BLOOKET_PDF]"
 
 class ChatRequest(BaseModel):
     message: str
@@ -25,9 +28,8 @@ class ChatResponse(BaseModel):
     citations: List[Dict[str, Any]] = []
     debug: Optional[Dict[str, Any]] = None
 
-def extract_and_strip_marker(answer: str) -> (str, bool):
-    # Detect the marker (case-insensitive, possibly with whitespace)
-    pattern = re.compile(r"\s*\[SEND_ENROLLMENT_FORM\]\s*$", re.IGNORECASE)
+def extract_and_strip_marker(answer: str, marker: str) -> (str, bool):
+    pattern = re.compile(rf"\s*\{re.escape(marker)}\s*$", re.IGNORECASE)
     if answer and pattern.search(answer):
         answer = pattern.sub("", answer)
         return answer.rstrip(), True
@@ -66,7 +68,7 @@ async def _send_whatsapp_message(to: str, message_body: str):
         except Exception as e:
             print(f"[WA] ERROR: Unexpected error in _send_whatsapp_message: {e}")
 
-async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "enrollment_form.pdf"):
+async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "document.pdf"):
     if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
         print("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send document.")
         return
@@ -126,12 +128,18 @@ def chat(req: ChatRequest, request: Request):
     if debug_info:
         print(f"[CHAT] LLM debug_info: {json.dumps(debug_info, indent=2)}")
 
-    # Postprocessing for enrollment form marker
-    answer, send_form = extract_and_strip_marker(answer)
+    # Enrollment form marker
+    answer, send_form = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
+    # Blooket marker
+    answer, send_blooket = extract_and_strip_marker(answer, BLOOKET_MARKER)
 
     if send_form:
         answer = (answer or "") + f"\n\nYou can download our enrollment form [here]({ENROLLMENT_FORM_URL})."
         print("[CHAT] Enrollment form marker detected: added PDF link to response.")
+
+    if send_blooket:
+        answer = (answer or "") + f"\n\nYou can download the Blooket instructions [here]({BLOOKET_PDF_URL})."
+        print("[CHAT] Blooket marker detected: added Blooket PDF link to response.")
 
     silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
     if not answer and silent_reason:
@@ -207,14 +215,24 @@ async def whatsapp_webhook_handler(request: Request):
                                 if not answer and silent_reason:
                                     print(f"[WA] LLM silenced answer. Reason: {silent_reason}")
 
-                                # Postprocessing for enrollment form marker
-                                answer, send_form = extract_and_strip_marker(answer)
+                                # Enrollment form marker
+                                answer, send_form = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
+                                # Blooket marker
+                                answer, send_blooket = extract_and_strip_marker(answer, BLOOKET_MARKER)
+                                
+                                sent = False
                                 if send_form:
                                     print("[WA] Enrollment form marker detected: sending PDF document.")
-                                    await _send_whatsapp_document(from_number, ENROLLMENT_FORM_URL)
-                                    # Optionally send text if present (e.g., extra instructions)
-                                    if answer:
-                                        await _send_whatsapp_message(from_number, answer)
+                                    await _send_whatsapp_document(from_number, ENROLLMENT_FORM_URL, "enrollment_form.pdf")
+                                    sent = True
+                                if send_blooket:
+                                    print("[WA] Blooket marker detected: sending Blooket instruction PDF.")
+                                    await _send_whatsapp_document(from_number, BLOOKET_PDF_URL, "blooket_instructions.pdf")
+                                    sent = True
+
+                                # If any marker was found, still send any remaining message text
+                                if sent and answer:
+                                    await _send_whatsapp_message(from_number, answer)
                                 elif answer:
                                     print(f"[WA] LLM Answer: '{answer}'")
                                     await _send_whatsapp_message(from_number, answer)
