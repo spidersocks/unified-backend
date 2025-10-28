@@ -56,7 +56,9 @@ async def whatsapp_webhook_verification(request: Request):
     token = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge")
 
-    print(f"INFO: Webhook Verification Request received. Mode: {mode}, Token: {token[:5]}..., Challenge: {challenge}")
+    # FIX: Safely log the token
+    token_preview = token[:5] + "..." if token else "None"
+    print(f"INFO: Webhook Verification Request received. Mode: {mode}, Token: {token_preview}, Challenge: {challenge}")
 
     if mode == "subscribe" and token == SETTINGS.whatsapp_verify_token:
         print("INFO: Webhook verification successful!")
