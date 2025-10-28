@@ -6,6 +6,10 @@ from llm.config import SETTINGS
 from llm.lang import detect_language
 from llm import tags_index
 from llm.chat_history import save_message, get_recent_history, prune_history, build_context_string
+
+from llm.intent import detect_opening_hours_intent
+from llm.opening_hours import compute_opening_answer
+
 import httpx
 import json
 import re
@@ -13,77 +17,13 @@ import time
 import sys
 import traceback
 
-async def _send_whatsapp_message(to: str, message_body: str):
-    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
-        _log("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send message.")
-        return
-
-    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
-    headers = {
-        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": {
-            "body": message_body
-        }
-    }
-
-    _log(f"[WA] Sending WhatsApp message to: {to} | Body: {message_body}")
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            _log(f"[WA] SUCCESS: WhatsApp message sent to {to}. Response: {response.json()}")
-        except httpx.HTTPStatusError as e:
-            _log(f"[WA] ERROR: Failed to send WhatsApp message to {to}. Status: {e.response.status_code}, Detail: {e.response.text}")
-        except httpx.RequestError as e:
-            _log(f"[WA] ERROR: An error occurred while requesting to send WhatsApp message to {to}: {e}")
-        except Exception as e:
-            _log(f"[WA] ERROR: Unexpected error in _send_whatsapp_message: {e}")
-
-async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "document.pdf"):
-    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
-        _log("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send document.")
-        return
-
-    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
-    headers = {
-        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "document",
-        "document": {
-            "link": doc_url,
-            "filename": filename
-        }
-    }
-    _log(f"[WA] Sending WhatsApp document to: {to} | Document URL: {doc_url}")
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            _log(f"[WA] SUCCESS: WhatsApp document sent to {to}. Response: {response.json()}")
-        except httpx.HTTPStatusError as e:
-            _log(f"[WA] ERROR: Failed to send WhatsApp document to {to}. Status: {e.response.status_code}, Detail: {e.response.text}")
-        except httpx.RequestError as e:
-            _log(f"[WA] ERROR: An error occurred while requesting to send WhatsApp document to {to}: {e}")
-        except Exception as e:
-            _log(f"[WA] ERROR: Unexpected error in _send_whatsapp_document: {e}")
-
+# --- Llama client helper (should be moved to llm/llama_client.py) ---
 def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop: list = None) -> str:
     import boto3
     import json
     from llm.config import SETTINGS
     bedrock = boto3.client("bedrock-runtime", region_name=SETTINGS.aws_region)
     model_arn = SETTINGS.kb_model_arn
-
     body = {
         "prompt": prompt,
         "max_gen_len": max_tokens,
@@ -91,7 +31,6 @@ def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop
     }
     if stop:
         body["stop_sequences"] = stop
-
     resp = bedrock.invoke_model(
         modelId=model_arn,
         contentType="application/json",
@@ -106,11 +45,6 @@ def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop
         return result.strip()
 
 def call_llm_rephrase(history_context: str, lang: str) -> str:
-    """
-    Calls your Llama 70B instruct model to rewrite the latest user message as a self-contained query.
-    Returns the rewritten query as a string.
-    """
-    # The following prompt gives *explicit* instructions to stay silent if unsure or insufficient info.
     prompts = {
         "en": (
             "Given the following conversation, rewrite the user's latest message as a self-contained, explicit question for the bot. "
@@ -141,49 +75,56 @@ def call_llm_rephrase(history_context: str, lang: str) -> str:
 def _log(msg):
     print(f"[LLM ROUTER] {msg}", file=sys.stderr, flush=True)
 
-router = APIRouter(tags=["LLM Chat (Bedrock KB)"])
+# --- WhatsApp helpers (should be moved to llm/whatsapp_utils.py) ---
+async def _send_whatsapp_message(to: str, message_body: str):
+    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
+        _log("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send message.")
+        return
+    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "text",
+        "text": {"body": message_body}
+    }
+    _log(f"[WA] Sending WhatsApp message to: {to} | Body: {message_body}")
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            _log(f"[WA] SUCCESS: WhatsApp message sent to {to}. Response: {response.json()}")
+        except Exception as e:
+            _log(f"[WA] ERROR: Failed to send WhatsApp message: {e}")
 
-ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"
-ENROLLMENT_FORM_MARKER = "[SEND_ENROLLMENT_FORM]"
-ENROLLMENT_FORM_DOCS = [
-    "/en/policies/enrollment_form.md",
-    "/zh-HK/policies/enrollment_form.md",
-    "/zh-CN/policies/enrollment_form.md",
-]
+async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "document.pdf"):
+    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
+        _log("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send document.")
+        return
+    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "document",
+        "document": {"link": doc_url, "filename": filename}
+    }
+    _log(f"[WA] Sending WhatsApp document to: {to} | Document URL: {doc_url}")
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            _log(f"[WA] SUCCESS: WhatsApp document sent to {to}. Response: {response.json()}")
+        except Exception as e:
+            _log(f"[WA] ERROR: Failed to send WhatsApp document: {e}")
 
-BLOOKET_PDF_URL = "https://drive.google.com/uc?export=download&id=18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M"
-BLOOKET_MARKER = "[SEND_BLOOKET_PDF]"
-BLOOKET_DOCS = [
-    "/en/policies/blooket_instructions.md",
-    "/zh-HK/policies/blooket_instructions.md",
-    "/zh-CN/policies/blooket_instructions.md",
-]
-
-ENROLLMENT_STRONG_PHRASES = {
-    "en": [
-        "enrollment form", "registration form", "application form",
-        "please fill out our enrollment form", "download the form", "attached form",
-        "fill in the form", "submit the enrollment form", "send me the form"
-    ],
-    "zh-HK": [
-        "入學表格", "報名表格", "申請表", "下載表格", "填好表格", "發送表格", "填寫入學表格"
-    ],
-    "zh-CN": [
-        "入学表格", "报名表格", "申请表", "下载表格", "填好表格", "发送表格", "填写入学表格"
-    ],
-}
-BLOOKET_STRONG_PHRASES = {
-    "en": [
-        "blooket", "blooket instructions", "online game", "how to play blooket", "the blooket pdf", "blooket guide"
-    ],
-    "zh-HK": [
-        "blooket", "網上遊戲", "布魯克特", "blooket 指引", "blooket 教學", "blooket pdf"
-    ],
-    "zh-CN": [
-        "blooket", "在线游戏", "布鲁克特", "blooket 指南", "blooket 教程", "blooket pdf"
-    ]
-}
-
+# --- Answer marker and guardrail helpers (should be moved to llm/answer_utils.py) ---
 def extract_and_strip_marker(answer: str, marker: str) -> (str, bool):
     pattern = re.compile(rf"\s*{re.escape(marker)}\s*$", re.IGNORECASE)
     if answer and pattern.search(answer):
@@ -204,31 +145,16 @@ def _any_doc_cited(citations, doc_paths: list) -> bool:
 def _answer_has_strong_phrase(answer: str, lang: str, phrases_by_lang: dict) -> bool:
     answer_lc = (answer or "").lower()
     phrases = phrases_by_lang.get(lang, []) + phrases_by_lang.get("en", [])
-    for phrase in phrases:
-        if phrase.lower() in answer_lc:
-            return True
-    return False
+    return any(phrase.lower() in answer_lc for phrase in phrases)
 
 def _answer_is_short(answer: str, max_words: int = 40) -> bool:
     words = (answer or "").split()
     return len(words) <= max_words
 
-import re
-
 def is_followup_message(msg: str) -> bool:
-    """
-    Returns True if the message is a context-dependent follow-up
-    (i.e., elliptical, referring to previous chat).
-    Triggers on:
-    - Classic short follow-up phrases ("what about", "and", "which ones", etc.)
-    - Short, vague questions ("?", "more?")
-    - Messages with referential pronouns ("that", "it", "this", "those", "these") AND a query keyword ("tuition", "fee", "cost", "price", "schedule", "age", "time", "when", "how much", "class", etc.)
-    Does NOT trigger for explicit, self-contained questions ("What is the tuition for math?")
-    """
     if not msg:
         return False
     msg_lc = msg.strip().lower()
-
     # 1. Classic follow-up/elliptical patterns (start of string)
     FOLLOWUP_PATTERNS = [
         r"^\s*(what about|how about|and|which ones|tell me more|like what|go on|what else|for example|can you elaborate|can you explain|例如|舉個例|可以再說說|举个例|还有呢|继续|再多一些|再讲讲|再說說)\b",
@@ -238,55 +164,60 @@ def is_followup_message(msg: str) -> bool:
         for pat in FOLLOWUP_PATTERNS:
             if re.match(pat, msg_lc):
                 return True
-
     # 2. Short, vague, ends with question mark and not explicit
     if len(msg_lc.split()) <= 3 and msg_lc.endswith("?"):
         if not re.match(r"^\s*(what|how|when|where|who|which|why)\b", msg_lc):
             return True
-
-    # 3. Referential pronouns + query word (tuition, fee, cost, price, schedule, age, time, class, etc.)
+    # 3. Referential pronouns + query word
     PRONOUNS = r"\b(that|it|this|those|these)\b"
     QUERY_KEYWORDS = r"\b(tuition|fee|cost|price|schedule|age|time|when|how much|class|course|program|subject|writing|math|english|chinese|mandarin|lesson|session)\b"
     if re.search(PRONOUNS, msg_lc) and re.search(QUERY_KEYWORDS, msg_lc):
         return True
-
     # 4. Very short, referential commands
     if msg_lc in {"that", "this", "it", "those", "these"}:
         return True
-
     return False
 
-# --- GUARDRAIL: Block answers that apologize, hedge, or refer to contacting staff if info is missing --- #
 NOINFO_PHRASES = [
-    "not explicitly stated",
-    "not specified",
-    "not mentioned",
-    "no information",
-    "not provided",
-    "no details",
-    "not found",
-    "please contact",
-    "refer to tuition listing",
-    "contact our staff",
-    "contact us",
-    "up-to-date fees",
-    "available time slots",
-    "no answer available",
-    "unable to find",
-    "unable to provide",
-    "no details available",
-    "please refer to",
+    "not explicitly stated", "not specified", "not mentioned", "no information", "not provided", "no details",
+    "not found", "please contact", "refer to tuition listing", "contact our staff", "contact us",
+    "up-to-date fees", "available time slots", "no answer available", "unable to find", "unable to provide",
+    "no details available", "please refer to",
 ]
-
 def contains_apology_or_noinfo(answer: str) -> bool:
     a = (answer or "").lower()
     return any(p in a for p in NOINFO_PHRASES)
 
-
 def likely_contains_fee(answer: str) -> bool:
-    # Looks for a $ or HK$ followed by a number
     return bool(re.search(r"(hk\$|\$)\s*\d+", answer, re.I))
 
+# --- Enrollment/Blooket markers ---
+ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"
+ENROLLMENT_FORM_MARKER = "[SEND_ENROLLMENT_FORM]"
+ENROLLMENT_FORM_DOCS = [
+    "/en/policies/enrollment_form.md",
+    "/zh-HK/policies/enrollment_form.md",
+    "/zh-CN/policies/enrollment_form.md",
+]
+BLOOKET_PDF_URL = "https://drive.google.com/uc?export=download&id=18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M"
+BLOOKET_MARKER = "[SEND_BLOOKET_PDF]"
+BLOOKET_DOCS = [
+    "/en/policies/blooket_instructions.md",
+    "/zh-HK/policies/blooket_instructions.md",
+    "/zh-CN/policies/blooket_instructions.md",
+]
+ENROLLMENT_STRONG_PHRASES = {
+    "en": ["enrollment form", "registration form", "application form", "please fill out our enrollment form", "download the form", "attached form", "fill in the form", "submit the enrollment form", "send me the form"],
+    "zh-HK": ["入學表格", "報名表格", "申請表", "下載表格", "填好表格", "發送表格", "填寫入學表格"],
+    "zh-CN": ["入学表格", "报名表格", "申请表", "下载表格", "填好表格", "发送表格", "填写入学表格"]
+}
+BLOOKET_STRONG_PHRASES = {
+    "en": ["blooket", "blooket instructions", "online game", "how to play blooket", "the blooket pdf", "blooket guide"],
+    "zh-HK": ["blooket", "網上遊戲", "布魯克特", "blooket 指引", "blooket 教學", "blooket pdf"],
+    "zh-CN": ["blooket", "在线游戏", "布鲁克特", "blooket 指南", "blooket 教程", "blooket pdf"]
+}
+
+# --- FastAPI schemas ---
 class ChatRequest(BaseModel):
     message: str
     language: Optional[str] = None
@@ -298,18 +229,26 @@ class ChatResponse(BaseModel):
     citations: List[Dict[str, Any]] = []
     debug: Optional[Dict[str, Any]] = None
 
+router = APIRouter(tags=["LLM Chat (Bedrock KB)"])
+
 @router.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest, request: Request):
     _log(f"/chat called: message={req.message!r}, language={req.language!r}, session_id={req.session_id!r}, debug={req.debug!r}")
     _log(f"Headers: {dict(request.headers)}")
-    session_id = req.session_id or ("web:" + str(hash(request.client.host)))  # fallback to web session
-    lang = req.language
-    if not lang:
-        lang = detect_language(req.message, accept_language=request.headers.get("accept-language"))
-        _log(f"Detected language: {lang!r}")
+    session_id = req.session_id or ("web:" + str(hash(request.client.host)))
+    lang = req.language or detect_language(req.message, accept_language=request.headers.get("accept-language"))
+    _log(f"Detected language: {lang!r}")
+
+    # --- PATCH: Opening hours intent routing ---
+    is_hours_intent, debug_intent = detect_opening_hours_intent(req.message, lang)
+    if is_hours_intent:
+        answer = compute_opening_answer(req.message, lang)
+        _log(f"Using deterministic opening hours function. Answer: {answer!r}")
+        citations = []
+        debug_info = {"source": "deterministic_opening_hours", "intent_debug": debug_intent}
+        return ChatResponse(answer=answer, citations=citations, debug=debug_info)
 
     use_history = (req.session_id is not None and not req.session_id.startswith("web:"))
-
     if use_history:
         try:
             history = get_recent_history(session_id, limit=6)
@@ -321,10 +260,8 @@ def chat(req: ChatRequest, request: Request):
         history = []
         _log("Skipping DynamoDB chat history for this session/request.")
 
-    # Build context string for LLM
     history_context = build_context_string(history, new_message=req.message, user_role="user", bot_role="bot", include_new=True)
 
-    # --- Reformulate query for follow-up/elliptical messages ---
     rag_query = req.message
     if is_followup_message(req.message):
         try:
@@ -334,7 +271,6 @@ def chat(req: ChatRequest, request: Request):
             _log(f"Failed to reformulate query, falling back to user message. Error: {e}")
             rag_query = req.message
 
-    # === Call the LLM/RAG ===
     _log(f"Calling chat_with_kb with rag_query length={len(rag_query)}")
     try:
         answer, citations, debug_info = chat_with_kb(
@@ -352,12 +288,9 @@ def chat(req: ChatRequest, request: Request):
     if debug_info:
         _log(f"LLM debug_info: {json.dumps(debug_info, indent=2)}")
 
-    # === GUARDRAIL: Silence any answer with no citations or only apologies/noinfo ===
     if not citations or contains_apology_or_noinfo(answer):
         _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
         answer = ""
-
-    # Additional guardrail: For tuition/fee queries, require a fee amount in answer
     if ("tuition" in rag_query.lower() or "fee" in rag_query.lower() or "price" in rag_query.lower() or "cost" in rag_query.lower()) and not likely_contains_fee(answer):
         _log("Answer does not contain a fee amount for a tuition/fee query, silencing.")
         answer = ""
@@ -438,6 +371,16 @@ async def whatsapp_webhook_handler(request: Request):
                                 lang = detect_language(message_body)
                                 _log(f"Detected language: {lang}")
 
+                                # --- PATCH: Opening hours intent routing ---
+                                is_hours_intent, debug_intent = detect_opening_hours_intent(message_body, lang)
+                                if is_hours_intent:
+                                    answer = compute_opening_answer(message_body, lang)
+                                    _log(f"Using deterministic opening hours function. Answer: {answer!r}")
+                                    citations = []
+                                    debug_info = {"source": "deterministic_opening_hours", "intent_debug": debug_intent}
+                                    await _send_whatsapp_message(from_number, answer)
+                                    return {"status": "ok", "message": "Sent deterministic opening hours answer"}
+
                                 try:
                                     history = get_recent_history(from_number, limit=6)
                                     _log(f"Fetched {len(history)} prior messages for session_id={from_number}")
@@ -447,7 +390,6 @@ async def whatsapp_webhook_handler(request: Request):
 
                                 history_context = build_context_string(history, new_message=message_body, user_role="user", bot_role="bot", include_new=True)
 
-                                # --- Reformulate query for follow-up/elliptical messages ---
                                 rag_query = message_body
                                 if is_followup_message(message_body):
                                     try:
@@ -469,12 +411,9 @@ async def whatsapp_webhook_handler(request: Request):
                                     _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
                                     raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
 
-                                # === GUARDRAIL: Silence any answer with no citations or only apologies/noinfo ===
                                 if not citations or contains_apology_or_noinfo(answer):
                                     _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
                                     answer = ""
-
-                                # Additional guardrail: For tuition/fee queries, require a fee amount in answer
                                 if ("tuition" in rag_query.lower() or "fee" in rag_query.lower() or "price" in rag_query.lower() or "cost" in rag_query.lower()) and not likely_contains_fee(answer):
                                     _log("Answer does not contain a fee amount for a tuition/fee query, silencing.")
                                     answer = ""
@@ -541,7 +480,6 @@ async def whatsapp_webhook_handler(request: Request):
                             return {"status": "ignored", "reason": "no messages or contacts"}
         _log("INFO: Webhook payload not a recognized message event.")
         return {"status": "ignored", "reason": "unrecognized payload structure"}
-
     except Exception as e:
         _log(f"ERROR: Failed to process WhatsApp webhook payload: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to process webhook: {e}")
