@@ -319,6 +319,11 @@ def chat(req: ChatRequest, request: Request):
     if debug_info:
         _log(f"LLM debug_info: {json.dumps(debug_info, indent=2)}")
 
+    # === GUARDRAIL: Silence any answer with no citations! ===
+    if not citations:
+        _log("No citations found for answer. Silencing output.")
+        answer = ""
+
     if use_history:
         try:
             now = time.time()
@@ -425,6 +430,11 @@ async def whatsapp_webhook_handler(request: Request):
                                 except Exception as e:
                                     _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
                                     raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
+
+                                # === GUARDRAIL: Silence any answer with no citations! ===
+                                if not citations:
+                                    _log("No citations found for answer. Silencing output.")
+                                    answer = ""
 
                                 try:
                                     now = time.time()
