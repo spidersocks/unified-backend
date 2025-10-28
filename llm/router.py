@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 from llm.bedrock_kb_client import chat_with_kb
 from llm.config import SETTINGS
-from llm.lang import detect_language, remember_session_language, get_session_language
+from llm.lang import detect_language
 from llm import tags_index
 from llm.chat_history import save_message, get_recent_history, prune_history, build_context_string
 import httpx
@@ -189,15 +189,9 @@ def chat(req: ChatRequest, request: Request):
     _log(f"Headers: {dict(request.headers)}")
     session_id = req.session_id or ("web:" + str(hash(request.client.host)))  # fallback to web session
     lang = req.language
-    if not lang and req.session_id:
-        lang = get_session_language(req.session_id)
-        _log(f"Used session_id={req.session_id} to get session language: {lang!r}")
     if not lang:
         lang = detect_language(req.message, accept_language=request.headers.get("accept-language"))
         _log(f"Detected language: {lang!r}")
-    if req.session_id and lang:
-        remember_session_language(req.session_id, lang)
-        _log(f"Remembered session language: session_id={req.session_id}, lang={lang}")
 
     use_history = (req.session_id is not None and not req.session_id.startswith("web:"))
 
@@ -223,7 +217,6 @@ def chat(req: ChatRequest, request: Request):
             lang,
             session_id,
             debug=bool(req.debug)
-            # extra_context is not used
         )
     except Exception as e:
         _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
@@ -259,7 +252,6 @@ def chat(req: ChatRequest, request: Request):
 
     silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
     is_followup = is_followup_message(req.message)
-    # Remove "[Sorry, no detailed answer found.]" fallback, just leave blank if nothing.
     if not answer and silent_reason == "no_citations" and is_followup and history:
         _log("Allowing context-only answer for followup message due to chat history, but LLM did not produce anything.")
         answer = ""  # Do not send any placeholder/apology.
@@ -323,10 +315,7 @@ async def whatsapp_webhook_handler(request: Request):
 
                                 lang = detect_language(message_body)
                                 _log(f"Detected language: {lang}")
-                                remember_session_language(from_number, lang)
-                                _log(f"Remembered session language for {from_number}: {lang}")
 
-                                # Get last 3 pairs for context
                                 try:
                                     history = get_recent_history(from_number, limit=6)
                                     _log(f"Fetched {len(history)} prior messages for session_id={from_number}")
@@ -336,7 +325,6 @@ async def whatsapp_webhook_handler(request: Request):
 
                                 history_context = build_context_string(history, new_message=message_body, user_role="user", bot_role="bot", include_new=True)
 
-                                # LLM call (pass full context as query)
                                 _log(f"Calling chat_with_kb with input_text length={len(history_context)}")
                                 try:
                                     answer, citations, debug_info = chat_with_kb(
