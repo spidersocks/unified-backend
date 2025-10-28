@@ -214,8 +214,8 @@ def chat_with_kb(
             }
         },
     }
-    if session_id:
-        req["sessionId"] = session_id
+    # if session_id:
+    #     req["sessionId"] = session_id
 
     try:
         resp = rag.retrieve_and_generate(**req)
