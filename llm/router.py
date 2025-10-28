@@ -88,70 +88,25 @@ def _answer_is_short(answer: str, max_words: int = 40) -> bool:
     words = (answer or "").split()
     return len(words) <= max_words
 
-# ========== WhatsApp Helper: Send Message ==========
-async def _send_whatsapp_message(to: str, message_body: str):
-    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
-        print("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send message.")
-        return
-
-    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
-    headers = {
-        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": {
-            "body": message_body
-        }
-    }
-
-    print(f"[WA] Sending WhatsApp message to: {to} | Body: {message_body}")
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            print(f"[WA] SUCCESS: WhatsApp message sent to {to}. Response: {response.json()}")
-        except httpx.HTTPStatusError as e:
-            print(f"[WA] ERROR: Failed to send WhatsApp message to {to}. Status: {e.response.status_code}, Detail: {e.response.text}")
-        except httpx.RequestError as e:
-            print(f"[WA] ERROR: An error occurred while requesting to send WhatsApp message to {to}: {e}")
-        except Exception as e:
-            print(f"[WA] ERROR: Unexpected error in _send_whatsapp_message: {e}")
-
-async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "document.pdf"):
-    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
-        print("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send document.")
-        return
-
-    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
-    headers = {
-        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "document",
-        "document": {
-            "link": doc_url,
-            "filename": filename
-        }
-    }
-    print(f"[WA] Sending WhatsApp document to: {to} | Document URL: {doc_url}")
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            print(f"[WA] SUCCESS: WhatsApp document sent to {to}. Response: {response.json()}")
-        except httpx.HTTPStatusError as e:
-            print(f"[WA] ERROR: Failed to send WhatsApp document to {to}. Status: {e.response.status_code}, Detail: {e.response.text}")
-        except httpx.RequestError as e:
-            print(f"[WA] ERROR: An error occurred while requesting to send WhatsApp document to {to}: {e}")
-        except Exception as e:
-            print(f"[WA] ERROR: Unexpected error in _send_whatsapp_document: {e}")
+def is_followup_message(msg: str) -> bool:
+    """
+    Returns True if the message is a context-dependent follow-up that should allow context-only LLM answers.
+    """
+    if not msg:
+        return False
+    msg_lc = msg.strip().lower()
+    followups = [
+        "tell me more", "like what", "which ones", "go on", "what else",
+        "can you elaborate", "can you explain", "for example", "例如", "舉個例",
+        "可以再說說", "举个例", "还有呢", "继续", "more?", "再多一些", "再讲讲", "再說說", "?"
+    ]
+    if len(msg_lc.split()) <= 8 or len(msg_lc) <= 35:
+        for phrase in followups:
+            if phrase in msg_lc:
+                return True
+    if len(msg_lc.split()) <= 2 and msg_lc.endswith("?"):
+        return True
+    return False
 
 class ChatRequest(BaseModel):
     message: str
@@ -245,6 +200,15 @@ def chat(req: ChatRequest, request: Request):
         _answer_has_strong_phrase(answer, lang, BLOOKET_STRONG_PHRASES) and
         _answer_is_short(answer)
     )
+
+    # === Follow-up silencing override ===
+    silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
+    is_followup = is_followup_message(req.message)
+    if not answer and silent_reason == "no_citations" and is_followup and history:
+        _log("Allowing context-only answer for followup message due to chat history.")
+        # Use LLM's answer if available, or fallback
+        answer = debug_info.get("raw_llm_answer", "") or "[Sorry, no detailed answer found.]"
+
     if send_form:
         answer = (answer or "") + f"\n\nYou can download our enrollment form [here]({ENROLLMENT_FORM_URL})."
         _log("Enrollment form marker/trigger detected: added PDF link to response.")
@@ -252,7 +216,6 @@ def chat(req: ChatRequest, request: Request):
         answer = (answer or "") + f"\n\nYou can download the Blooket instructions [here]({BLOOKET_PDF_URL})."
         _log("Blooket marker/trigger detected: added Blooket PDF link to response.")
 
-    silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
     if not answer and silent_reason:
         _log(f"LLM silenced answer. Reason: {silent_reason}")
 
@@ -260,6 +223,7 @@ def chat(req: ChatRequest, request: Request):
     _log(f"Final answer length={len(answer)}. Returning response.")
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
 
+# ... WhatsApp webhook unchanged, but you can apply the same followup logic there if needed ...
 @router.get("/whatsapp_webhook")
 async def whatsapp_webhook_verification(request: Request):
     mode = request.query_params.get("hub.mode")
