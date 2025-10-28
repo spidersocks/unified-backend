@@ -199,7 +199,8 @@ def is_general_hours_query(message: str, lang: str) -> bool:
     # If it contains any explicit date/weekday/relative marker, it's not general
     if _extract_day_of_month(m) is not None:
         return False
-    def _extract_full_chinese_date(msg: str) -> Optional[Tuple[int, int]]:
+        
+def _extract_full_chinese_date(msg: str) -> Optional[Tuple[int, int]]:
     """
     Extracts (month, day) from patterns like '12月25號', '12月25日'
     """
