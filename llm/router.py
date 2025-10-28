@@ -20,16 +20,15 @@ def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop
     from llm.config import SETTINGS
     bedrock = boto3.client("bedrock-runtime", region_name=SETTINGS.aws_region)
     model_arn = SETTINGS.kb_model_arn
-    gen_config = {
-        "maxTokens": max_tokens,
+
+    body = {
+        "prompt": prompt,
+        "max_gen_len": max_tokens,
         "temperature": temperature,
     }
     if stop:
-        gen_config["stopSequences"] = stop
-    body = {
-        "prompt": prompt,
-        "generationConfig": gen_config,
-    }
+        body["stop_sequences"] = stop
+
     resp = bedrock.invoke_model(
         modelId=model_arn,
         contentType="application/json",
@@ -39,6 +38,7 @@ def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop
     result = resp["body"].read().decode("utf-8")
     try:
         out = json.loads(result)
+        # Try all possible keys for the result, just like your RAG code
         return out.get("generation", "").strip() or out.get("output", "").strip() or out.get("text", "").strip()
     except Exception:
         return result.strip()
