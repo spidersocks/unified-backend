@@ -25,15 +25,21 @@ import boto3
 TRAD_ONLY = set("學體車國廣馬門風愛聽話醫龍書氣媽齡費號聯網臺灣灣課師資簡介聯絡資料")
 SIMP_ONLY = set("学体车国广马门风爱听话医龙书气妈龄费号联网台湾湾课师资简介联络资料")
 
-# Minimal in-memory session stickiness
-_SESSION_LANG: dict[str, Tuple[str, float]] = {}
-_SESSION_TTL_SECS = int(os.environ.get("LANG_SESSION_TTL_SECS", "3600"))
-
-def _now() -> float:
-    return time.time()
-
+# --- Robust CJK detection with expanded ranges
 def _contains_cjk(s: str) -> bool:
-    return any("\u4e00" <= ch <= "\u9fff" for ch in s or "")
+    # Includes CJK Unified, Extension A, Symbols/Punctuation
+    return any(
+        ("\u4e00" <= ch <= "\u9fff") or
+        ("\u3400" <= ch <= "\u4DBF") or
+        ("\u20000" <= ch <= "\u2A6DF") or
+        ("\u3000" <= ch <= "\u303F")
+        for ch in s or ""
+    )
+
+# --- Known Chinese greetings and short markers
+CHINESE_GREETINGS = {
+    "你好", "您好", "嗨", "哈囉", "哈啰", "早安", "晚安", "早上好", "您好呀"
+}
 
 def _normalize_lang_tag(tag: Optional[str]) -> Optional[str]:
     if not tag:
@@ -144,46 +150,30 @@ def _detect_with_cld3(text: str) -> Optional[str]:
 def detect_language(message: str, accept_language: Optional[str] = None) -> str:
     """
     Returns one of: 'en' | 'zh-HK' | 'zh-CN'
-    New priority:
-      1) Strong content signal: if message contains CJK, pick zh-HK vs zh-CN from the text.
-      2) AWS Comprehend (optional) or CLD3 if installed.
-      3) Accept-Language header as a hint (used only when content is ambiguous).
-      4) Default to English.
+    Priority:
+      1) If the message is a known Chinese greeting or contains any CJK, treat as Chinese. For CJK, pick zh-HK vs zh-CN from the script.
+      2) If mixed CJK and Latin, prefer Chinese.
+      3) ML detectors (Comprehend/CLD3) if available.
+      4) Accept-Language header as a hint (only if content is ambiguous).
+      5) Default to English.
     """
-    msg = message or ""
-    # 1) Text content takes precedence
+    msg = (message or "").strip()
+    # 1) Exact Chinese greeting
+    if msg in CHINESE_GREETINGS:
+        return "zh-HK"
+    # 2) Any CJK presence: treat as Chinese (even if mixed or short)
     if _contains_cjk(msg):
         return _decide_zh_variant(msg)
-
-    # 2) ML detectors if available
+    # 3) ML detectors if available
     v = _detect_with_comprehend(msg)
     if v in ("en", "zh-HK", "zh-CN"):
         return v
     v = _detect_with_cld3(msg)
     if v in ("en", "zh-HK", "zh-CN"):
         return v
-
-    # 3) Only now consider Accept-Language
+    # 4) Accept-Language header as a hint
     hinted = _parse_accept_language(accept_language)
     if hinted in ("en", "zh-HK", "zh-CN"):
         return hinted
-
-    # 4) Default
+    # 5) Default
     return "en"
-
-def remember_session_language(session_id: Optional[str], lang: str):
-    if not session_id or not lang:
-        return
-    _SESSION_LANG[session_id] = (lang, _now())
-
-def get_session_language(session_id: Optional[str]) -> Optional[str]:
-    if not session_id:
-        return None
-    entry = _SESSION_LANG.get(session_id)
-    if not entry:
-        return None
-    lang, ts = entry
-    if _now() - ts > _SESSION_TTL_SECS:
-        _SESSION_LANG.pop(session_id, None)
-        return None
-    return lang
