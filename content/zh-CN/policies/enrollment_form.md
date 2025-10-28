@@ -7,8 +7,16 @@ aliases: 入学表格; 报名表格; 报名; 报名表; 申请表; 申请表格;
 ---
 # 入学表格
 
-如需报名 Little Scholars，请填写我们的入学表格。
+**重要：如家长索取入学表格，请务必在答案末尾另起一行加上此标记：**
+```
+[SEND_ENROLLMENT_FORM]
+```
 
-如家长索取入学表格，请务必在答案末尾加上此标记：[SEND_ENROLLMENT_FORM]
+例子：  
+问：可以发我入学表格吗？  
+答：如需报名 Little Scholars，请填写我们的入学表格。  
+```
+[SEND_ENROLLMENT_FORM]
+```
 
 填写后，请将表格通过电子邮件发送至 info@decoders-ls.com 或通过 WhatsApp 提交给本中心工作人员。
