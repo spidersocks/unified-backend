@@ -13,6 +13,70 @@ import time
 import sys
 import traceback
 
+async def _send_whatsapp_message(to: str, message_body: str):
+    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
+        _log("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send message.")
+        return
+
+    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "text",
+        "text": {
+            "body": message_body
+        }
+    }
+
+    _log(f"[WA] Sending WhatsApp message to: {to} | Body: {message_body}")
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            _log(f"[WA] SUCCESS: WhatsApp message sent to {to}. Response: {response.json()}")
+        except httpx.HTTPStatusError as e:
+            _log(f"[WA] ERROR: Failed to send WhatsApp message to {to}. Status: {e.response.status_code}, Detail: {e.response.text}")
+        except httpx.RequestError as e:
+            _log(f"[WA] ERROR: An error occurred while requesting to send WhatsApp message to {to}: {e}")
+        except Exception as e:
+            _log(f"[WA] ERROR: Unexpected error in _send_whatsapp_message: {e}")
+
+async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "document.pdf"):
+    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
+        _log("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send document.")
+        return
+
+    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "document",
+        "document": {
+            "link": doc_url,
+            "filename": filename
+        }
+    }
+    _log(f"[WA] Sending WhatsApp document to: {to} | Document URL: {doc_url}")
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            _log(f"[WA] SUCCESS: WhatsApp document sent to {to}. Response: {response.json()}")
+        except httpx.HTTPStatusError as e:
+            _log(f"[WA] ERROR: Failed to send WhatsApp document to {to}. Status: {e.response.status_code}, Detail: {e.response.text}")
+        except httpx.RequestError as e:
+            _log(f"[WA] ERROR: An error occurred while requesting to send WhatsApp document to {to}: {e}")
+        except Exception as e:
+            _log(f"[WA] ERROR: Unexpected error in _send_whatsapp_document: {e}")
+
 def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop: list = None) -> str:
     import boto3
     import json
