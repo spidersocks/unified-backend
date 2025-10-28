@@ -206,7 +206,7 @@ def chat_with_kb(
     t0 = time.time()
 
     # Use raw user question for retrieval embedding
-     input_text = _prompt_prefix(L) + (extra_context + "\n" if extra_context else "") + (message or "")
+    input_text = _prompt_prefix(L) + (extra_context + "\n" if extra_context else "") + (message or "")
 
     # Optional guardrails (kept for generation stage only)
     prefix = _prompt_prefix(L)
