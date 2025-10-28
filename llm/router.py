@@ -13,6 +13,65 @@ import time
 import sys
 import traceback
 
+# You may want to move this to llm/llama_client.py in production.
+def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop: list = None) -> str:
+    """
+    Calls Bedrock Llama 70B instruct with a prompt and returns the output.
+    """
+    import boto3
+    import json
+    from llm.config import SETTINGS
+    bedrock = boto3.client("bedrock-runtime", region_name=SETTINGS.aws_region)
+    model_arn = SETTINGS.kb_model_arn
+    body = {
+        "prompt": prompt,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if stop:
+        body["stop"] = stop
+    resp = bedrock.invoke_model(
+        modelId=model_arn,
+        contentType="application/json",
+        accept="application/json",
+        body=json.dumps(body)
+    )
+    result = resp["body"].read().decode("utf-8")
+    try:
+        out = json.loads(result)
+        return out.get("generation", "").strip() or out.get("output", "").strip() or out.get("text", "").strip()
+    except Exception:
+        return result.strip()
+
+def call_llm_rephrase(history_context: str, lang: str) -> str:
+    """
+    Calls your Llama 70B instruct model to rewrite the latest user message as a self-contained query.
+    Returns the rewritten query as a string.
+    """
+    prompts = {
+        "en": (
+            "Given the following conversation, rewrite the user's latest message as a self-contained, explicit question for the bot. "
+            "If the last message is already explicit, return it unchanged.\n"
+            "Conversation so far:\n"
+            f"{history_context}\n"
+            "Rewritten latest user message:"
+        ),
+        "zh-HK": (
+            "請根據下列對話，把家長的最後一句重寫成完整、明確的自足問題（如「請問英語語文課學費是多少？」）。如果已經是完整問題，則原文返回。\n"
+            "對話如下：\n"
+            f"{history_context}\n"
+            "重寫後的家長問題："
+        ),
+        "zh-CN": (
+            "请根据下列对话，把家长的最后一句重写成完整、明确的自足问题（如“请问英语语言艺术课学费是多少？”）。如果已经是完整问题，则原文返回。\n"
+            "对话如下：\n"
+            f"{history_context}\n"
+            "重写后的家长问题："
+        ),
+    }
+    prompt = prompts.get(lang, prompts["en"])
+    return call_llama(prompt, max_tokens=60, temperature=0.0).strip()
+
 def _log(msg):
     print(f"[LLM ROUTER] {msg}", file=sys.stderr, flush=True)
 
@@ -209,11 +268,21 @@ def chat(req: ChatRequest, request: Request):
     # Build context string for LLM
     history_context = build_context_string(history, new_message=req.message, user_role="user", bot_role="bot", include_new=True)
 
-    # === Call the LLM (ALWAYS pass full chat context as the query itself) ===
-    _log(f"Calling chat_with_kb with input_text length={len(history_context)}")
+    # --- Reformulate query for follow-up/elliptical messages ---
+    rag_query = req.message
+    if is_followup_message(req.message):
+        try:
+            rag_query = call_llm_rephrase(history_context, lang)
+            _log(f"Reformulated query: {rag_query!r}")
+        except Exception as e:
+            _log(f"Failed to reformulate query, falling back to user message. Error: {e}")
+            rag_query = req.message
+
+    # === Call the LLM/RAG ===
+    _log(f"Calling chat_with_kb with rag_query length={len(rag_query)}")
     try:
         answer, citations, debug_info = chat_with_kb(
-            history_context,  # Pass context as the actual query!
+            rag_query,
             lang,
             session_id,
             debug=bool(req.debug)
@@ -270,19 +339,6 @@ def chat(req: ChatRequest, request: Request):
     _log(f"Final answer length={len(answer)}. Returning response.")
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
 
-@router.get("/whatsapp_webhook")
-async def whatsapp_webhook_verification(request: Request):
-    mode = request.query_params.get("hub.mode")
-    token = request.query_params.get("hub.verify_token")
-    challenge = request.query_params.get("hub.challenge")
-    token_preview = token[:5] + "..." if token else "None"
-    print(f"[WA] Webhook Verification Request: Mode={mode}, Token={token_preview}, Challenge={challenge}")
-    if mode == "subscribe" and token == SETTINGS.whatsapp_verify_token:
-        print("[WA] Webhook verification successful!")
-        return Response(content=challenge, media_type="text/plain", status_code=200)
-    else:
-        print(f"[WA] Webhook verification FAILED. Token mismatch or invalid mode. Expected: {SETTINGS.whatsapp_verify_token}")
-        raise HTTPException(status_code=403, detail="Verification token mismatch or invalid mode")
 
 @router.post("/whatsapp_webhook")
 async def whatsapp_webhook_handler(request: Request):
@@ -325,10 +381,20 @@ async def whatsapp_webhook_handler(request: Request):
 
                                 history_context = build_context_string(history, new_message=message_body, user_role="user", bot_role="bot", include_new=True)
 
-                                _log(f"Calling chat_with_kb with input_text length={len(history_context)}")
+                                # --- Reformulate query for follow-up/elliptical messages ---
+                                rag_query = message_body
+                                if is_followup_message(message_body):
+                                    try:
+                                        rag_query = call_llm_rephrase(history_context, lang)
+                                        _log(f"Reformulated query: {rag_query!r}")
+                                    except Exception as e:
+                                        _log(f"Failed to reformulate query, falling back to user message. Error: {e}")
+                                        rag_query = message_body
+
+                                _log(f"Calling chat_with_kb with rag_query length={len(rag_query)}")
                                 try:
                                     answer, citations, debug_info = chat_with_kb(
-                                        history_context,
+                                        rag_query,
                                         lang,
                                         session_id=from_number,
                                         debug=True
