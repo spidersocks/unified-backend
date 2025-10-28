@@ -5,7 +5,7 @@ from llm.bedrock_kb_client import chat_with_kb
 from llm.config import SETTINGS
 from llm.lang import detect_language, remember_session_language, get_session_language
 from llm import tags_index
-from llm.chat_history import save_message, get_recent_history, prune_history
+from llm.chat_history import save_message, get_recent_history, prune_history, build_context_string
 import httpx
 import json
 import re
@@ -199,10 +199,8 @@ def chat(req: ChatRequest, request: Request):
         remember_session_language(req.session_id, lang)
         _log(f"Remembered session language: session_id={req.session_id}, lang={lang}")
 
-    # Only use DynamoDB history for WhatsApp/real sessions (not web/test)
     use_history = (req.session_id is not None and not req.session_id.startswith("web:"))
 
-    # === Retrieve chat history (if enabled) ===
     if use_history:
         try:
             history = get_recent_history(session_id, limit=6)
@@ -214,22 +212,18 @@ def chat(req: ChatRequest, request: Request):
         history = []
         _log("Skipping DynamoDB chat history for this session/request.")
 
-    context_lines = []
-    for msg in history:
-        prefix = "Parent:" if msg["role"] == "user" else "Bot:"
-        context_lines.append(f"{prefix} {msg['message']}")
-    context_lines.append(f"Parent: {req.message}")
-    history_context = "\n".join(context_lines)
+    # Build context string for LLM
+    history_context = build_context_string(history, new_message=req.message, user_role="user", bot_role="bot", include_new=True)
 
-    # === Call the LLM ===
-    _log(f"Calling chat_with_kb with extra_context length={len(history_context)}")
+    # === Call the LLM (ALWAYS pass full chat context as the query itself) ===
+    _log(f"Calling chat_with_kb with input_text length={len(history_context)}")
     try:
         answer, citations, debug_info = chat_with_kb(
-            req.message,
+            history_context,  # Pass context as the actual query!
             lang,
             session_id,
-            debug=bool(req.debug),
-            extra_context=history_context
+            debug=bool(req.debug)
+            # extra_context is not used
         )
     except Exception as e:
         _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
@@ -240,7 +234,6 @@ def chat(req: ChatRequest, request: Request):
     if debug_info:
         _log(f"LLM debug_info: {json.dumps(debug_info, indent=2)}")
 
-    # === Store chat history (if enabled) ===
     if use_history:
         try:
             now = time.time()
@@ -251,7 +244,6 @@ def chat(req: ChatRequest, request: Request):
         except Exception as e:
             _log(f"ERROR saving/pruning DynamoDB history: {e}\n{traceback.format_exc()}")
 
-    # === PDF triggers and final formatting (as before) ===
     answer, marker = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
     send_form = marker or (
         _any_doc_cited(citations, ENROLLMENT_FORM_DOCS) and
@@ -265,12 +257,12 @@ def chat(req: ChatRequest, request: Request):
         _answer_is_short(answer)
     )
 
-    # === Follow-up silencing override ===
     silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
     is_followup = is_followup_message(req.message)
+    # Remove "[Sorry, no detailed answer found.]" fallback, just leave blank if nothing.
     if not answer and silent_reason == "no_citations" and is_followup and history:
-        _log("Allowing context-only answer for followup message due to chat history.")
-        answer = debug_info.get("raw_llm_answer", "") or "[Sorry, no detailed answer found.]"
+        _log("Allowing context-only answer for followup message due to chat history, but LLM did not produce anything.")
+        answer = ""  # Do not send any placeholder/apology.
 
     if send_form:
         answer = (answer or "") + f"\n\nYou can download our enrollment form [here]({ENROLLMENT_FORM_URL})."
@@ -342,28 +334,21 @@ async def whatsapp_webhook_handler(request: Request):
                                     _log(f"ERROR retrieving DynamoDB history: {e}\n{traceback.format_exc()}")
                                     history = []
 
-                                context_lines = []
-                                for msg in history:
-                                    prefix = "Parent:" if msg["role"] == "user" else "Bot:"
-                                    context_lines.append(f"{prefix} {msg['message']}")
-                                context_lines.append(f"Parent: {message_body}")
-                                history_context = "\n".join(context_lines)
+                                history_context = build_context_string(history, new_message=message_body, user_role="user", bot_role="bot", include_new=True)
 
-                                # LLM call
-                                _log(f"Calling chat_with_kb with extra_context length={len(history_context)}")
+                                # LLM call (pass full context as query)
+                                _log(f"Calling chat_with_kb with input_text length={len(history_context)}")
                                 try:
                                     answer, citations, debug_info = chat_with_kb(
-                                        message_body,
+                                        history_context,
                                         lang,
                                         session_id=from_number,
-                                        debug=True,
-                                        extra_context=history_context
+                                        debug=True
                                     )
                                 except Exception as e:
                                     _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
                                     raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
 
-                                # Save new user and bot messages, prune to last 6
                                 try:
                                     now = time.time()
                                     save_message(from_number, "user", message_body, lang, now)
@@ -380,12 +365,11 @@ async def whatsapp_webhook_handler(request: Request):
                                 silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
                                 is_followup = is_followup_message(message_body)
                                 if not answer and silent_reason == "no_citations" and is_followup and history:
-                                    _log("Allowing context-only answer for followup message due to chat history.")
-                                    answer = debug_info.get("raw_llm_answer", "") or "[Sorry, no detailed answer found.]"
+                                    _log("Allowing context-only answer for followup message due to chat history, but LLM did not produce anything.")
+                                    answer = ""  # Do not send any placeholder/apology.
                                 if not answer and silent_reason:
                                     _log(f"LLM silenced answer. Reason: {silent_reason}")
 
-                                # Enrollment form: marker or (citation + strong phrase + short)
                                 answer, marker = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
                                 send_form = marker or (
                                     _any_doc_cited(citations, ENROLLMENT_FORM_DOCS)
@@ -393,7 +377,6 @@ async def whatsapp_webhook_handler(request: Request):
                                     and _answer_is_short(answer)
                                 )
 
-                                # Blooket: marker or (citation + strong phrase + short)
                                 answer, marker_blooket = extract_and_strip_marker(answer, BLOOKET_MARKER)
                                 send_blooket = marker_blooket or (
                                     _any_doc_cited(citations, BLOOKET_DOCS)
