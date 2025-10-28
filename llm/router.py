@@ -145,7 +145,7 @@ async def whatsapp_webhook_handler(request: Request):
                                 answer, citations, debug_info = chat_with_kb(
                                     message_body,
                                     lang,
-                                    session_id=from_number,
+                                    session_id=None,
                                     debug=True  # Always debug for WA for now
                                 )
                                 print(f"[WA] LLM raw answer: {answer!r}")
