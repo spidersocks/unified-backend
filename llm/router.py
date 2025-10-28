@@ -13,7 +13,6 @@ import time
 import sys
 import traceback
 
-# You may want to move this to llm/llama_client.py in production.
 def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop: list = None) -> str:
     import boto3
     import json
@@ -38,7 +37,6 @@ def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop
     result = resp["body"].read().decode("utf-8")
     try:
         out = json.loads(result)
-        # Try all possible keys for the result, just like your RAG code
         return out.get("generation", "").strip() or out.get("output", "").strip() or out.get("text", "").strip()
     except Exception:
         return result.strip()
@@ -48,22 +46,26 @@ def call_llm_rephrase(history_context: str, lang: str) -> str:
     Calls your Llama 70B instruct model to rewrite the latest user message as a self-contained query.
     Returns the rewritten query as a string.
     """
+    # The following prompt gives *explicit* instructions to stay silent if unsure or insufficient info.
     prompts = {
         "en": (
             "Given the following conversation, rewrite the user's latest message as a self-contained, explicit question for the bot. "
             "If the last message is already explicit, return it unchanged.\n"
+            "IMPORTANT: If you are unsure, if the question is ambiguous, or if you cannot confidently reformulate, DO NOT GUESS. Reply with [NO_CONTEXT] and do not send an answer.\n"
             "Conversation so far:\n"
             f"{history_context}\n"
             "Rewritten latest user message:"
         ),
         "zh-HK": (
             "請根據下列對話，把家長的最後一句重寫成完整、明確的自足問題（如「請問英語語文課學費是多少？」）。如果已經是完整問題，則原文返回。\n"
+            "重要：如果你不能明確判斷問題內容、覺得資訊不足或不確定，請直接回覆[NO_CONTEXT]，不要嘗試猜測。\n"
             "對話如下：\n"
             f"{history_context}\n"
             "重寫後的家長問題："
         ),
         "zh-CN": (
             "请根据下列对话，把家长的最后一句重写成完整、明确的自足问题（如“请问英语语言艺术课学费是多少？”）。如果已经是完整问题，则原文返回。\n"
+            "重要：如果你不能明确判断问题内容、觉得信息不足或不确定，请直接回复[NO_CONTEXT]，不要尝试猜测。\n"
             "对话如下：\n"
             f"{history_context}\n"
             "重写后的家长问题："
@@ -190,69 +192,36 @@ def is_followup_message(msg: str) -> bool:
 
     return False
 
-async def _send_whatsapp_message(to: str, message_body: str):
-    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
-        _log("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send message.")
-        return
+# --- GUARDRAIL: Block answers that apologize, hedge, or refer to contacting staff if info is missing --- #
+NOINFO_PHRASES = [
+    "not explicitly stated",
+    "not specified",
+    "not mentioned",
+    "no information",
+    "not provided",
+    "no details",
+    "not found",
+    "please contact",
+    "refer to tuition listing",
+    "contact our staff",
+    "contact us",
+    "up-to-date fees",
+    "available time slots",
+    "no answer available",
+    "unable to find",
+    "unable to provide",
+    "no details available",
+    "please refer to",
+]
 
-    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
-    headers = {
-        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": {
-            "body": message_body
-        }
-    }
+def contains_apology_or_noinfo(answer: str) -> bool:
+    a = (answer or "").lower()
+    return any(p in a for p in NOINFO_PHRASES)
 
-    _log(f"[WA] Sending WhatsApp message to: {to} | Body: {message_body}")
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            _log(f"[WA] SUCCESS: WhatsApp message sent to {to}. Response: {response.json()}")
-        except httpx.HTTPStatusError as e:
-            _log(f"[WA] ERROR: Failed to send WhatsApp message to {to}. Status: {e.response.status_code}, Detail: {e.response.text}")
-        except httpx.RequestError as e:
-            _log(f"[WA] ERROR: An error occurred while requesting to send WhatsApp message to {to}: {e}")
-        except Exception as e:
-            _log(f"[WA] ERROR: Unexpected error in _send_whatsapp_message: {e}")
 
-async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "document.pdf"):
-    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
-        _log("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send document.")
-        return
-
-    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
-    headers = {
-        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "document",
-        "document": {
-            "link": doc_url,
-            "filename": filename
-        }
-    }
-    _log(f"[WA] Sending WhatsApp document to: {to} | Document URL: {doc_url}")
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            _log(f"[WA] SUCCESS: WhatsApp document sent to {to}. Response: {response.json()}")
-        except httpx.HTTPStatusError as e:
-            _log(f"[WA] ERROR: Failed to send WhatsApp document to {to}. Status: {e.response.status_code}, Detail: {e.response.text}")
-        except httpx.RequestError as e:
-            _log(f"[WA] ERROR: An error occurred while requesting to send WhatsApp document to {to}: {e}")
-        except Exception as e:
-            _log(f"[WA] ERROR: Unexpected error in _send_whatsapp_document: {e}")
+def likely_contains_fee(answer: str) -> bool:
+    # Looks for a $ or HK$ followed by a number
+    return bool(re.search(r"(hk\$|\$)\s*\d+", answer, re.I))
 
 class ChatRequest(BaseModel):
     message: str
@@ -319,9 +288,14 @@ def chat(req: ChatRequest, request: Request):
     if debug_info:
         _log(f"LLM debug_info: {json.dumps(debug_info, indent=2)}")
 
-    # === GUARDRAIL: Silence any answer with no citations! ===
-    if not citations:
-        _log("No citations found for answer. Silencing output.")
+    # === GUARDRAIL: Silence any answer with no citations or only apologies/noinfo ===
+    if not citations or contains_apology_or_noinfo(answer):
+        _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
+        answer = ""
+
+    # Additional guardrail: For tuition/fee queries, require a fee amount in answer
+    if ("tuition" in rag_query.lower() or "fee" in rag_query.lower() or "price" in rag_query.lower() or "cost" in rag_query.lower()) and not likely_contains_fee(answer):
+        _log("Answer does not contain a fee amount for a tuition/fee query, silencing.")
         answer = ""
 
     if use_history:
@@ -367,7 +341,7 @@ def chat(req: ChatRequest, request: Request):
     _log(f"Final answer length={len(answer)}. Returning response.")
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
 
-
+# WhatsApp handler uses the same guardrails as above.
 @router.post("/whatsapp_webhook")
 async def whatsapp_webhook_handler(request: Request):
     try:
@@ -431,9 +405,14 @@ async def whatsapp_webhook_handler(request: Request):
                                     _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
                                     raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
 
-                                # === GUARDRAIL: Silence any answer with no citations! ===
-                                if not citations:
-                                    _log("No citations found for answer. Silencing output.")
+                                # === GUARDRAIL: Silence any answer with no citations or only apologies/noinfo ===
+                                if not citations or contains_apology_or_noinfo(answer):
+                                    _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
+                                    answer = ""
+
+                                # Additional guardrail: For tuition/fee queries, require a fee amount in answer
+                                if ("tuition" in rag_query.lower() or "fee" in rag_query.lower() or "price" in rag_query.lower() or "cost" in rag_query.lower()) and not likely_contains_fee(answer):
+                                    _log("Answer does not contain a fee amount for a tuition/fee query, silencing.")
                                     answer = ""
 
                                 try:
