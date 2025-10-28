@@ -7,8 +7,12 @@ from llm.lang import detect_language, remember_session_language, get_session_lan
 from llm import tags_index
 import httpx
 import json
+import re
 
 router = APIRouter(tags=["LLM Chat (Bedrock KB)"])
+
+ENROLLMENT_FORM_URL = "https://s24.q4cdn.com/216390268/files/doc_downloads/test.pdf"  # <-- Set your form's public URL here
+ENROLLMENT_FORM_MARKER = "[SEND_ENROLLMENT_FORM]"
 
 class ChatRequest(BaseModel):
     message: str
@@ -20,6 +24,14 @@ class ChatResponse(BaseModel):
     answer: str
     citations: List[Dict[str, Any]] = []
     debug: Optional[Dict[str, Any]] = None
+
+def extract_and_strip_marker(answer: str) -> (str, bool):
+    # Detect the marker (case-insensitive, possibly with whitespace)
+    pattern = re.compile(r"\s*\[SEND_ENROLLMENT_FORM\]\s*$", re.IGNORECASE)
+    if answer and pattern.search(answer):
+        answer = pattern.sub("", answer)
+        return answer.rstrip(), True
+    return answer, False
 
 # ========== WhatsApp Helper: Send Message ==========
 async def _send_whatsapp_message(to: str, message_body: str):
@@ -54,6 +66,38 @@ async def _send_whatsapp_message(to: str, message_body: str):
         except Exception as e:
             print(f"[WA] ERROR: Unexpected error in _send_whatsapp_message: {e}")
 
+async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "enrollment_form.pdf"):
+    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
+        print("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send document.")
+        return
+
+    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "document",
+        "document": {
+            "link": doc_url,
+            "filename": filename
+        }
+    }
+    print(f"[WA] Sending WhatsApp document to: {to} | Document URL: {doc_url}")
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            print(f"[WA] SUCCESS: WhatsApp document sent to {to}. Response: {response.json()}")
+        except httpx.HTTPStatusError as e:
+            print(f"[WA] ERROR: Failed to send WhatsApp document to {to}. Status: {e.response.status_code}, Detail: {e.response.text}")
+        except httpx.RequestError as e:
+            print(f"[WA] ERROR: An error occurred while requesting to send WhatsApp document to {to}: {e}")
+        except Exception as e:
+            print(f"[WA] ERROR: Unexpected error in _send_whatsapp_document: {e}")
+
 # ===== /chat endpoint =====
 @router.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest, request: Request):
@@ -81,6 +125,13 @@ def chat(req: ChatRequest, request: Request):
     print(f"[CHAT] LLM citations: {json.dumps(citations, indent=2)}")
     if debug_info:
         print(f"[CHAT] LLM debug_info: {json.dumps(debug_info, indent=2)}")
+
+    # Postprocessing for enrollment form marker
+    answer, send_form = extract_and_strip_marker(answer)
+
+    if send_form:
+        answer = (answer or "") + f"\n\nYou can download our enrollment form [here]({ENROLLMENT_FORM_URL})."
+        print("[CHAT] Enrollment form marker detected: added PDF link to response.")
 
     silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
     if not answer and silent_reason:
@@ -146,7 +197,7 @@ async def whatsapp_webhook_handler(request: Request):
                                     message_body,
                                     lang,
                                     session_id=None,
-                                    debug=True  # Always debug for WA for now
+                                    debug=True
                                 )
                                 print(f"[WA] LLM raw answer: {answer!r}")
                                 print(f"[WA] LLM citations: {json.dumps(citations, indent=2)}")
@@ -156,7 +207,15 @@ async def whatsapp_webhook_handler(request: Request):
                                 if not answer and silent_reason:
                                     print(f"[WA] LLM silenced answer. Reason: {silent_reason}")
 
-                                if answer:
+                                # Postprocessing for enrollment form marker
+                                answer, send_form = extract_and_strip_marker(answer)
+                                if send_form:
+                                    print("[WA] Enrollment form marker detected: sending PDF document.")
+                                    await _send_whatsapp_document(from_number, ENROLLMENT_FORM_URL)
+                                    # Optionally send text if present (e.g., extra instructions)
+                                    if answer:
+                                        await _send_whatsapp_message(from_number, answer)
+                                elif answer:
                                     print(f"[WA] LLM Answer: '{answer}'")
                                     await _send_whatsapp_message(from_number, answer)
                                 else:
