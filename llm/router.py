@@ -160,9 +160,7 @@ async def whatsapp_webhook_handler(request: Request):
                                     print(f"[WA] LLM Answer: '{answer}'")
                                     await _send_whatsapp_message(from_number, answer)
                                 else:
-                                    fallback_message = "Sorry, I couldn't find an answer to that. Please try rephrasing your question or contact our staff."
-                                    print(f"[WA] WARNING: LLM provided no answer. Sending fallback: '{fallback_message}'")
-                                    await _send_whatsapp_message(from_number, fallback_message)
+                                    print(f"[WA] LLM provided no answer. No WhatsApp reply sent.")
                                 return {"status": "ok", "message": "Message processed"}
                             else:
                                 print(f"[WA] INFO: Received non-text message of type '{message_type}' from {from_number}. Ignoring.")
