@@ -15,21 +15,21 @@ import traceback
 
 # You may want to move this to llm/llama_client.py in production.
 def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop: list = None) -> str:
-    """
-    Calls Bedrock Llama 70B instruct with a prompt and returns the output.
-    """
     import boto3
     import json
     from llm.config import SETTINGS
     bedrock = boto3.client("bedrock-runtime", region_name=SETTINGS.aws_region)
     model_arn = SETTINGS.kb_model_arn
-    body = {
-        "prompt": prompt,
-        "max_tokens": max_tokens,
+    gen_config = {
+        "maxTokens": max_tokens,
         "temperature": temperature,
     }
     if stop:
-        body["stop"] = stop
+        gen_config["stopSequences"] = stop
+    body = {
+        "prompt": prompt,
+        "generationConfig": gen_config,
+    }
     resp = bedrock.invoke_model(
         modelId=model_arn,
         contentType="application/json",
