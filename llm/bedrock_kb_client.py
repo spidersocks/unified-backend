@@ -1,334 +1,266 @@
-from fastapi import APIRouter, HTTPException, Request, Query, Response
-from pydantic import BaseModel
-from typing import List, Dict, Optional, Any
-from llm.bedrock_kb_client import chat_with_kb
-from llm.config import SETTINGS
-from llm.lang import detect_language, remember_session_language, get_session_language
-from llm import tags_index
-import httpx
-import json
+"""
+Thin client for Bedrock Knowledge Base RetrieveAndGenerate.
+Optimized for latency: fewer retrieved chunks, smaller max tokens, no unconditional retry.
+"""
+import os
+import time
 import re
+import boto3
+from botocore.config import Config
+from typing import Optional, Tuple, List, Dict, Any
+from llm.config import SETTINGS
 
-router = APIRouter(tags=["LLM Chat (Bedrock KB)"])
+# Configure Bedrock client timeouts + limited retries to reduce tail latency
+_boto_cfg = Config(
+    connect_timeout=SETTINGS.kb_rag_connect_timeout_secs,
+    read_timeout=SETTINGS.kb_rag_read_timeout_secs,
+    retries={"max_attempts": SETTINGS.kb_rag_max_attempts, "mode": "standard"},
+)
+rag = boto3.client("bedrock-agent-runtime", region_name=SETTINGS.aws_region, config=_boto_cfg)
 
-ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"
-ENROLLMENT_FORM_MARKER = "[SEND_ENROLLMENT_FORM]"
-ENROLLMENT_FORM_DOCS = [
-    "/en/policies/enrollment_form.md",
-    "/zh-HK/policies/enrollment_form.md",
-    "/zh-CN/policies/enrollment_form.md",
-]
+NO_CONTEXT_TOKEN = "[NO_CONTEXT]"
 
-BLOOKET_PDF_URL = "https://drive.google.com/uc?export=download&id=18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M"
-BLOOKET_MARKER = "[SEND_BLOOKET_PDF]"
-BLOOKET_DOCS = [
-    "/en/policies/blooket_instructions.md",
-    "/zh-HK/policies/blooket_instructions.md",
-    "/zh-CN/policies/blooket_instructions.md",
-]
-
-# Phrase triggers for form/game (EN, zh-HK, zh-CN)
-ENROLLMENT_STRONG_PHRASES = {
-    "en": [
-        "enrollment form", "registration form", "application form",
-        "please fill out our enrollment form", "download the form", "attached form",
-        "fill in the form", "submit the enrollment form", "send me the form"
-    ],
-    "zh-HK": [
-        "入學表格", "報名表格", "申請表", "下載表格", "填好表格", "發送表格", "填寫入學表格"
-    ],
-    "zh-CN": [
-        "入学表格", "报名表格", "申请表", "下载表格", "填好表格", "发送表格", "填写入学表格"
-    ],
-}
-BLOOKET_STRONG_PHRASES = {
-    "en": [
-        "blooket", "blooket instructions", "online game", "how to play blooket", "the blooket pdf", "blooket guide"
-    ],
-    "zh-HK": [
-        "blooket", "網上遊戲", "布魯克特", "blooket 指引", "blooket 教學", "blooket pdf"
-    ],
-    "zh-CN": [
-        "blooket", "在线游戏", "布鲁克特", "blooket 指南", "blooket 教程", "blooket pdf"
-    ]
+INSTRUCTIONS = {
+    "en": (
+        f"Answer ONLY from the retrieved context. Use short bullets. If context is insufficient or irrelevant, output {NO_CONTEXT_TOKEN} exactly.\n\n"
+        "IMPORTANT: If the retrieved context describes sending an enrollment form, ALWAYS append the marker [SEND_ENROLLMENT_FORM] on its own line at the end of your answer.\n"
+        "If the context describes sending Blooket instructions or the online game, ALWAYS append the marker [SEND_BLOOKET_PDF] on its own line at the end of your answer."
+    ),
+    "zh-HK": (
+        f"只可根據檢索內容作答。用精簡要點。若內容不足或無關，請輸出 {NO_CONTEXT_TOKEN}。\n\n"
+        "重要：如檢索內容涉及發送入學表格，請務必在答案最後另起一行加上此標記：[SEND_ENROLLMENT_FORM]\n"
+        "如涉及發送 Blooket 指引或網上遊戲說明，請務必在答案最後另起一行加上此標記：[SEND_BLOOKET_PDF]"
+    ),
+    "zh-CN": (
+        f"仅按检索内容作答。用精简要点。若内容不足或无关，请输出 {NO_CONTEXT_TOKEN}。\n\n"
+        "重要：如检索内容涉及发送入学表格，请务必在答案末尾另起一行加上此标记：[SEND_ENROLLMENT_FORM]\n"
+        "如涉及发送 Blooket 指南或在线游戏说明，请务必在答案末尾另起一行加上此标记：[SEND_BLOOKET_PDF]"
+    )
 }
 
-def extract_and_strip_marker(answer: str, marker: str) -> (str, bool):
-    pattern = re.compile(rf"\s*{re.escape(marker)}\s*$", re.IGNORECASE)
-    if answer and pattern.search(answer):
-        answer = pattern.sub("", answer)
-        return answer.rstrip(), True
-    return answer, False
+OPENING_HOURS_WEATHER_GUARDRAIL = {
+    "en": "Important: Do NOT reference any weather information or weather policy unless the user asked about weather, or there is an active Black Rainstorm Signal or Typhoon Signal No. 8 (or above).",
+    "zh-HK": "重要：除非用戶主動詢問天氣，或當前正生效黑雨或八號（或以上）風球，否則不要提及任何天氣資訊或天氣政策文件。",
+    "zh-CN": "重要：除非用户主动询问天气，或当前正生效黑雨或八号（及以上）台风信号，否则不要引用任何天气信息或天气政策文档。",
+}
+OPENING_HOURS_HOLIDAY_GUARDRAIL = {
+    "en": "Also: Do NOT mention public holidays unless the user asked about holidays, or the resolved date is a Hong Kong public holiday.",
+    "zh-HK": "同時：除非用戶主動詢問或所涉日期是香港公眾假期，否則不要提及公眾假期。",
+    "zh-CN": "同时：除非用户主动询问或所涉日期为香港公众假期，否则不要提及公众假期。",
+}
 
-def _any_doc_cited(citations, doc_paths: list) -> bool:
-    if not citations:
+CONTACT_MINIMAL_GUARDRAIL = {
+    "en": "If the user is asking for contact details, reply with ONLY phone and email on separate lines. Do not include address, map, or social links unless explicitly requested.",
+    "zh-HK": "如用戶詢問聯絡方式，只回覆電話及電郵，各佔一行。除非用戶明確要求，請不要加入地址、地圖或社交連結。",
+    "zh-CN": "如用户询问联系方式，只回复电话和电邮，各占一行。除非用户明确要求，请不要加入地址、地图或社交链接。",
+}
+
+STAFF = {
+    "en": "If needed, contact our staff: +852 2537 9519 (Call), +852 5118 2819 (WhatsApp), info@decoders-ls.com",
+    "zh-HK": "如需協助，請聯絡職員：+852 2537 9519（致電）、+852 5118 2819（WhatsApp）、info@decoders-ls.com",
+    "zh-CN": "如需协助，请联系职员：+852 2537 9519（致电）、+852 5118 2819（WhatsApp）、info@decoders-ls.com",
+}
+
+REFUSAL_PHRASES = [NO_CONTEXT_TOKEN.lower()]
+APOLOGY_MARKERS = [
+    "sorry","i am unable","i'm unable","i cannot","i can't",
+    "抱歉","很抱歉","對不起","对不起",
+    "無提供相關信息","沒有相關信息","沒有資料","沒有相关资料","暂无相关信息","暂无资料",
+]
+
+_CACHE: Dict[Tuple[str,str], Tuple[float, str, List[Dict], Dict[str,Any]]] = {}
+_CACHE_TTL_SECS = int(os.environ.get("KB_RESPONSE_CACHE_TTL_SECS", "120"))
+
+def _lang_label(lang: Optional[str]) -> str:
+    l = (lang or "").lower()
+    if l.startswith("zh-hk"): return "zh-HK"
+    if l.startswith("zh-cn") or l == "zh": return "zh-CN"
+    return "en"
+
+def _prompt_prefix(lang: str) -> str:
+    return f"{INSTRUCTIONS.get(lang, INSTRUCTIONS['en'])}\n\n"
+
+def _is_contact_query(message: str, lang: Optional[str]) -> bool:
+    m = (message or "").lower()
+    if not m:
         return False
-    for c in citations:
-        uri = c.get("uri", "") or ""
-        for doc in doc_paths:
-            if uri.endswith(doc):
-                return True
-    return False
+    if lang and str(lang).lower().startswith("zh-hk"):
+        return bool(re.search(r"聯絡|聯絡資料|電話|致電|電郵|whatsapp|联系|联系方式", m, flags=re.IGNORECASE))
+    if lang and (str(lang).lower().startswith("zh-cn") or str(lang).lower() == "zh"):
+        return bool(re.search(r"联系|联系方式|电话|致电|电邮|邮箱|whatsapp", m, flags=re.IGNORECASE))
+    return bool(re.search(r"\b(contact|phone|call|email|e-?mail|whatsapp)\b", m, flags=re.IGNORECASE))
 
-def _answer_has_strong_phrase(answer: str, lang: str, phrases_by_lang: dict) -> bool:
-    answer_lc = (answer or "").lower()
-    phrases = phrases_by_lang.get(lang, []) + phrases_by_lang.get("en", [])
-    for phrase in phrases:
-        if phrase.lower() in answer_lc:
-            return True
-    return False
+def _norm_uri(loc: Dict) -> Optional[str]:
+    s3 = loc.get("s3Location") or loc.get("S3Location") or {}
+    if isinstance(s3, dict):
+        if s3.get("uri"):
+            return s3["uri"]
+        bucket = s3.get("bucketName") or s3.get("bucket") or s3.get("Bucket") or s3.get("bucketArn")
+        key = s3.get("key") or s3.get("objectKey") or s3.get("Key") or s3.get("path")
+        if bucket and isinstance(bucket, str) and "arn:aws:s3:::" in bucket:
+            bucket = bucket.split(":::")[-1]
+        if bucket and key:
+            return f"s3://{bucket}/{key}"
+    if loc.get("type") == "S3":
+        bucket = loc.get("bucketName") or loc.get("bucket")
+        key = loc.get("key") or loc.get("objectKey")
+        if bucket and key:
+            return f"s3://{bucket}/{key}"
+    return loc.get("uri")
 
-def _answer_is_short(answer: str, max_words: int = 40) -> bool:
-    """Detect if answer is short enough to likely be a direct form response."""
-    words = (answer or "").split()
-    return len(words) <= max_words
+def _parse_citations(cits_raw: List[Dict]) -> List[Dict]:
+    citations: List[Dict] = []
+    for c in cits_raw or []:
+        refs = c.get("retrievedReferences") or c.get("references") or []
+        for ref in refs or []:
+            uri = _norm_uri(ref.get("location") or {})
+            citations.append({"uri": uri, "score": ref.get("score"), "metadata": ref.get("metadata", {}) or {}})
+    return [c for c in citations if c.get("uri")]
 
-# ========== WhatsApp Helper: Send Message ==========
-async def _send_whatsapp_message(to: str, message_body: str):
-    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
-        print("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send message.")
-        return
+def _filter_refusal(answer: str) -> str:
+    stripped = (answer or "").strip()
+    if not stripped: return ""
+    if any(p in stripped.lower() for p in REFUSAL_PHRASES):
+        return ""
+    return stripped
 
-    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
-    headers = {
-        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
-        "Content-Type": "application/json"
+def _silence_reason(answer: str, parsed_count: int) -> Optional[str]:
+    stripped = (answer or "").strip()
+    if not stripped: return "empty"
+    lower = stripped.lower()
+    if NO_CONTEXT_TOKEN.lower() in lower: return "refusal_token"
+    if SETTINGS.kb_require_citation and parsed_count == 0: return "no_citations"
+    if SETTINGS.kb_silence_apology and any(m in lower for m in APOLOGY_MARKERS): return "apology_marker"
+    return None
+
+def _cache_get(lang: str, message: str):
+    key = (lang, message.strip())
+    now = time.time()
+    entry = _CACHE.get(key)
+    if not entry: return None
+    ts, ans, cits, dbg = entry
+    if now - ts > _CACHE_TTL_SECS:
+        _CACHE.pop(key, None)
+        return None
+    return ans, cits, dbg
+
+def _cache_set(lang: str, message: str, ans: str, cits: List[Dict], dbg: Dict[str,Any]):
+    _CACHE[(lang, message.strip())] = (time.time(), ans, cits, dbg)
+
+def chat_with_kb(
+    message: str,
+    language: Optional[str] = None,
+    session_id: Optional[str] = None,
+    debug: bool = False,
+    extra_context: Optional[str] = None,
+    extra_keywords: Optional[List[str]] = None,
+    hint_canonical: Optional[str] = None,
+) -> Tuple[str, List[Dict], Dict[str, Any]]:
+    L = _lang_label(language)
+    cached = _cache_get(L, message or "")
+    if cached:
+        ans, cits, dbg = cached
+        return ans, cits, (dbg if debug else {})
+
+    debug_info: Dict[str, Any] = {
+        "region": SETTINGS.aws_region,
+        "kb_id": SETTINGS.kb_id[:12] + "…" if SETTINGS.kb_id else "",
+        "model": SETTINGS.kb_model_arn.split("/")[-1] if SETTINGS.kb_model_arn else "",
+        "lang_filter_enabled": not SETTINGS.kb_disable_lang_filter,
+        "session_provided": bool(session_id),
+        "message_chars": len(message or ""),
+        "error": None,
+        "attempts": [],
+        "silenced": False,
+        "silence_reason": None,
+        "latency_ms": None,
     }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": {
-            "body": message_body
-        }
+    if not SETTINGS.kb_id or not SETTINGS.kb_model_arn:
+        debug_info["error"] = "KB_ID or KB_MODEL_ARN not configured"
+        return "", [], debug_info
+
+    t0 = time.time()
+
+    # Use raw user question for retrieval embedding
+    input_text = (message or "")
+
+    # Optional guardrails (kept for generation stage only)
+    prefix = _prompt_prefix(L)
+    if hint_canonical and hint_canonical.lower() == "opening_hours":
+        prefix = f"{prefix}{OPENING_HOURS_WEATHER_GUARDRAIL.get(L, OPENING_HOURS_WEATHER_GUARDRAIL['en'])}\n{OPENING_HOURS_HOLIDAY_GUARDRAIL.get(L, OPENING_HOURS_HOLIDAY_GUARDRAIL['en'])}\n\n"
+        if debug:
+            debug_info["opening_hours_guardrail"] = True
+    if _is_contact_query(message or "", L):
+        prefix = f"{prefix}{CONTACT_MINIMAL_GUARDRAIL.get(L, CONTACT_MINIMAL_GUARDRAIL['en'])}\n\n"
+        if debug:
+            debug_info["contact_guardrail"] = True
+
+    # Language-only filter
+    vec_cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
+    if not SETTINGS.kb_disable_lang_filter:
+        vec_cfg["filter"] = {"equals": {"key": "language", "value": L}}
+    debug_info["first_attempt_retrieval_config"] = dict(vec_cfg)
+    debug_info["retrieval_config"] = dict(vec_cfg)
+
+    req: Dict = {
+        "input": {"text": input_text},
+        "retrieveAndGenerateConfiguration": {
+            "type": "KNOWLEDGE_BASE",
+            "knowledgeBaseConfiguration": {
+                "knowledgeBaseId": SETTINGS.kb_id,
+                "modelArn": SETTINGS.kb_model_arn,
+                "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
+                # Minimal body is enough; omit generationConfiguration unless you need custom decoding
+            }
+        },
     }
-
-    print(f"[WA] Sending WhatsApp message to: {to} | Body: {message_body}")
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            print(f"[WA] SUCCESS: WhatsApp message sent to {to}. Response: {response.json()}")
-        except httpx.HTTPStatusError as e:
-            print(f"[WA] ERROR: Failed to send WhatsApp message to {to}. Status: {e.response.status_code}, Detail: {e.response.text}")
-        except httpx.RequestError as e:
-            print(f"[WA] ERROR: An error occurred while requesting to send WhatsApp message to {to}: {e}")
-        except Exception as e:
-            print(f"[WA] ERROR: Unexpected error in _send_whatsapp_message: {e}")
-
-async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "document.pdf"):
-    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
-        print("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send document.")
-        return
-
-    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
-    headers = {
-        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "document",
-        "document": {
-            "link": doc_url,
-            "filename": filename
-        }
-    }
-    print(f"[WA] Sending WhatsApp document to: {to} | Document URL: {doc_url}")
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            print(f"[WA] SUCCESS: WhatsApp document sent to {to}. Response: {response.json()}")
-        except httpx.HTTPStatusError as e:
-            print(f"[WA] ERROR: Failed to send WhatsApp document to {to}. Status: {e.response.status_code}, Detail: {e.response.text}")
-        except httpx.RequestError as e:
-            print(f"[WA] ERROR: An error occurred while requesting to send WhatsApp document to {to}: {e}")
-        except Exception as e:
-            print(f"[WA] ERROR: Unexpected error in _send_whatsapp_document: {e}")
-
-# ===== /chat endpoint =====
-class ChatRequest(BaseModel):
-    message: str
-    language: Optional[str] = None  # "en" | "zh-hk" | "zh-cn"
-    session_id: Optional[str] = None
-    debug: Optional[bool] = False   # return debug object in response
-
-class ChatResponse(BaseModel):
-    answer: str
-    citations: List[Dict[str, Any]] = []
-    debug: Optional[Dict[str, Any]] = None
-
-@router.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest, request: Request):
-    print(f"[CHAT] /chat called with: message={req.message!r}, language={req.language!r}, session_id={req.session_id!r}, debug={req.debug!r}")
-    print(f"[CHAT] Headers: {dict(request.headers)}")
-    lang = req.language
-    if not lang and req.session_id:
-        lang = get_session_language(req.session_id)
-        print(f"[CHAT] Used session_id={req.session_id} to get session language: {lang!r}")
-    if not lang:
-        lang = detect_language(req.message, accept_language=request.headers.get("accept-language"))
-        print(f"[CHAT] Detected language: {lang!r}")
-    if req.session_id and lang:
-        remember_session_language(req.session_id, lang)
-        print(f"[CHAT] Remembered session language: session_id={req.session_id}, lang={lang}")
-
-    # Call LLM
-    answer, citations, debug_info = chat_with_kb(
-        req.message,
-        lang,
-        req.session_id,
-        debug=bool(req.debug)
-    )
-    print(f"[CHAT] LLM raw answer: {answer!r}")
-    print(f"[CHAT] LLM citations: {json.dumps(citations, indent=2)}")
-    if debug_info:
-        print(f"[CHAT] LLM debug_info: {json.dumps(debug_info, indent=2)}")
-
-    # Enrollment: marker or (citation + strong phrase + short answer)
-    answer, marker = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
-    send_form = marker or (
-        _any_doc_cited(citations, ENROLLMENT_FORM_DOCS) and
-        _answer_has_strong_phrase(answer, lang, ENROLLMENT_STRONG_PHRASES) and
-        _answer_is_short(answer)
-    )
-
-    # Blooket: marker or (citation + strong phrase + short answer)
-    answer, marker_blooket = extract_and_strip_marker(answer, BLOOKET_MARKER)
-    send_blooket = marker_blooket or (
-        _any_doc_cited(citations, BLOOKET_DOCS) and
-        _answer_has_strong_phrase(answer, lang, BLOOKET_STRONG_PHRASES) and
-        _answer_is_short(answer)
-    )
-
-    if send_form:
-        answer = (answer or "") + f"\n\nYou can download our enrollment form [here]({ENROLLMENT_FORM_URL})."
-        print("[CHAT] Enrollment form marker/trigger detected: added PDF link to response.")
-
-    if send_blooket:
-        answer = (answer or "") + f"\n\nYou can download the Blooket instructions [here]({BLOOKET_PDF_URL})."
-        print("[CHAT] Blooket marker/trigger detected: added Blooket PDF link to response.")
-
-    silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
-    if not answer and silent_reason:
-        print(f"[CHAT] LLM silenced answer. Reason: {silent_reason}")
-
-    answer = answer or ""
-    return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
-
-# ========== WhatsApp Webhook Endpoints ==========
-
-@router.get("/whatsapp_webhook")
-async def whatsapp_webhook_verification(request: Request):
-    mode = request.query_params.get("hub.mode")
-    token = request.query_params.get("hub.verify_token")
-    challenge = request.query_params.get("hub.challenge")
-    token_preview = token[:5] + "..." if token else "None"
-    print(f"[WA] Webhook Verification Request: Mode={mode}, Token={token_preview}, Challenge={challenge}")
-    if mode == "subscribe" and token == SETTINGS.whatsapp_verify_token:
-        print("[WA] Webhook verification successful!")
-        return Response(content=challenge, media_type="text/plain", status_code=200)
-    else:
-        print(f"[WA] Webhook verification FAILED. Token mismatch or invalid mode. Expected: {SETTINGS.whatsapp_verify_token}")
-        raise HTTPException(status_code=403, detail="Verification token mismatch or invalid mode")
-
-@router.post("/whatsapp_webhook")
-async def whatsapp_webhook_handler(request: Request):
-    payload = await request.json()
-    print(f"[WA] Received WhatsApp webhook payload:\n{json.dumps(payload, indent=2)}")
+    if session_id:
+        req["sessionId"] = session_id
 
     try:
-        if "object" in payload and "entry" in payload:
-            for entry in payload["entry"]:
-                for change in entry.get("changes", []):
-                    if change.get("field") == "messages":
-                        value = change.get("value", {})
-                        messages = value.get("messages", [])
-                        contacts = value.get("contacts", [])
+        resp = rag.retrieve_and_generate(**req)
+        answer = ((resp.get("output") or {}).get("text") or "").strip()
+        raw_cits = resp.get("citations", []) or []
+        parsed = _parse_citations(raw_cits)
 
-                        if messages and contacts:
-                            message = messages[0]
-                            contact = contacts[0]
-                            from_number = message.get("from")
-                            message_type = message.get("type")
-                            print(f"[WA] Message details: from={from_number}, type={message_type}, contact={contact}")
+        if debug:
+            debug_info["raw_citations"] = raw_cits
+            debug_info["input_preview"] = input_text[:120]
 
-                            if message_type == "text":
-                                message_body = message["text"].get("body")
-                                print(f"[WA] Text message from {from_number} (Name: {contact.get('profile',{}).get('name')}): '{message_body}'")
+        answer = _filter_refusal(answer)
+        reason = _silence_reason(answer, len(parsed))
 
-                                # Whitelist check
-                                if from_number not in SETTINGS.whatsapp_test_numbers:
-                                    print(f"[WA] WARNING: Message from non-whitelisted number {from_number} ignored during testing.")
-                                    return {"status": "ignored", "reason": "not in test numbers"}
+        # Optional retry without any filter
+        if (reason or not answer) and SETTINGS.kb_retry_nofilter:
+            kb_conf = req["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"]
+            vec = kb_conf["retrievalConfiguration"]["vectorSearchConfiguration"]
+            vec.pop("filter", None)
+            debug_info["retry_reason"] = f"Initial attempt failed ({reason or 'empty_answer'}). Retrying without filter."
+            debug_info["retry_retrieval_config"] = dict(vec)
 
-                                # Detect language
-                                lang = detect_language(message_body)
-                                print(f"[WA] Detected language: {lang}")
-                                remember_session_language(from_number, lang)
-                                print(f"[WA] Remembered session language for {from_number}: {lang}")
+            resp2 = rag.retrieve_and_generate(**req)
+            answer2 = ((resp2.get("output") or {}).get("text") or "").strip()
+            raw2 = resp2.get("citations", []) or []
+            parsed2 = _parse_citations(raw2)
+            if debug:
+                debug_info.setdefault("retry", {})["raw_citations"] = raw2
+            answer2 = _filter_refusal(answer2)
+            reason2 = _silence_reason(answer2, len(parsed2))
+            if not reason2 and answer2:
+                answer, parsed, reason = answer2, parsed2, None
+                debug_info["retry_succeeded"] = True
 
-                                # Call LLM
-                                answer, citations, debug_info = chat_with_kb(
-                                    message_body,
-                                    lang,
-                                    session_id=None,
-                                    debug=True
-                                )
-                                print(f"[WA] LLM raw answer: {answer!r}")
-                                print(f"[WA] LLM citations: {json.dumps(citations, indent=2)}")
-                                if debug_info:
-                                    print(f"[WA] LLM debug_info: {json.dumps(debug_info, indent=2)}")
-                                silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
-                                if not answer and silent_reason:
-                                    print(f"[WA] LLM silenced answer. Reason: {silent_reason}")
+        if answer and not reason and SETTINGS.kb_append_staff_footer:
+            answer = f"{answer}\n\n{STAFF.get(L, STAFF['en'])}"
 
-                                # Enrollment form: marker or (citation + strong phrase + short)
-                                answer, marker = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
-                                send_form = marker or (
-                                    _any_doc_cited(citations, ENROLLMENT_FORM_DOCS)
-                                    and _answer_has_strong_phrase(answer, lang, ENROLLMENT_STRONG_PHRASES)
-                                    and _answer_is_short(answer)
-                                )
-
-                                # Blooket: marker or (citation + strong phrase + short)
-                                answer, marker_blooket = extract_and_strip_marker(answer, BLOOKET_MARKER)
-                                send_blooket = marker_blooket or (
-                                    _any_doc_cited(citations, BLOOKET_DOCS)
-                                    and _answer_has_strong_phrase(answer, lang, BLOOKET_STRONG_PHRASES)
-                                    and _answer_is_short(answer)
-                                )
-
-                                sent = False
-                                if send_form:
-                                    print("[WA] Enrollment form marker/trigger detected: sending PDF document.")
-                                    await _send_whatsapp_document(from_number, ENROLLMENT_FORM_URL, "enrollment_form.pdf")
-                                    sent = True
-                                if send_blooket:
-                                    print("[WA] Blooket marker/trigger detected: sending Blooket instruction PDF.")
-                                    await _send_whatsapp_document(from_number, BLOOKET_PDF_URL, "blooket_instructions.pdf")
-                                    sent = True
-
-                                # If any marker or trigger fired, still send any remaining message text
-                                if sent and answer:
-                                    await _send_whatsapp_message(from_number, answer)
-                                elif answer:
-                                    print(f"[WA] LLM Answer: '{answer}'")
-                                    await _send_whatsapp_message(from_number, answer)
-                                else:
-                                    print(f"[WA] LLM provided no answer. No WhatsApp reply sent.")
-                                return {"status": "ok", "message": "Message processed"}
-                            else:
-                                print(f"[WA] INFO: Received non-text message of type '{message_type}' from {from_number}. Ignoring.")
-                                return {"status": "ignored", "reason": f"non-text message type: {message_type}"}
-                        else:
-                            print("[WA] INFO: No messages or contacts found in webhook payload.")
-                            return {"status": "ignored", "reason": "no messages or contacts"}
-        print("[WA] INFO: Webhook payload not a recognized message event.")
-        return {"status": "ignored", "reason": "unrecognized payload structure"}
-
+        debug_info["latency_ms"] = int((time.time() - t0) * 1000)
+        if reason:
+            debug_info["silenced"] = True
+            debug_info["silence_reason"] = reason
+            _cache_set(L, message or "", "", [], debug_info)
+            return "", [], (debug_info if debug else {})
+        _cache_set(L, message or "", answer, parsed, debug_info)
+        return answer, parsed, (debug_info if debug else {})
     except Exception as e:
-        print(f"[WA] ERROR: Failed to process WhatsApp webhook payload: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to process webhook: {e}")
+        debug_info["error"] = f"{type(e).__name__}: {e}"
+        return "", [], (debug_info if debug else {})

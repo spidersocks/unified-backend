@@ -13,20 +13,45 @@ router = APIRouter(tags=["LLM Chat (Bedrock KB)"])
 
 ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"
 ENROLLMENT_FORM_MARKER = "[SEND_ENROLLMENT_FORM]"
+ENROLLMENT_FORM_DOCS = [
+    "/en/policies/enrollment_form.md",
+    "/zh-HK/policies/enrollment_form.md",
+    "/zh-CN/policies/enrollment_form.md",
+]
 
 BLOOKET_PDF_URL = "https://drive.google.com/uc?export=download&id=18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M"
 BLOOKET_MARKER = "[SEND_BLOOKET_PDF]"
+BLOOKET_DOCS = [
+    "/en/policies/blooket_instructions.md",
+    "/zh-HK/policies/blooket_instructions.md",
+    "/zh-CN/policies/blooket_instructions.md",
+]
 
-class ChatRequest(BaseModel):
-    message: str
-    language: Optional[str] = None  # "en" | "zh-hk" | "zh-cn"
-    session_id: Optional[str] = None
-    debug: Optional[bool] = False   # return debug object in response
-
-class ChatResponse(BaseModel):
-    answer: str
-    citations: List[Dict[str, Any]] = []
-    debug: Optional[Dict[str, Any]] = None
+# Phrase triggers for form/game (EN, zh-HK, zh-CN)
+ENROLLMENT_STRONG_PHRASES = {
+    "en": [
+        "enrollment form", "registration form", "application form",
+        "please fill out our enrollment form", "download the form", "attached form",
+        "fill in the form", "submit the enrollment form", "send me the form"
+    ],
+    "zh-HK": [
+        "入學表格", "報名表格", "申請表", "下載表格", "填好表格", "發送表格", "填寫入學表格"
+    ],
+    "zh-CN": [
+        "入学表格", "报名表格", "申请表", "下载表格", "填好表格", "发送表格", "填写入学表格"
+    ],
+}
+BLOOKET_STRONG_PHRASES = {
+    "en": [
+        "blooket", "blooket instructions", "online game", "how to play blooket", "the blooket pdf", "blooket guide"
+    ],
+    "zh-HK": [
+        "blooket", "網上遊戲", "布魯克特", "blooket 指引", "blooket 教學", "blooket pdf"
+    ],
+    "zh-CN": [
+        "blooket", "在线游戏", "布鲁克特", "blooket 指南", "blooket 教程", "blooket pdf"
+    ]
+}
 
 def extract_and_strip_marker(answer: str, marker: str) -> (str, bool):
     pattern = re.compile(rf"\s*{re.escape(marker)}\s*$", re.IGNORECASE)
@@ -34,6 +59,29 @@ def extract_and_strip_marker(answer: str, marker: str) -> (str, bool):
         answer = pattern.sub("", answer)
         return answer.rstrip(), True
     return answer, False
+
+def _any_doc_cited(citations, doc_paths: list) -> bool:
+    if not citations:
+        return False
+    for c in citations:
+        uri = c.get("uri", "") or ""
+        for doc in doc_paths:
+            if uri.endswith(doc):
+                return True
+    return False
+
+def _answer_has_strong_phrase(answer: str, lang: str, phrases_by_lang: dict) -> bool:
+    answer_lc = (answer or "").lower()
+    phrases = phrases_by_lang.get(lang, []) + phrases_by_lang.get("en", [])
+    for phrase in phrases:
+        if phrase.lower() in answer_lc:
+            return True
+    return False
+
+def _answer_is_short(answer: str, max_words: int = 40) -> bool:
+    """Detect if answer is short enough to likely be a direct form response."""
+    words = (answer or "").split()
+    return len(words) <= max_words
 
 # ========== WhatsApp Helper: Send Message ==========
 async def _send_whatsapp_message(to: str, message_body: str):
@@ -101,6 +149,17 @@ async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "docume
             print(f"[WA] ERROR: Unexpected error in _send_whatsapp_document: {e}")
 
 # ===== /chat endpoint =====
+class ChatRequest(BaseModel):
+    message: str
+    language: Optional[str] = None  # "en" | "zh-hk" | "zh-cn"
+    session_id: Optional[str] = None
+    debug: Optional[bool] = False   # return debug object in response
+
+class ChatResponse(BaseModel):
+    answer: str
+    citations: List[Dict[str, Any]] = []
+    debug: Optional[Dict[str, Any]] = None
+
 @router.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest, request: Request):
     print(f"[CHAT] /chat called with: message={req.message!r}, language={req.language!r}, session_id={req.session_id!r}, debug={req.debug!r}")
@@ -128,18 +187,29 @@ def chat(req: ChatRequest, request: Request):
     if debug_info:
         print(f"[CHAT] LLM debug_info: {json.dumps(debug_info, indent=2)}")
 
-    # Enrollment form marker
-    answer, send_form = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
-    # Blooket marker
-    answer, send_blooket = extract_and_strip_marker(answer, BLOOKET_MARKER)
+    # Enrollment: marker or (citation + strong phrase + short answer)
+    answer, marker = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
+    send_form = marker or (
+        _any_doc_cited(citations, ENROLLMENT_FORM_DOCS) and
+        _answer_has_strong_phrase(answer, lang, ENROLLMENT_STRONG_PHRASES) and
+        _answer_is_short(answer)
+    )
+
+    # Blooket: marker or (citation + strong phrase + short answer)
+    answer, marker_blooket = extract_and_strip_marker(answer, BLOOKET_MARKER)
+    send_blooket = marker_blooket or (
+        _any_doc_cited(citations, BLOOKET_DOCS) and
+        _answer_has_strong_phrase(answer, lang, BLOOKET_STRONG_PHRASES) and
+        _answer_is_short(answer)
+    )
 
     if send_form:
         answer = (answer or "") + f"\n\nYou can download our enrollment form [here]({ENROLLMENT_FORM_URL})."
-        print("[CHAT] Enrollment form marker detected: added PDF link to response.")
+        print("[CHAT] Enrollment form marker/trigger detected: added PDF link to response.")
 
     if send_blooket:
         answer = (answer or "") + f"\n\nYou can download the Blooket instructions [here]({BLOOKET_PDF_URL})."
-        print("[CHAT] Blooket marker detected: added Blooket PDF link to response.")
+        print("[CHAT] Blooket marker/trigger detected: added Blooket PDF link to response.")
 
     silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
     if not answer and silent_reason:
@@ -215,22 +285,33 @@ async def whatsapp_webhook_handler(request: Request):
                                 if not answer and silent_reason:
                                     print(f"[WA] LLM silenced answer. Reason: {silent_reason}")
 
-                                # Enrollment form marker
-                                answer, send_form = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
-                                # Blooket marker
-                                answer, send_blooket = extract_and_strip_marker(answer, BLOOKET_MARKER)
-                                
+                                # Enrollment form: marker or (citation + strong phrase + short)
+                                answer, marker = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
+                                send_form = marker or (
+                                    _any_doc_cited(citations, ENROLLMENT_FORM_DOCS)
+                                    and _answer_has_strong_phrase(answer, lang, ENROLLMENT_STRONG_PHRASES)
+                                    and _answer_is_short(answer)
+                                )
+
+                                # Blooket: marker or (citation + strong phrase + short)
+                                answer, marker_blooket = extract_and_strip_marker(answer, BLOOKET_MARKER)
+                                send_blooket = marker_blooket or (
+                                    _any_doc_cited(citations, BLOOKET_DOCS)
+                                    and _answer_has_strong_phrase(answer, lang, BLOOKET_STRONG_PHRASES)
+                                    and _answer_is_short(answer)
+                                )
+
                                 sent = False
                                 if send_form:
-                                    print("[WA] Enrollment form marker detected: sending PDF document.")
+                                    print("[WA] Enrollment form marker/trigger detected: sending PDF document.")
                                     await _send_whatsapp_document(from_number, ENROLLMENT_FORM_URL, "enrollment_form.pdf")
                                     sent = True
                                 if send_blooket:
-                                    print("[WA] Blooket marker detected: sending Blooket instruction PDF.")
+                                    print("[WA] Blooket marker/trigger detected: sending Blooket instruction PDF.")
                                     await _send_whatsapp_document(from_number, BLOOKET_PDF_URL, "blooket_instructions.pdf")
                                     sent = True
 
-                                # If any marker was found, still send any remaining message text
+                                # If any marker or trigger fired, still send any remaining message text
                                 if sent and answer:
                                     await _send_whatsapp_message(from_number, answer)
                                 elif answer:
