@@ -1,5 +1,12 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field # Import 'field'
+from typing import List # Import List
+
+# Helper function to parse the WHATSAPP_TEST_NUMBERS environment variable
+def _get_whatsapp_test_numbers_from_env() -> List[str]:
+    """Parses the WHATSAPP_TEST_NUMBERS environment variable into a list of strings."""
+    env_var = os.environ.get("WHATSAPP_TEST_NUMBERS", "")
+    return [num.strip() for num in env_var.split(",") if num.strip()]
 
 @dataclass
 class Settings:
@@ -49,6 +56,15 @@ class Settings:
     debug_kb_log_prompt: bool = os.environ.get("DEBUG_KB_LOG_PROMPT", "false").lower() in ("1","true","yes")
 
     # App behavior
-    default_languages = ("en", "zh-HK", "zh-CN")
+    default_languages: tuple[str, ...] = ("en", "zh-HK", "zh-CN") # Added type hint for clarity
+
+    # --- NEW: WhatsApp Integration Settings ---
+    whatsapp_verify_token: str = os.environ.get("WHATSAPP_VERIFY_TOKEN", "spidersocks")
+    whatsapp_access_token: str = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
+    whatsapp_phone_number_id: str = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
+    # WHATSAPP_TEST_NUMBERS should be a comma-separated string, e.g., "+1234567890,+1122334455"
+    # Corrected: Use default_factory for mutable default (list)
+    whatsapp_test_numbers: List[str] = field(default_factory=_get_whatsapp_test_numbers_from_env)
+
 
 SETTINGS = Settings()

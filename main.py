@@ -9,8 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pokemon_app.router import router as pokemon_router
 from news_app.router import router as news_router
 from run_calculator_app.router import router as run_calculator_router
-# Removed Dialogflow webhook router
 from llm.router import router as llm_router
+# --- NEW: Import WhatsApp router ---
+from whatsapp_app.router import router as whatsapp_router
 
 from pokemon_app.router import load_pokemon_assets
 
@@ -50,8 +51,9 @@ def healthz():
 app.include_router(pokemon_router)
 app.include_router(news_router)
 app.include_router(run_calculator_router)
-# app.include_router(dialogflow_router)  # removed
 app.include_router(llm_router)
+# --- NEW: Include WhatsApp router ---
+app.include_router(whatsapp_router)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
