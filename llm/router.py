@@ -184,6 +184,20 @@ NOINFO_PHRASES = [
     "up-to-date fees", "available time slots", "no answer available", "unable to find", "unable to provide",
     "no details available", "please refer to", "no specific information", "the search results do not specify", "no start date mentioned"
 ]
+
+
+def safe_session_id(sid):
+    """
+    Ensures session_id is Bedrock-compatible (not all-digits, <=64 chars, starts with a letter).
+    """
+    sid = str(sid or "")
+    # Bedrock session IDs must be <=64 chars, alphanumeric, and not all-digits
+    if len(sid) > 60:
+        sid = sid[:60]
+    if not sid or not sid[0].isalpha() or sid.isdigit():
+        sid = "U" + sid
+    return sid
+
 def contains_apology_or_noinfo(answer: str) -> bool:
     a = (answer or "").lower()
     return any(p in a for p in NOINFO_PHRASES)
@@ -303,10 +317,11 @@ def chat(req: ChatRequest, request: Request):
 
     _log(f"Calling chat_with_kb with rag_query length={len(rag_query)}")
     try:
+        safe_id = safe_session_id(from_number)
         answer, citations, debug_info = chat_with_kb(
             rag_query,
             lang,
-            session_id=from_number,
+            session_id=safe_id,
             debug=SETTINGS.debug_kb,
             extra_context=opening_context,
             hint_canonical=hint_canonical,
@@ -455,10 +470,11 @@ async def whatsapp_webhook_handler(request: Request):
 
                                 _log(f"Calling chat_with_kb with rag_query length={len(rag_query)}")
                                 try:
+                                    safe_id = safe_session_id(from_number)
                                     answer, citations, debug_info = chat_with_kb(
                                         rag_query,
                                         lang,
-                                        session_id=from_number,
+                                        session_id=safe_id,
                                         debug=SETTINGS.debug_kb,
                                         extra_context=opening_context,
                                         hint_canonical=hint_canonical,
