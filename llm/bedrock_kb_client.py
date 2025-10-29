@@ -1,6 +1,6 @@
 """
 Thin client for Bedrock Knowledge Base RetrieveAndGenerate.
-Optimized for latency: fewer retrieved chunks, smaller max tokens, no unconditional retry.
+Optimized for latency with correct request shape. Ensures retrieval uses ONLY the user's message.
 """
 import os
 import time
@@ -23,7 +23,7 @@ NO_CONTEXT_TOKEN = "[NO_CONTEXT]"
 
 INSTRUCTIONS = {
     "en": (
-        f"Answer ONLY from the retrieved context and any provided SYSTEM CONTEXT below.\n"
+        "Answer ONLY from the retrieved context and any provided SYSTEM CONTEXT below.\n"
         "SYSTEM CONTEXT may include a resolved date, public holiday status, weather, or open hours for a specific day.\n"
         "If SYSTEM CONTEXT includes a 'Resolved date', ALWAYS answer directly about that specific date, using the facts given (e.g., 'Yes, classes are open on Thursday, October 30, 2025. Hours: 09:00–18:00.' or 'No, classes are closed on Sunday.')."
         " DO NOT repeat or summarize the general opening hours policy unless the user explicitly asks for the weekly schedule or general business hours.\n"
@@ -36,7 +36,7 @@ INSTRUCTIONS = {
         "If the context describes sending Blooket instructions or the online game, ALWAYS append the marker [SEND_BLOOKET_PDF] on its own line at the end of your answer."
     ),
     "zh-HK": (
-        f"只可根據檢索內容及下方提供的【SYSTEM CONTEXT】作答。\n"
+        "只可根據檢索內容及下方提供的【SYSTEM CONTEXT】作答。\n"
         "【SYSTEM CONTEXT】可能包含「已解析日期」、公眾假期、天氣或特定日子的營業時間。\n"
         "如【SYSTEM CONTEXT】包含「已解析日期」，必須直接針對該日回答（例如：「是，2025年10月30日（星期四）中心有開放，時間為09:00–18:00。」或「否，星期日中心休息。」）。"
         "除非家長明確查詢整體營業時間或一週時間表，否則請勿重述或總結一般營業政策。\n"
@@ -49,18 +49,18 @@ INSTRUCTIONS = {
         "如涉及發送 Blooket 指引或網上遊戲說明，請務必在答案最後另起一行加上此標記：[SEND_BLOOKET_PDF]"
     ),
     "zh-CN": (
-        f"仅按检索内容和下方的【SYSTEM CONTEXT】作答。\n"
+        "仅按检索内容和下方的【SYSTEM CONTEXT】作答。\n"
         "【SYSTEM CONTEXT】可能包含“已解析日期”、公众假期、天气或某一特定日子的开放时间。\n"
         "如【SYSTEM CONTEXT】给出“已解析日期”，必须直接针对该日回答（如：“是，2025年10月30日（星期四）中心正常开放，时间为09:00–18:00。”或“否，星期日中心休息。”）。"
         "除非家长明确咨询整体营业时间或一周时间表，否则不要复述或概括营业政策。\n"
         "如【SYSTEM CONTEXT】提示为公众假期或星期日，请直接说明当天休息，并尽量告知下次开放日期。\n"
-        "如有严重天气，仅在相关日期需要时提及停课安排。\n"
+        "如有严重天气，仅在相关日期需要时才提及停课安排。\n"
         "有明确日期时，务必直接明了地作答，不要只说一般规则。\n"
         "用精简要点。若内容不足或无关，无法完整且有把握地回答用户问题，请输出 [NO_CONTEXT]。\n\n"
         "你必须用简体中文作答。严禁用英文或繁体中文作答，即使用户输入为混合语言亦然。\n"
         "重要：如检索内容涉及发送入学表格，请务必在答案末尾另起一行加上此标记：[SEND_ENROLLMENT_FORM]\n"
         "如涉及发送 Blooket 指南或在线游戏说明，请务必在答案末尾另起一行加上此标记：[SEND_BLOOKET_PDF]"
-    )
+    ),
 }
 
 OPENING_HOURS_WEATHER_GUARDRAIL = {
@@ -103,7 +103,7 @@ def _lang_label(lang: Optional[str]) -> str:
     return "en"
 
 def _prompt_prefix(lang: str) -> str:
-    return f"{INSTRUCTIONS.get(lang, INSTRUCTIONS['en'])}\n\n"
+    return INSTRUCTIONS.get(lang, INSTRUCTIONS["en"])
 
 def _is_contact_query(message: str, lang: Optional[str]) -> bool:
     m = (message or "").lower()
@@ -179,10 +179,31 @@ def _cache_set(lang: str, message: str, extra_context: Optional[str], hint_canon
     key = _cache_key(lang, message, extra_context, hint_canonical)
     _CACHE[key] = (time.time(), ans, cits, dbg)
 
-def _build_generation_configuration() -> Dict[str, Any]:
+def _build_prompt_template(prefix: str, lang: str, extra_context: Optional[str]) -> str:
+    """
+    Build a prompt template for Bedrock KB generation that:
+    - Keeps retrieval query clean (only the user's message is sent to input.text)
+    - Injects our system rules and optional SYSTEM CONTEXT into the LLM prompt
+    Note: {{context}} and {{input}} are the placeholders Bedrock KB substitutes
+    with retrieved passages and the user query, respectively.
+    """
+    sc = ""
+    if extra_context:
+        sc = f"\nSYSTEM CONTEXT:\n{extra_context.strip()}\n"
+    # Optional guardrails are included in 'prefix'
+    template = (
+        f"{prefix.strip()}{sc}\n"
+        "Use ONLY the retrieved context below to answer. If insufficient, output [NO_CONTEXT].\n\n"
+        "Retrieved context:\n{{context}}\n\n"
+        "User question:\n{{input}}\n\n"
+        "Answer:"
+    )
+    return template
+
+def _build_generation_configuration(prompt_template: Optional[str] = None) -> Dict[str, Any]:
     """
     Bedrock KB RetrieveAndGenerate expects generationConfiguration with inferenceConfig.textInferenceConfig.
-    Move maxTokens/temperature/topP under that shape to avoid ParamValidationError.
+    We optionally add a promptTemplate so instructions don't pollute retrieval.
     """
     text_cfg: Dict[str, Any] = {}
     if getattr(SETTINGS, "gen_max_tokens", None) is not None:
@@ -191,16 +212,20 @@ def _build_generation_configuration() -> Dict[str, Any]:
         text_cfg["temperature"] = SETTINGS.gen_temperature
     if getattr(SETTINGS, "gen_top_p", None) is not None:
         text_cfg["topP"] = SETTINGS.gen_top_p
-    # Optional: stop sequences if provided
     if getattr(SETTINGS, "gen_stop_sequences", None):
         text_cfg["stopSequences"] = SETTINGS.gen_stop_sequences
 
     gen_cfg: Dict[str, Any] = {}
     if text_cfg:
         gen_cfg["inferenceConfig"] = {"textInferenceConfig": text_cfg}
-    # You may add guardrails/prompt templates here if needed:
-    # gen_cfg["guardrailConfiguration"] = {"guardrailId": "...", "guardrailVersion": "..."}
-    # gen_cfg["promptTemplate"] = {"textPromptTemplate": "..."}
+    if prompt_template:
+        gen_cfg["promptTemplate"] = {"textPromptTemplate": prompt_template}
+    # You may add guardrails here if enabled in SETTINGS:
+    # if SETTINGS.kb_guardrail_id and SETTINGS.kb_guardrail_version:
+    #     gen_cfg["guardrailConfiguration"] = {
+    #         "guardrailId": SETTINGS.kb_guardrail_id,
+    #         "guardrailVersion": SETTINGS.kb_guardrail_version,
+    #     }
     return gen_cfg
 
 def chat_with_kb(
@@ -237,46 +262,54 @@ def chat_with_kb(
 
     t0 = time.time()
 
-    # Build prompt prefix + guardrails
+    # Build prompt prefix + guardrails (these go into generation, NOT retrieval)
     prefix = _prompt_prefix(L)
     if hint_canonical and hint_canonical.lower() == "opening_hours":
-        prefix = f"{prefix}{OPENING_HOURS_WEATHER_GUARDRAIL.get(L, OPENING_HOURS_WEATHER_GUARDRAIL['en'])}\n{OPENING_HOURS_HOLIDAY_GUARDRAIL.get(L, OPENING_HOURS_HOLIDAY_GUARDRAIL['en'])}\n\n"
+        prefix = (
+            f"{prefix}\n{OPENING_HOURS_WEATHER_GUARDRAIL.get(L, OPENING_HOURS_WEATHER_GUARDRAIL['en'])}\n"
+            f"{OPENING_HOURS_HOLIDAY_GUARDRAIL.get(L, OPENING_HOURS_HOLIDAY_GUARDRAIL['en'])}"
+        )
         if debug:
             debug_info["opening_hours_guardrail"] = True
     if _is_contact_query(message or "", L):
-        prefix = f"{prefix}{CONTACT_MINIMAL_GUARDRAIL.get(L, CONTACT_MINIMAL_GUARDRAIL['en'])}\n\n"
+        prefix = f"{prefix}\n{CONTACT_MINIMAL_GUARDRAIL.get(L, CONTACT_MINIMAL_GUARDRAIL['en'])}"
         if debug:
             debug_info["contact_guardrail"] = True
 
-    # Compose input for RAG (keep prefix and any structured context at the top)
-    input_text = prefix + ((extra_context + "\n\n") if extra_context else "") + (message or "")
-    if debug and SETTINGS.debug_kb_log_prompt:
-        debug_info["input_preview"] = input_text[:240]
+    # Retrieval query MUST be only the user message (avoid polluting embeddings)
+    user_query = (message or "").strip()
 
-    # Language-only filter
-    vec_cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
+    # Optional: light keyword expansion for retrieval, if provided
+    if extra_keywords:
+        user_query = f"{user_query}\nKeywords: {', '.join(extra_keywords)}"
+
+    # Build a per-request prompt template for the LLM generation stage
+    prompt_template = _build_prompt_template(prefix, L, extra_context)
+    gen_cfg = _build_generation_configuration(prompt_template)
+    if debug:
+        debug_info["generation_configuration"] = gen_cfg
+        debug_info["retrieval_query"] = user_query
+        debug_info["prompt_template_preview"] = prompt_template[:240]
+
+    # Language-only filter for retrieval
+    vec_cfg: Dict[str, Any] = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
     if not SETTINGS.kb_disable_lang_filter:
         vec_cfg["filter"] = {"equals": {"key": "language", "value": L}}
     debug_info["retrieval_config"] = dict(vec_cfg)
 
-    gen_cfg = _build_generation_configuration()
-    if debug:
-        debug_info["generation_configuration"] = gen_cfg
-
     req: Dict = {
-        "input": {"text": input_text},
+        "input": {"text": user_query},
         "retrieveAndGenerateConfiguration": {
             "type": "KNOWLEDGE_BASE",
             "knowledgeBaseConfiguration": {
                 "knowledgeBaseId": SETTINGS.kb_id,
                 "modelArn": SETTINGS.kb_model_arn,
                 "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
-                # Use the new, valid shape for generationConfiguration:
-                # {"inferenceConfig": {"textInferenceConfig": {...}}}
                 "generationConfiguration": gen_cfg,
             }
         },
     }
+    # If you later use session-based memory, you can add:
     # if session_id:
     #     req["sessionId"] = session_id
 
@@ -292,11 +325,13 @@ def chat_with_kb(
         answer = _filter_refusal(answer)
         reason = _silence_reason(answer, len(parsed))
 
-        # Optional retry without any filter
+        # Optional retry without language filter if first pass failed
         if (reason or not answer) and SETTINGS.kb_retry_nofilter:
             kb_conf = req["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"]
             vec = kb_conf["retrievalConfiguration"]["vectorSearchConfiguration"]
             vec.pop("filter", None)
+            # Optionally bump recall on retry
+            vec["numberOfResults"] = max(vec.get("numberOfResults", 6), 12)
             debug_info["retry_reason"] = f"Initial attempt failed ({reason or 'empty_answer'}). Retrying without filter."
             debug_info["retry_retrieval_config"] = dict(vec)
 
