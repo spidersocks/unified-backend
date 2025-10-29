@@ -194,18 +194,21 @@ def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[date
             for dt_obj, official_name in all_holidays:
                 if official_name == matched_official_name:
                     dt_hk = HK_TZ.localize(datetime.combine(dt_obj, time(12, 0)))
-                    # CRITICAL FIX #3: Include today and the past in search.
-                    # If the user asks about a holiday, they might be asking about today.
-                    if dt_hk.date() >= base.date() - timedelta(days=1):
+                    # Include only future occurrences (today and beyond)
+                    if dt_hk.date() >= base.date():
                         future_holiday_matches.append((dt_hk, official_name))
         
         if future_holiday_matches:
             return min(future_holiday_matches, key=lambda x: x[0])
         
-        # CRITICAL FIX #4: If calendar is unavailable or holiday not found in calendar,
-        # attempt to compute the date using a heuristic or return a placeholder.
-        # For now, we return None to allow other parsing methods to try.
-        # In production, you might implement hardcoded dates for major holidays.
+        # If the holiday has already passed this year, try next year
+        if cal_next:
+            all_holidays_next = sorted(cal_next.items())
+            for dt_obj, official_name in all_holidays_next:
+                if official_name == matched_official_name:
+                    dt_hk = HK_TZ.localize(datetime.combine(dt_obj, time(12, 0)))
+                    return (dt_hk, official_name)
+        
         return None
     
     # CRITICAL FIX #5: If no keyword matched but calendar is available,
