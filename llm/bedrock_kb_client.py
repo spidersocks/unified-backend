@@ -1,6 +1,12 @@
 """
 Thin client for Bedrock Knowledge Base RetrieveAndGenerate.
-Optimized for latency with correct request shape. Ensures retrieval uses ONLY the user's message.
+
+Fixes:
+- Restore promptTemplate with $search_results$ and $query$ so generation is grounded.
+- Use only the user message for retrieval (clean embeddings), but allow keyword biasing.
+- Inject optional SYSTEM CONTEXT (e.g., opening-hours) into generation stage (not retrieval).
+- Add retry when citations == 0 (not only on refusal/empty answer).
+- Stronger cache key (includes context hash + hint) and avoid caching 0-citation results.
 """
 import os
 import time
@@ -24,58 +30,31 @@ NO_CONTEXT_TOKEN = "[NO_CONTEXT]"
 INSTRUCTIONS = {
     "en": (
         "Answer ONLY from the retrieved context and any provided SYSTEM CONTEXT below.\n"
-        "SYSTEM CONTEXT may include a resolved date, public holiday status, weather, or open hours for a specific day.\n"
-        "If SYSTEM CONTEXT includes a 'Resolved date', ALWAYS answer directly about that specific date, using the facts given (e.g., 'Yes, classes are open on Thursday, October 30, 2025. Hours: 09:00–18:00.' or 'No, classes are closed on Sunday.')."
-        " DO NOT repeat or summarize the general opening hours policy unless the user explicitly asks for the weekly schedule or general business hours.\n"
-        "If SYSTEM CONTEXT indicates a public holiday or Sunday, say the center is closed and specify the next open day if possible.\n"
-        "If SYSTEM CONTEXT includes severe weather, mention any closures only if relevant to that date.\n"
-        "Use clear, direct answers, not generic rules, when a resolved date is provided.\n"
-        "Use short bullets. If context is irrelevant, or insufficient to answer the user's question in full and with high confidence, output [NO_CONTEXT] exactly.\n\n"
-        "IMPORTANT: Your answer MUST be in English. Do NOT answer in any other language, even if the user input is mixed.\n"
-        "If the retrieved context describes sending an enrollment form, ALWAYS append the marker [SEND_ENROLLMENT_FORM] on its own line at the end of your answer.\n"
-        "If the context describes sending Blooket instructions or the online game, ALWAYS append the marker [SEND_BLOOKET_PDF] on its own line at the end of your answer."
+        "Use short bullets. If context is irrelevant or insufficient to answer confidently, output [NO_CONTEXT] exactly."
     ),
     "zh-HK": (
-        "只可根據檢索內容及下方提供的【SYSTEM CONTEXT】作答。\n"
-        "【SYSTEM CONTEXT】可能包含「已解析日期」、公眾假期、天氣或特定日子的營業時間。\n"
-        "如【SYSTEM CONTEXT】包含「已解析日期」，必須直接針對該日回答（例如：「是，2025年10月30日（星期四）中心有開放，時間為09:00–18:00。」或「否，星期日中心休息。」）。"
-        "除非家長明確查詢整體營業時間或一週時間表，否則請勿重述或總結一般營業政策。\n"
-        "如【SYSTEM CONTEXT】顯示為公眾假期或星期日，請明確回覆中心休息，如可行請提供下次開放日期。\n"
-        "如遇嚴重天氣，僅在相關日期需要時才提及停課安排。\n"
-        "有明確日期時，務必直接、明確回答，不要只說通用規則。\n"
-        "用精簡要點。若內容不足或無關，無法完整且有把握地回答用戶問題，請輸出 [NO_CONTEXT]。\n\n"
-        "你必須用繁體中文（香港）作答。嚴禁用英文或簡體中文作答，即使用戶輸入為混合語言亦然。\n"
-        "重要：如檢索內容涉及發送入學表格，請務必在答案最後另起一行加上此標記：[SEND_ENROLLMENT_FORM]\n"
-        "如涉及發送 Blooket 指引或網上遊戲說明，請務必在答案最後另起一行加上此標記：[SEND_BLOOKET_PDF]"
+        "只可根據檢索內容及下方的【SYSTEM CONTEXT】作答。\n"
+        "用精簡要點。若內容不足或無關，請輸出 [NO_CONTEXT]。"
     ),
     "zh-CN": (
-        "仅按检索内容和下方的【SYSTEM CONTEXT】作答。\n"
-        "【SYSTEM CONTEXT】可能包含“已解析日期”、公众假期、天气或某一特定日子的开放时间。\n"
-        "如【SYSTEM CONTEXT】给出“已解析日期”，必须直接针对该日回答（如：“是，2025年10月30日（星期四）中心正常开放，时间为09:00–18:00。”或“否，星期日中心休息。”）。"
-        "除非家长明确咨询整体营业时间或一周时间表，否则不要复述或概括营业政策。\n"
-        "如【SYSTEM CONTEXT】提示为公众假期或星期日，请直接说明当天休息，并尽量告知下次开放日期。\n"
-        "如有严重天气，仅在相关日期需要时才提及停课安排。\n"
-        "有明确日期时，务必直接明了地作答，不要只说一般规则。\n"
-        "用精简要点。若内容不足或无关，无法完整且有把握地回答用户问题，请输出 [NO_CONTEXT]。\n\n"
-        "你必须用简体中文作答。严禁用英文或繁体中文作答，即使用户输入为混合语言亦然。\n"
-        "重要：如检索内容涉及发送入学表格，请务必在答案末尾另起一行加上此标记：[SEND_ENROLLMENT_FORM]\n"
-        "如涉及发送 Blooket 指南或在线游戏说明，请务必在答案末尾另起一行加上此标记：[SEND_BLOOKET_PDF]"
+        "仅按检索内容和下方【SYSTEM CONTEXT】作答。\n"
+        "用精简要点。若内容不足或无关，请输出 [NO_CONTEXT]。"
     ),
 }
 
 OPENING_HOURS_WEATHER_GUARDRAIL = {
-    "en": "Important: Do NOT reference any weather information or weather policy unless the user asked about weather, or there is an active Black Rainstorm Signal or Typhoon Signal No. 8 (or above).",
-    "zh-HK": "重要：除非用戶主動詢問天氣，或當前正生效黑雨或八號（或以上）風球，否則不要提及任何天氣資訊或天氣政策文件。",
-    "zh-CN": "重要：除非用户主动询问天气，或当前正生效黑雨或八号（及以上）台风信号，否则不要引用任何天气信息或天气政策文档。",
+    "en": "Important: Do NOT reference weather unless the user asked, or there is an active Black Rainstorm Signal or Typhoon Signal No. 8 (or above).",
+    "zh-HK": "重要：除非用戶主動詢問天氣，或正生效黑雨或八號（或以上）風球，否則不要提及任何天氣資訊或天氣政策文件。",
+    "zh-CN": "重要：除非用户主动询问天气，或正生效黑雨或八号（及以上）台风信号，否则不要引用任何天气信息或天气政策文档。",
 }
 OPENING_HOURS_HOLIDAY_GUARDRAIL = {
-    "en": "Also: Do NOT mention public holidays unless the user asked about holidays, or the resolved date is a Hong Kong public holiday.",
+    "en": "Also: Do NOT mention public holidays unless the user asked, or the resolved date is a Hong Kong public holiday.",
     "zh-HK": "同時：除非用戶主動詢問或所涉日期是香港公眾假期，否則不要提及公眾假期。",
     "zh-CN": "同时：除非用户主动询问或所涉日期为香港公众假期，否则不要提及公众假期。",
 }
 
 CONTACT_MINIMAL_GUARDRAIL = {
-    "en": "If the user is asking for contact details, reply with ONLY phone and email on separate lines. Do not include address, map, or social links unless explicitly requested.",
+    "en": "If the user asks for contact details, reply with ONLY phone and email on separate lines. Do not include address/map/social unless explicitly requested.",
     "zh-HK": "如用戶詢問聯絡方式，只回覆電話及電郵，各佔一行。除非用戶明確要求，請不要加入地址、地圖或社交連結。",
     "zh-CN": "如用户询问联系方式，只回复电话和电邮，各占一行。除非用户明确要求，请不要加入地址、地图或社交链接。",
 }
@@ -93,7 +72,8 @@ APOLOGY_MARKERS = [
     "無提供相關信息","沒有相關信息","沒有資料","沒有相关资料","暂无相关信息","暂无资料",
 ]
 
-_CACHE: Dict[Tuple[str,str,str,str], Tuple[float, str, List[Dict], Dict[str,Any]]] = {}
+# Cache keyed by (lang, message, extra_context_hash, hint)
+_CACHE: Dict[Tuple[str, str, str, str], Tuple[float, str, List[Dict], Dict[str, Any]]] = {}
 _CACHE_TTL_SECS = int(os.environ.get("KB_RESPONSE_CACHE_TTL_SECS", "120"))
 
 def _lang_label(lang: Optional[str]) -> str:
@@ -144,7 +124,8 @@ def _parse_citations(cits_raw: List[Dict]) -> List[Dict]:
 
 def _filter_refusal(answer: str) -> str:
     stripped = (answer or "").strip()
-    if not stripped: return ""
+    if not stripped:
+        return ""
     if any(p in stripped.lower() for p in REFUSAL_PHRASES):
         return ""
     return stripped
@@ -158,54 +139,48 @@ def _silence_reason(answer: str, parsed_count: int) -> Optional[str]:
     if SETTINGS.kb_silence_apology and any(m in lower for m in APOLOGY_MARKERS): return "apology_marker"
     return None
 
-def _cache_key(lang: str, message: str, extra_context: Optional[str], hint_canonical: Optional[str]) -> Tuple[str,str,str,str]:
+def _cache_key(lang: str, message: str, extra_context: Optional[str], hint_canonical: Optional[str]) -> Tuple[str, str, str, str]:
     ec = extra_context or ""
     ec_hash = hashlib.sha256(ec.encode("utf-8")).hexdigest()[:12] if ec else ""
-    hc = hint_canonical or ""
-    return (lang, message.strip(), ec_hash, hc)
+    hc = (hint_canonical or "").strip().lower()
+    return (lang, (message or "").strip(), ec_hash, hc)
 
 def _cache_get(lang: str, message: str, extra_context: Optional[str], hint_canonical: Optional[str]):
     key = _cache_key(lang, message, extra_context, hint_canonical)
     now = time.time()
     entry = _CACHE.get(key)
-    if not entry: return None
+    if not entry:
+        return None
     ts, ans, cits, dbg = entry
     if now - ts > _CACHE_TTL_SECS:
         _CACHE.pop(key, None)
         return None
     return ans, cits, dbg
 
-def _cache_set(lang: str, message: str, extra_context: Optional[str], hint_canonical: Optional[str], ans: str, cits: List[Dict], dbg: Dict[str,Any]):
+def _cache_set(lang: str, message: str, extra_context: Optional[str], hint_canonical: Optional[str], ans: str, cits: List[Dict], dbg: Dict[str, Any]):
     key = _cache_key(lang, message, extra_context, hint_canonical)
     _CACHE[key] = (time.time(), ans, cits, dbg)
 
-def _build_prompt_template(prefix: str, lang: str, extra_context: Optional[str]) -> str:
+def _build_prompt_template(prefix: str, extra_context: Optional[str]) -> str:
     """
-    Build a prompt template for Bedrock KB generation that:
-    - Keeps retrieval query clean (only the user's message is sent to input.text)
-    - Injects our system rules and optional SYSTEM CONTEXT into the LLM prompt
-    Required placeholders for Bedrock KB:
+    Bedrock KB requires:
       - $search_results$  -> retrieved passages
-      - $query$           -> the user query (input.text)
+      - $query$           -> user query (input.text)
+    We prepend our instructions and optional SYSTEM CONTEXT to guide generation,
+    without polluting retrieval embeddings.
     """
     sc = ""
     if extra_context:
         sc = f"\nSYSTEM CONTEXT:\n{extra_context.strip()}\n"
-
-    template = (
+    return (
         f"{prefix.strip()}{sc}\n"
         "Use ONLY the retrieved context below to answer. If insufficient, output [NO_CONTEXT].\n\n"
         "Retrieved context:\n$search_results$\n\n"
         "User question:\n$query$\n\n"
         "Answer:"
     )
-    return template
 
 def _build_generation_configuration(prompt_template: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Bedrock KB RetrieveAndGenerate expects generationConfiguration with inferenceConfig.textInferenceConfig.
-    We optionally add a promptTemplate so instructions don't pollute retrieval.
-    """
     text_cfg: Dict[str, Any] = {}
     if getattr(SETTINGS, "gen_max_tokens", None) is not None:
         text_cfg["maxTokens"] = SETTINGS.gen_max_tokens
@@ -221,7 +196,7 @@ def _build_generation_configuration(prompt_template: Optional[str] = None) -> Di
         gen_cfg["inferenceConfig"] = {"textInferenceConfig": text_cfg}
     if prompt_template:
         gen_cfg["promptTemplate"] = {"textPromptTemplate": prompt_template}
-    # You may add guardrails here if enabled in SETTINGS:
+    # Optional: guardrails can be added here if configured
     # if SETTINGS.kb_guardrail_id and SETTINGS.kb_guardrail_version:
     #     gen_cfg["guardrailConfiguration"] = {
     #         "guardrailId": SETTINGS.kb_guardrail_id,
@@ -252,7 +227,6 @@ def chat_with_kb(
         "session_provided": bool(session_id),
         "message_chars": len(message or ""),
         "error": None,
-        "attempts": [],
         "silenced": False,
         "silence_reason": None,
         "latency_ms": None,
@@ -263,7 +237,7 @@ def chat_with_kb(
 
     t0 = time.time()
 
-    # Build prompt prefix + guardrails (these go into generation, NOT retrieval)
+    # Build prefix and guardrails (for generation only)
     prefix = _prompt_prefix(L)
     if hint_canonical and hint_canonical.lower() == "opening_hours":
         prefix = (
@@ -277,28 +251,26 @@ def chat_with_kb(
         if debug:
             debug_info["contact_guardrail"] = True
 
-    # Retrieval query MUST be only the user message (avoid polluting embeddings)
+    # Retrieval query MUST be only the user message; optional keyword bias
     user_query = (message or "").strip()
-
-    # Optional: light keyword expansion for retrieval, if provided
     if extra_keywords:
         user_query = f"{user_query}\nKeywords: {', '.join(extra_keywords)}"
 
-    # Build a per-request prompt template for the LLM generation stage
-    prompt_template = _build_prompt_template(prefix, L, extra_context)
+    # Prompt template for generation (does not affect retrieval)
+    prompt_template = _build_prompt_template(prefix, extra_context)
     gen_cfg = _build_generation_configuration(prompt_template)
     if debug:
         debug_info["generation_configuration"] = gen_cfg
         debug_info["retrieval_query"] = user_query
         debug_info["prompt_template_preview"] = prompt_template[:240]
 
-    # Language-only filter for retrieval
+    # Language filter for retrieval
     vec_cfg: Dict[str, Any] = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
     if not SETTINGS.kb_disable_lang_filter:
         vec_cfg["filter"] = {"equals": {"key": "language", "value": L}}
     debug_info["retrieval_config"] = dict(vec_cfg)
 
-    req: Dict = {
+    req: Dict[str, Any] = {
         "input": {"text": user_query},
         "retrieveAndGenerateConfiguration": {
             "type": "KNOWLEDGE_BASE",
@@ -310,11 +282,11 @@ def chat_with_kb(
             }
         },
     }
-    # If you later use session-based memory, you can add:
-    # if session_id:
-    #     req["sessionId"] = session_id
+    if session_id:
+        req["sessionId"] = session_id
 
     try:
+        # First attempt
         resp = rag.retrieve_and_generate(**req)
         answer = ((resp.get("output") or {}).get("text") or "").strip()
         raw_cits = resp.get("citations", []) or []
@@ -322,18 +294,23 @@ def chat_with_kb(
 
         if debug:
             debug_info["raw_citations"] = raw_cits
+            debug_info["input_preview"] = user_query[:160]
 
         answer = _filter_refusal(answer)
         reason = _silence_reason(answer, len(parsed))
 
-        # Optional retry without language filter if first pass failed
-        if (reason or not answer) and SETTINGS.kb_retry_nofilter:
+        # Retry when:
+        # - explicit failure/empty OR
+        # - zero citations (even if an answer was produced) and retry is enabled
+        need_retry_for_zero_citations = (len(parsed) == 0)
+        if ((reason or not answer) or need_retry_for_zero_citations) and SETTINGS.kb_retry_nofilter:
             kb_conf = req["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"]
             vec = kb_conf["retrievalConfiguration"]["vectorSearchConfiguration"]
-            vec.pop("filter", None)
-            # Optionally bump recall on retry
-            vec["numberOfResults"] = max(vec.get("numberOfResults", 6), 12)
-            debug_info["retry_reason"] = f"Initial attempt failed ({reason or 'empty_answer'}). Retrying without filter."
+            vec.pop("filter", None)  # remove language filter
+            vec["numberOfResults"] = max(vec.get("numberOfResults", 6), 12)  # bump recall
+            debug_info["retry_reason"] = (
+                f"{'no citations' if need_retry_for_zero_citations else (reason or 'empty_answer')}. Retrying without filter."
+            )
             debug_info["retry_retrieval_config"] = dict(vec)
 
             resp2 = rag.retrieve_and_generate(**req)
@@ -344,21 +321,29 @@ def chat_with_kb(
                 debug_info.setdefault("retry", {})["raw_citations"] = raw2
             answer2 = _filter_refusal(answer2)
             reason2 = _silence_reason(answer2, len(parsed2))
-            if not reason2 and answer2:
+            if (not reason2 and answer2) and len(parsed2) > 0:
                 answer, parsed, reason = answer2, parsed2, None
                 debug_info["retry_succeeded"] = True
 
+        # Optional footer
         if answer and not reason and SETTINGS.kb_append_staff_footer:
             answer = f"{answer}\n\n{STAFF.get(L, STAFF['en'])}"
 
         debug_info["latency_ms"] = int((time.time() - t0) * 1000)
+
+        # Avoid caching “poison” entries when citations are empty
         if reason:
             debug_info["silenced"] = True
             debug_info["silence_reason"] = reason
-            _cache_set(L, message or "", extra_context, hint_canonical, "", [], debug_info)
+            # do not cache failures
             return "", [], (debug_info if debug else {})
-        _cache_set(L, message or "", extra_context, hint_canonical, answer, parsed, debug_info)
-        return answer, parsed, (debug_info if debug else {})
+        else:
+            if len(parsed) == 0:
+                # Return what we have (for callers that don't require citations), but don't cache
+                return answer, parsed, (debug_info if debug else {})
+            _cache_set(L, message or "", extra_context, hint_canonical, answer, parsed, debug_info)
+            return answer, parsed, (debug_info if debug else {})
+
     except Exception as e:
         debug_info["error"] = f"{type(e).__name__}: {e}"
         return "", [], (debug_info if debug else {})
