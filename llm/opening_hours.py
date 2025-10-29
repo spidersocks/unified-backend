@@ -18,6 +18,9 @@ from llm.hko import get_weather_hint_for_opening
 from llm.config import SETTINGS
 
 HK_TZ = pytz.timezone("Asia/Hong_Kong")
+# opening_hours.py
+if holidays is None:
+    print("[OPENING_HOURS] ERROR: 'holidays' package not installed. HK public holiday resolution disabled.", flush=True)
 
 # Business hours
 WEEKDAY_OPEN = time(9, 0)    # Mon-Fri
@@ -132,6 +135,23 @@ def _is_public_holiday(d: datetime) -> Tuple[bool, Optional[str]]:
         return True, str(name)
     return False, None
 
+def _names_match(a: str, b: str) -> bool:
+    a = (a or "").lower()
+    b = (b or "").lower()
+    return a == b or a in b or b in a
+
+def _detect_holiday_keyword(message: str) -> Optional[str]:
+    m = (message or "").lower()
+    for official_name, keywords_list in _HOLIDAY_KEYWORDS.items():
+        for keyword in keywords_list:
+            k = keyword.lower()
+            if (' ' not in k and re.search(r'[a-zA-Z]', k)):
+                if re.search(r'\b' + re.escape(k) + r'\b', m):
+                    return official_name
+            elif k in m:
+                return official_name
+    return None
+
 # --- NEW: PARSER FOR SPECIAL NAMED DAYS ---
 def _parse_special_named_day(message: str, base: datetime) -> Optional[datetime]:
     """
@@ -153,93 +173,102 @@ def _parse_special_named_day(message: str, base: datetime) -> Optional[datetime]
 
 def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[datetime, str]]:
     """
-    Finds the date of an OFFICIAL PUBLIC HOLIDAY mentioned in the message.
-    ROBUST: Falls back to keyword matching even if the holidays library is unavailable.
+    Resolve an OFFICIAL PUBLIC HOLIDAY date mentioned in the message.
+    Robust against naming differences (e.g., "Mid-Autumn Festival" vs.
+    "The day following the Chinese Mid-Autumn Festival").
     """
     cal_this = _hk_calendar(base.year, base.year)
     cal_next = _hk_calendar(base.year + 1, base.year + 1)
-    
-    m_normalized = (message or "").lower()
-    
-    # CRITICAL FIX #1: Attempt keyword matching first, before relying on the calendar.
-    # This ensures that even if the holidays library is missing or out of sync,
-    # we can still detect holidays by their known names.
-    
-    # Collect all keyword-to-official-name mappings
-    keyword_to_official = {}
-    for official_name, keywords_list in _HOLIDAY_KEYWORDS.items():
-        for keyword in keywords_list:
-            keyword_to_official[keyword.lower()] = official_name
-    
-    # Check if any keyword appears in the message
-    matched_official_name = None
-    for keyword_lower, official_name in keyword_to_official.items():
-        # Use word-boundary regex for English keywords; substring match for Chinese
-        if ' ' not in keyword_lower and re.search(r'[a-zA-Z]', keyword_lower):
-            if re.search(r'\b' + re.escape(keyword_lower) + r'\b', m_normalized):
-                matched_official_name = official_name
-                break
-        elif keyword_lower in m_normalized:
-            matched_official_name = official_name
-            break
-    
-    # CRITICAL FIX #2: If we matched a keyword, try to find the actual date from the calendar.
-    # If the calendar is unavailable, use a hardcoded fallback date.
-    if matched_official_name:
-        future_holiday_matches = []
-        
-        # Try to find this holiday in the official calendar
-        if cal_this or cal_next:
-            all_holidays = sorted((cal_this or {}).items()) + sorted((cal_next or {}).items())
-            for dt_obj, official_name in all_holidays:
-                if (official_name.lower() == matched_official_name.lower()
-                   or matched_official_name.lower() in official_name.lower()
-                   or official_name.lower() in matched_official_name.lower()):
+    matched_official = _detect_holiday_keyword(message)
+    if not matched_official:
+        # Fallback scan (original CRITICAL FIX #5) remains as last resort below
+        pass
+    else:
+        # Preferred path: fuzzy match calendar event names against the matched official name
+        future_matches: list[Tuple[datetime, str]] = []
+        for cal in (cal_this, cal_next):
+            if not cal:
+                continue
+            for dt_obj, off_name in cal.items():
+                if _names_match(off_name, matched_official):
                     dt_hk = HK_TZ.localize(datetime.combine(dt_obj, time(12, 0)))
-                    # Include only future occurrences (today and beyond)
                     if dt_hk.date() >= base.date():
-                        future_holiday_matches.append((dt_hk, official_name))
-        
-        if future_holiday_matches:
-            return min(future_holiday_matches, key=lambda x: x[0])
-        
-        # If the holiday has already passed this year, try next year
-        if cal_next:
-            all_holidays_next = sorted(cal_next.items())
-            for dt_obj, official_name in all_holidays_next:
-                if official_name == matched_official_name:
-                    dt_hk = HK_TZ.localize(datetime.combine(dt_obj, time(12, 0)))
-                    return (dt_hk, official_name)
-        
-        return None
-    
-    # CRITICAL FIX #5: If no keyword matched but calendar is available,
-    # scan the calendar for any holiday after today (original behavior).
-    if cal_this or cal_next:
-        all_holidays = sorted((cal_this or {}).items()) + sorted((cal_next or {}).items())
-        future_holiday_matches = []
+                        future_matches.append((dt_hk, off_name))
 
+        if future_matches:
+            return min(future_matches, key=lambda x: x[0])
+
+        # If nothing left this year, try next year again with fuzzy match (no future-date filter needed now)
+        if cal_next:
+            for dt_obj, off_name in cal_next.items():
+                if _names_match(off_name, matched_official):
+                    dt_hk = HK_TZ.localize(datetime.combine(dt_obj, time(12, 0)))
+                    return (dt_hk, off_name)
+
+        # Calendar unavailable? Provide a best-effort fixed-date fallback for a few Gregorian holidays.
+        if not cal_this and not cal_next:
+            dt_fallback = _fixed_gregorian_fallback(matched_official, base)
+            if dt_fallback:
+                return dt_fallback, matched_official
+        # Otherwise give up and allow the broader scan below to try.
+    
+    # Original CRITICAL FIX #5: scan calendars using keyword matching per holiday entry
+    if cal_this or cal_next:
+        m_normalized = (message or "").lower()
+        future_holiday_matches: list[Tuple[datetime, str]] = []
+        all_holidays = sorted((cal_this or {}).items()) + sorted((cal_next or {}).items())
         for dt_obj, official_name in all_holidays:
             dt_hk = HK_TZ.localize(datetime.combine(dt_obj, time(12, 0)))
             if dt_hk.date() < base.date():
                 continue
-
             keywords_for_holiday = _HOLIDAY_KEYWORDS.get(official_name)
             if not keywords_for_holiday:
                 continue
-
             for keyword in keywords_for_holiday:
-                if ' ' not in keyword and re.search(r'[a-zA-Z]', keyword):
-                    if re.search(r'\b' + re.escape(keyword) + r'\b', m_normalized):
+                k = keyword.lower()
+                if (' ' not in k and re.search(r'[a-zA-Z]', k)):
+                    if re.search(r'\b' + re.escape(k) + r'\b', m_normalized):
                         future_holiday_matches.append((dt_hk, official_name))
                         break
-                elif keyword in m_normalized:
+                elif k in m_normalized:
                     future_holiday_matches.append((dt_hk, official_name))
                     break
-        
         if future_holiday_matches:
             return min(future_holiday_matches, key=lambda x: x[0])
 
+    return None
+
+# Minimal fixed-date fallback (only used when 'holidays' is unavailable)
+_FIXED_GREGORIAN = {
+    "Christmas Day": (12, 25),
+    "Labour Day": (5, 1),
+    "National Day": (10, 1),
+    "HKSAR Establishment Day": (7, 1),
+}
+
+def _first_weekday_after(dt: datetime) -> datetime:
+    # Mon-Fri as business weekdays; advance to next Mon-Fri strictly after dt
+    d = dt + timedelta(days=1)
+    while d.weekday() > 4:
+        d += timedelta(days=1)
+    return d
+
+def _fixed_gregorian_fallback(official_name: str, base: datetime) -> Optional[datetime]:
+    name = (official_name or "").strip()
+    y = base.year
+    if name in _FIXED_GREGORIAN:
+        m, d = _FIXED_GREGORIAN[name]
+        cand = HK_TZ.localize(datetime(y, m, d, 12, 0))
+        if cand.date() < base.date():
+            cand = HK_TZ.localize(datetime(y + 1, m, d, 12, 0))
+        return cand
+    if name == "The first weekday after Christmas Day":
+        day = HK_TZ.localize(datetime(y, 12, 25, 12, 0))
+        cand = _first_weekday_after(day)
+        if cand.date() < base.date():
+            day_next = HK_TZ.localize(datetime(y + 1, 12, 25, 12, 0))
+            cand = _first_weekday_after(day_next)
+        return cand
     return None
 
 _ORD_DAY_PAT = re.compile(r"\b(?:(?:the\s+)?)((?:[12]?\d|3[01]))(?:st|nd|rd|th)?\b", re.I)
@@ -414,6 +443,9 @@ def _get_opening_facts(message: str, lang: Optional[str] = None, is_general: boo
     dt = None
     holiday_reason = None
     parse_debug = {}
+    holiday_kw_official = _detect_holiday_keyword(msg)
+    parse_debug["holiday_keyword_detected"] = bool(holiday_kw_official)
+    parse_debug["holiday_keyword_official"] = holiday_kw_official
 
     # --- Attempt 1: Parse special, non-holiday named days (e.g., Christmas Eve). ---
     dt = _parse_special_named_day(msg, now)
@@ -428,6 +460,7 @@ def _get_opening_facts(message: str, lang: Optional[str] = None, is_general: boo
             parse_debug["matched_via"] = "public_holiday"
             parse_debug["holiday_name"] = holiday_reason
     
+    parse_debug["is_fallback_to_now"] = (dt is None)
     # --- Attempt 3: If still no date, use general-purpose date parsing. ---
     if dt is None:
         dt = _parse_datetime(msg, now, L)
@@ -468,31 +501,25 @@ def _get_opening_facts(message: str, lang: Optional[str] = None, is_general: boo
     }
 
 def extract_opening_context(message: str, lang: Optional[str] = None) -> str:
-    """
-    Returns a context string with resolved attendance facts for the LLM.
-    This function is now a thin wrapper around _get_opening_facts.
-    """
-    # is_general is False because this function is only called for specific queries
     facts = _get_opening_facts(message, lang, is_general=False)
     dt = facts["datetime"]
     L = facts["lang"]
-    
-    context_lines = []
+    dbg = facts.get("parse_debug", {})
+    suppress_hours = bool(dbg.get("holiday_keyword_detected") and dbg.get("is_fallback_to_now"))
+
+    lines = []
     if facts["weather_hint"]:
-        context_lines.append(f"Weather Status: {facts['weather_hint']}")
-        
-    context_lines.append(f"Resolved date: {dt.strftime('%Y-%m-%d')} ({_fmt_date_human(dt, L)})")
-    
+        lines.append(f"Weather Status: {facts['weather_hint']}")
+    lines.append(f"Resolved date: {dt.strftime('%Y-%m-%d')} ({_fmt_date_human(dt, L)})")
     if facts["is_holiday"]:
-        context_lines.append(f"Public holiday: Yes ({facts['holiday_name']})")
-    
+        lines.append(f"Public holiday: Yes ({facts['holiday_name']})")
     if facts["is_sunday"]:
-        context_lines.append("Day: Sunday (center closed)")
-    
-    if facts["open_time"] and facts["close_time"] and not facts["is_holiday"] and not facts["is_sunday"]:
-        context_lines.append(f"Open hours: {_fmt_time(facts['open_time'])}–{_fmt_time(facts['close_time'])}")
-    
-    return "\n".join(context_lines)
+        lines.append("Day: Sunday (center closed)")
+    if (facts["open_time"] and facts["close_time"]
+        and not facts["is_holiday"] and not facts["is_sunday"]
+        and not suppress_hours):
+        lines.append(f"Open hours: {_fmt_time(facts['open_time'])}–{_fmt_time(facts['close_time'])}")
+    return "\n".join(lines)
 
 def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool = False, is_general: bool = False) -> str:
     """
