@@ -192,7 +192,9 @@ def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[date
         if cal_this or cal_next:
             all_holidays = sorted((cal_this or {}).items()) + sorted((cal_next or {}).items())
             for dt_obj, official_name in all_holidays:
-                if official_name == matched_official_name:
+                if (official_name.lower() == matched_official_name.lower()
+                   or matched_official_name.lower() in official_name.lower()
+                   or official_name.lower() in matched_official_name.lower()):
                     dt_hk = HK_TZ.localize(datetime.combine(dt_obj, time(12, 0)))
                     # Include only future occurrences (today and beyond)
                     if dt_hk.date() >= base.date():
