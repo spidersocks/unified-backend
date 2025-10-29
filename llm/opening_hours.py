@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, time
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, Callable
 import re
 
 import pytz
@@ -15,8 +15,6 @@ except Exception:
 
 from functools import lru_cache
 from llm.hko import get_weather_hint_for_opening
-# We remove the import of is_general_hours_query to avoid circular dependencies
-# from llm.intent import is_general_hours_query
 from llm.config import SETTINGS
 
 HK_TZ = pytz.timezone("Asia/Hong_Kong")
@@ -61,64 +59,33 @@ _REL_ZH = {
 _REL_EN = {"today": 0, "tomorrow": 1, "day after tomorrow": 2}
 
 # --- SINGLE SOURCE OF TRUTH FOR HOLIDAY KEYWORDS ---
-# This dictionary is now imported and used by intent.py for consistency.
-# Keys are the terms to search for in the user's message.
-# Values are the official English names from the `holidays` library.
 _HOLIDAY_KEYWORDS = {
-    "lunar new year": "Lunar New Year",
-    "chinese new year": "Lunar New Year",
-    "the first day of lunar new year": "Lunar New Year",
-    "the second day of lunar new year": "Second Day of Lunar New Year",
-    "the third day of lunar new year": "Third Day of Lunar New Year",
-    "年初一": "Lunar New Year",
-    "年初二": "Second Day of Lunar New Year",
-    "年初三": "Third Day of Lunar New Year",
-    "農曆新年": "Lunar New Year", "农历新年": "Lunar New Year",
-
-    "ching ming": "Ching Ming Festival",
-    "tomb-sweeping": "Ching Ming Festival",
-    "清明": "Ching Ming Festival", "清明節": "Ching Ming Festival", "清明节": "Ching Ming Festival",
-
-    "chung yeung": "Chung Yeung Festival",
-    "重陽": "Chung Yeung Festival", "重阳": "Chung Yeung Festival", "重陽節": "Chung Yeung Festival", "重阳节": "Chung Yeung Festival",
-
-    "tuen ng": "Tuen Ng Festival",
-    "dragon boat": "Tuen Ng Festival",
-    "端午": "Tuen Ng Festival", "端午節": "Tuen Ng Festival", "端午节": "Tuen Ng Festival",
-
-    "mid-autumn": "Mid-Autumn Festival", "mid autumn": "Mid-Autumn Festival",
-    "the day following the chinese mid-autumn festival": "The day following the Chinese Mid-Autumn Festival",
-    "中秋": "Mid-Autumn Festival", "中秋節": "Mid-Autumn Festival", "中秋节": "Mid-Autumn Festival",
-    "中秋節翌日": "The day following the Chinese Mid-Autumn Festival", "中秋节翌日": "The day following the Chinese Mid-Autumn Festival",
-
-    "buddha": "Buddha's Birthday", "buddha's birthday": "Buddha's Birthday",
-    "佛誕": "Buddha's Birthday", "佛诞": "Buddha's Birthday",
-
-    "national day": "National Day",
-    "國慶": "National Day", "国庆": "National Day", "國慶日": "National Day", "国庆日": "National Day",
-
-    "labour day": "Labour Day", "labor day": "Labour Day",
-    "勞動節": "Labour Day", "劳动节": "Labour Day",
-
-    "establishment day": "HKSAR Establishment Day", "hksar establishment": "HKSAR Establishment Day",
-    "回歸": "HKSAR Establishment Day", "回归": "HKSAR Establishment Day",
-    "香港特別行政區成立紀念日": "HKSAR Establishment Day", "香港特别行政区成立纪念日": "HKSAR Establishment Day",
-
-    "good friday": "Good Friday",
-    "easter monday": "Easter Monday",
-    "耶穌受難日": "Good Friday", "耶稣受难日": "Good Friday",
-    "復活節星期一": "Easter Monday", "复活节星期一": "Easter Monday",
-
-    "christmas eve": "Christmas Eve",
-    "平安夜": "Christmas Eve",
-
-    "christmas": "Christmas Day", "christmas day": "Christmas Day",
-    "the first weekday after christmas day": "The first weekday after Christmas Day",
-    "聖誕": "Christmas Day", "圣诞": "Christmas Day",
-    "聖誕節": "Christmas Day", "圣诞节": "Christmas Day",
-    "聖誕節後首個工作天": "The first weekday after Christmas Day",
-    "圣诞节后第一个工作日": "The first weekday after Christmas Day",
+    "Lunar New Year": ["lunar new year", "chinese new year", "the first day of lunar new year", "年初一", "農曆新年", "农历新年"],
+    "Second Day of Lunar New Year": ["the second day of lunar new year", "年初二"],
+    "Third Day of Lunar New Year": ["the third day of lunar new year", "年初三"],
+    "Ching Ming Festival": ["ching ming", "tomb-sweeping", "清明", "清明節", "清明节"],
+    "Chung Yeung Festival": ["chung yeung", "重陽", "重阳", "重陽節", "重阳节"],
+    "Tuen Ng Festival": ["tuen ng", "dragon boat", "端午", "端午節", "端午节"],
+    "The day following the Chinese Mid-Autumn Festival": ["the day following the chinese mid-autumn festival", "中秋節翌日", "中秋节翌日"],
+    "Mid-Autumn Festival": ["mid-autumn", "mid autumn", "中秋", "中秋節", "中秋节"],
+    "Buddha's Birthday": ["buddha", "buddha's birthday", "佛誕", "佛诞"],
+    "National Day": ["national day", "國慶", "国庆", "國慶日", "国庆日"],
+    "Labour Day": ["labour day", "labor day", "勞動節", "劳动节"],
+    "HKSAR Establishment Day": ["establishment day", "hksar establishment", "回歸", "回归", "香港特別行政區成立紀念日", "香港特别行政区成立纪念日"],
+    "Good Friday": ["good friday", "耶穌受難日", "耶稣受难日"],
+    "Easter Monday": ["easter monday", "復活節星期一", "复活节星期一"],
+    "The first weekday after Christmas Day": ["the first weekday after christmas day", "聖誕節後首個工作天", "圣诞节后第一个工作日"],
+    "Christmas Day": ["christmas", "christmas day", "聖誕", "圣诞", "聖誕節", "圣诞节"],
 }
+
+# --- NEW: DICTIONARY FOR SPECIAL DAYS THAT ARE NOT PUBLIC HOLIDAYS ---
+# This allows us to parse days like "Christmas Eve" correctly.
+# The value is a function that takes a year and returns a (month, day) tuple.
+_SPECIAL_NAMED_DAYS: Dict[str, Callable[[int], Tuple[int, int]]] = {
+    "christmas eve": lambda year: (12, 24),
+    "平安夜": lambda year: (12, 24),
+}
+
 
 def _fmt_time(t: time) -> str:
     return f"{t.hour:02d}:{t.minute:02d}"
@@ -165,52 +132,61 @@ def _is_public_holiday(d: datetime) -> Tuple[bool, Optional[str]]:
         return True, str(name)
     return False, None
 
+# --- NEW: PARSER FOR SPECIAL NAMED DAYS ---
+def _parse_special_named_day(message: str, base: datetime) -> Optional[datetime]:
+    """
+    Parses special, non-public-holiday dates like Christmas Eve.
+    """
+    m_normalized = (message or "").lower()
+    for keyword, date_func in _SPECIAL_NAMED_DAYS.items():
+        if keyword in m_normalized:
+            # Check this year
+            month, day = date_func(base.year)
+            dt_this_year = HK_TZ.localize(datetime(base.year, month, day, 12, 0))
+            if dt_this_year.date() >= base.date():
+                return dt_this_year
+            # If past, check next year
+            month_next, day_next = date_func(base.year + 1)
+            dt_next_year = HK_TZ.localize(datetime(base.year + 1, month_next, day_next, 12, 0))
+            return dt_next_year
+    return None
+
 def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[datetime, str]]:
     """
-    --- REFACTORED FOR ROBUSTNESS ---
-    Finds the LONGEST matching holiday keyword in the message to avoid ambiguity.
-    e.g., matches "lunar new year" over "new year".
+    Finds the date of an OFFICIAL PUBLIC HOLIDAY mentioned in the message.
     """
     cal_this = _hk_calendar(base.year, base.year)
     cal_next = _hk_calendar(base.year + 1, base.year + 1)
     if not (cal_this or cal_next):
         return None
-    
+
     m_normalized = (message or "").lower()
+    all_holidays = sorted((cal_this or {}).items()) + sorted((cal_next or {}).items())
     
-    best_match_kw = ""
-    target_en_name = None
+    future_holiday_matches = []
 
-    # --- FIX: Simplified and corrected keyword matching logic ---
-    # The original logic was case-sensitive for multi-word English keywords.
-    # This new logic correctly checks all keywords against the lowercased message.
-    for k, en_kw in _HOLIDAY_KEYWORDS.items():
-        if k in m_normalized:
-            if len(k) > len(best_match_kw):
-                best_match_kw = k
-                target_en_name = en_kw
+    for dt_obj, official_name in all_holidays:
+        dt_hk = HK_TZ.localize(datetime.combine(dt_obj, time(12, 0)))
+        if dt_hk.date() < base.date():
+            continue
 
-    if not target_en_name:
-        return None
+        keywords_for_holiday = _HOLIDAY_KEYWORDS.get(official_name)
+        if not keywords_for_holiday:
+            continue
 
-    target_kw_lower = target_en_name.lower()
+        for keyword in keywords_for_holiday:
+            if ' ' not in keyword and re.search(r'[a-zA-Z]', keyword):
+                if re.search(r'\b' + re.escape(keyword) + r'\b', m_normalized):
+                    future_holiday_matches.append((dt_hk, official_name))
+                    break 
+            elif keyword in m_normalized:
+                future_holiday_matches.append((dt_hk, official_name))
+                break
+    
+    if future_holiday_matches:
+        return min(future_holiday_matches, key=lambda x: x[0])
 
-    def find_in_calendar(cal, yr: int):
-        if not cal:
-            return None
-        # Find the earliest date matching the holiday name in the given year
-        future_holidays = []
-        for dt0, name in cal.items():
-            if target_kw_lower in str(name).lower():
-                dt_hk = HK_TZ.localize(datetime(yr, dt0.month, dt0.day, 12, 0))
-                if dt_hk.date() >= base.date():
-                    future_holidays.append((dt_hk, str(name)))
-        return min(future_holidays, key=lambda x: x[0]) if future_holidays else None
-
-    hit = find_in_calendar(cal_this, base.year)
-    if hit:
-        return hit
-    return find_in_calendar(cal_next, base.year + 1)
+    return None
 
 _ORD_DAY_PAT = re.compile(r"\b(?:(?:the\s+)?)((?:[12]?\d|3[01]))(?:st|nd|rd|th)?\b", re.I)
 _TIME_PAT = re.compile(r"\b(\d{1,2}):(\d{2})\b|\b(\d{1,2})\s*(am|pm)\b", re.I)
@@ -369,7 +345,7 @@ def _localize_holiday_name(name_en: str, L: str) -> str:
 def _contains_time_of_day(message: str) -> bool:
     return bool(re.search(r"\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(am|pm)\b", message, flags=re.IGNORECASE) or re.search(r"[一二两三四五六七八九十〇零]{1,3}\s*(点|點|时|時)", message))
 
-# --- REFACTORED LOGIC ---
+# --- REVISED LOGIC WITH NEW PARSING ORDER ---
 
 def _get_opening_facts(message: str, lang: Optional[str] = None, is_general: bool = False) -> Dict[str, Any]:
     """
@@ -384,14 +360,18 @@ def _get_opening_facts(message: str, lang: Optional[str] = None, is_general: boo
     dt = None
     holiday_reason = None
 
-    # --- Attempt 1: Search for a specific, named holiday using our curated list. ---
-    # This is the most reliable method for holiday queries.
-    holiday_match = _search_holiday_by_name(msg, now)
-    if holiday_match:
-        dt, holiday_reason = holiday_match
+    # --- Attempt 1: Parse special, non-holiday named days (e.g., Christmas Eve). ---
+    # This is the highest priority to ensure these keywords are always caught.
+    dt = _parse_special_named_day(msg, now)
+
+    # --- Attempt 2: If not a special day, search for an official public holiday. ---
+    if dt is None:
+        holiday_match = _search_holiday_by_name(msg, now)
+        if holiday_match:
+            dt, holiday_reason = holiday_match
     
-    # --- Attempt 2: If no named holiday, use general-purpose date parsing. ---
-    # This handles relative dates ("tomorrow"), weekdays ("next Mon"), and absolute dates ("Dec 25").
+    # --- Attempt 3: If still no date, use general-purpose date parsing. ---
+    # This handles relative dates ("tomorrow"), weekdays ("next Mon"), etc.
     if dt is None:
         dt = _parse_datetime(msg, now, L)
 
@@ -404,7 +384,8 @@ def _get_opening_facts(message: str, lang: Optional[str] = None, is_general: boo
     weather_hint = get_weather_hint_for_opening(L) if SETTINGS.opening_hours_weather_enabled else None
     open_t, close_t = _dow_window(final_dt.weekday())
     
-    # If we resolved a date but don't have a holiday reason yet (e.g., from "Dec 25"), check if it's a holiday.
+    # If we resolved a date but don't have a holiday reason yet, check if it's a holiday.
+    # This covers cases like parsing "Dec 25" and then realizing it's Christmas.
     if holiday_reason is None:
         is_holiday, name = _is_public_holiday(final_dt)
         if is_holiday:

@@ -1,5 +1,5 @@
 import re
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, List
 
 # Import the single source of truth for holiday keywords from opening_hours
 # This prevents inconsistencies between intent detection and date parsing.
@@ -35,7 +35,6 @@ _ZH_HK_WEAK_TERMS = [
 _ZH_CN_STRONG_TERMS = [
     r"营业|开放|开门|关门|几点(开|关)",
     r"上课|上学|上(?:不)?上课",
-
     r"安排|改期",
     r"公众假期|公休日|假期",
 ]
@@ -55,9 +54,10 @@ _TIME_HINTS = [
     r"[上下]午", r"\d點|\d点",
 ]
 
-# --- REMOVED REDUNDANT HOLIDAY LISTS ---
-# We now use the keys from the _HOLIDAY_KEYWORDS dictionary in opening_hours.py
-_HOLIDAY_TERMS_REGEX = [re.escape(term) for term in _HOLIDAY_KEYWORDS.keys()]
+# --- FLATTENED HOLIDAY KEYWORDS FOR REGEX ---
+# We now use the values from the _HOLIDAY_KEYWORDS dictionary in opening_hours.py
+_ALL_HOLIDAY_KEYWORDS: List[str] = [keyword for sublist in _HOLIDAY_KEYWORDS.values() for keyword in sublist]
+_HOLIDAY_TERMS_REGEX = [re.escape(term) for term in _ALL_HOLIDAY_KEYWORDS]
 
 
 # Negative markers: if present, do NOT classify as opening-hours
@@ -81,7 +81,7 @@ def is_general_hours_query(message: str, lang: str) -> bool:
     but does NOT contain any explicit date, weekday, relative-day, or named holiday marker.
     Used to distinguish 'What are your opening hours?' from 'Are you open on Christmas?'.
     """
-    m = message or ""
+    m = (message or "").lower()
     # An intent check is no longer needed here; this function's purpose is to refine
     # a query already determined to have opening hours intent.
 
@@ -107,12 +107,13 @@ def is_general_hours_query(message: str, lang: str) -> bool:
     # --- MAJOR FIX ---
     # Check for named holidays. If one is found, the query is specific.
     # We use the consolidated list imported from opening_hours.py
-    for holiday_term in _HOLIDAY_KEYWORDS.keys():
+    for holiday_term in _ALL_HOLIDAY_KEYWORDS:
         # Use regex to match whole words for English terms to avoid partial matches like 'day' in 'today'
-        if holiday_term.isalpha() and re.search(r'\b' + re.escape(holiday_term) + r'\b', m, re.I):
-             return False
+        if ' ' not in holiday_term and re.search(r'[a-zA-Z]', holiday_term):
+             if re.search(r'\b' + re.escape(holiday_term) + r'\b', m, re.I):
+                return False
         # For Chinese terms or multi-word English terms, simple substring search is fine
-        elif not holiday_term.isalpha() and holiday_term in m.lower():
+        elif holiday_term in m:
              return False
 
     # If no specific date, weekday, or holiday markers are found, it's a general query.
