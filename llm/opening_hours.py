@@ -15,7 +15,8 @@ except Exception:
 
 from functools import lru_cache
 from llm.hko import get_weather_hint_for_opening
-from llm.intent import is_general_hours_query
+# We remove the import of is_general_hours_query to avoid circular dependencies
+# from llm.intent import is_general_hours_query
 from llm.config import SETTINGS
 
 HK_TZ = pytz.timezone("Asia/Hong_Kong")
@@ -59,7 +60,10 @@ _REL_ZH = {
 }
 _REL_EN = {"today": 0, "tomorrow": 1, "day after tomorrow": 2}
 
-# Holiday keyword hints (English + HK/CN)
+# --- SINGLE SOURCE OF TRUTH FOR HOLIDAY KEYWORDS ---
+# This dictionary is now imported and used by intent.py for consistency.
+# Keys are the terms to search for in the user's message.
+# Values are the official English names from the `holidays` library.
 _HOLIDAY_KEYWORDS = {
     "lunar new year": "Lunar New Year",
     "chinese new year": "Lunar New Year",
@@ -163,10 +167,14 @@ def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[date
     cal_next = _hk_calendar(base.year + 1, base.year + 1)
     if not (cal_this or cal_next):
         return None
-    mlow = (message or "").lower()
+    
+    m_normalized = (message or "").lower()
     target_kw = None
+
+    # Iterate through our canonical list of holiday keywords
     for k, en_kw in _HOLIDAY_KEYWORDS.items():
-        if k in mlow or k in (message or ""):
+        # Check for English keywords (case-insensitive) or Chinese keywords (case-sensitive)
+        if (k.isalpha() and k in m_normalized) or (not k.isalpha() and k in message):
             target_kw = en_kw.lower()
             break
     if not target_kw:
@@ -348,7 +356,7 @@ def _contains_time_of_day(message: str) -> bool:
 
 # --- REFACTORED LOGIC ---
 
-def _get_opening_facts(message: str, lang: Optional[str] = None) -> Dict[str, Any]:
+def _get_opening_facts(message: str, lang: Optional[str] = None, is_general: bool = False) -> Dict[str, Any]:
     """
     A single source of truth for all date, holiday, and weather analysis.
     Parses the user message and returns a dictionary of facts.
@@ -379,7 +387,7 @@ def _get_opening_facts(message: str, lang: Optional[str] = None) -> Dict[str, An
         "holiday_name": holiday_reason,
         "weather_hint": weather_hint,
         "asked_specific_time": _contains_time_of_day(message or ""),
-        "is_general_query": is_general_hours_query(message, L)
+        "is_general_query": is_general
     }
 
 def extract_opening_context(message: str, lang: Optional[str] = None) -> str:
@@ -387,7 +395,8 @@ def extract_opening_context(message: str, lang: Optional[str] = None) -> str:
     Returns a context string with resolved attendance facts for the LLM.
     This function is now a thin wrapper around _get_opening_facts.
     """
-    facts = _get_opening_facts(message, lang)
+    # is_general is False because this function is only called for specific queries
+    facts = _get_opening_facts(message, lang, is_general=False)
     dt = facts["datetime"]
     L = facts["lang"]
     
@@ -408,12 +417,12 @@ def extract_opening_context(message: str, lang: Optional[str] = None) -> str:
     
     return "\n".join(context_lines)
 
-def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool = False) -> str:
+def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool = False, is_general: bool = False) -> str:
     """
     Deterministic opening-hours answer using a unified facts object.
     Prioritizes closure reasons: 1. Weather, 2. Holiday, 3. Sunday.
     """
-    facts = _get_opening_facts(message, lang)
+    facts = _get_opening_facts(message, lang, is_general=is_general)
     L = facts["lang"]
     dt = facts["datetime"]
     date_h = _fmt_date_human(dt, L)

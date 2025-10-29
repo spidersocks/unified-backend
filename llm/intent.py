@@ -1,6 +1,10 @@
 import re
 from typing import Tuple, Dict, Any
 
+# Import the single source of truth for holiday keywords from opening_hours
+# This prevents inconsistencies between intent detection and date parsing.
+from llm.opening_hours import _HOLIDAY_KEYWORDS
+
 # Broad catch-all intent detection for opening hours, attendance, and arrangements
 # Supports English, zh-HK (Traditional), zh-CN (Simplified)
 
@@ -42,46 +46,12 @@ _TIME_HINTS = [
     r"[上下]午", r"\d點|\d点",
 ]
 
-# Holiday name patterns (EN / zh-HK / zh-CN)
-_HOLIDAY_EN = [
-    r"\blunar new year\b", r"\bchinese new year\b", r"\bsecond day of lunar new year\b", r"\bthird day of lunar new year\b",
-    r"\bching ming\b", r"\btomb-?sweeping\b",
-    r"\bchung yeung\b",
-    r"\btuen ng\b", r"\bdragon boat\b",
-    r"\bmid[- ]autumn\b", r"\bthe day following the chinese mid[- ]autumn festival\b",
-    r"\bbuddha(?:'s)? birthday\b",
-    r"\bnational day\b",
-    r"\blabou?r day\b",
-    r"\bhksar establishment day\b|\bestablishment day\b",
-    r"\bgood friday\b", r"\beaster monday\b",
-    r"\bchristmas\b|\bfirst weekday after christmas\b",
-]
-_HOLIDAY_ZH_HK = [
-    r"農曆新年|年初[一二三]|新年",
-    r"清明|清明節",
-    r"重陽|重陽節",
-    r"端午|端午節",
-    r"中秋|中秋節|中秋節翌日",
-    r"佛誕",
-    r"國慶|國慶日",
-    r"勞動節",
-    r"回歸|香港特別行政區成立紀念日",
-    r"耶穌受難日|復活節星期一",
-    r"聖誕|聖誕節|聖誕節後首個工作天",
-]
-_HOLIDAY_ZH_CN = [
-    r"农历新年|年初[一二三]|新年",
-    r"清明|清明节",
-    r"重阳|重阳节",
-    r"端午|端午节",
-    r"中秋|中秋节|中秋节翌日",
-    r"佛诞",
-    r"国庆|国庆日",
-    r"劳动节",
-    r"回归|香港特别行政区成立纪念日",
-    r"耶稣受难日|复活节星期一",
-    r"圣诞|圣诞节|圣诞节后第一个工作日",
-]
+# --- REMOVED REDUNDANT HOLIDAY LISTS ---
+# The _HOLIDAY_EN, _HOLIDAY_ZH_HK, and _HOLIDAY_ZH_CN lists were removed.
+# We now use the keys from the _HOLIDAY_KEYWORDS dictionary in opening_hours.py
+# as the single source of truth.
+_HOLIDAY_TERMS_REGEX = [re.escape(term) for term in _HOLIDAY_KEYWORDS.keys()]
+
 
 # Negative markers: if present, do NOT classify as opening-hours
 _NEG_EN = [r"\b(tuition|fee|fees|price|cost)\b", r"\bclass\s*size\b"]
@@ -100,42 +70,44 @@ def _score_regex(message: str, patterns: list[str]) -> Tuple[int, list[str]]:
 def is_general_hours_query(message: str, lang: str) -> bool:
     """
     Returns True if the message is about opening hours/attendance intent,
-    but does NOT contain any explicit date, weekday, or relative-day marker.
-    Used to distinguish 'What are your opening hours?' from 'Are you open on Sunday?'.
-    For EN, treat 'public holiday' or 'holiday' as general.
+    but does NOT contain any explicit date, weekday, relative-day, or named holiday marker.
+    Used to distinguish 'What are your opening hours?' from 'Are you open on Christmas?'.
     """
     m = message or ""
-    L = lang.lower() if lang else "en"
-    is_intent, _ = detect_opening_hours_intent(m, lang, use_llm=True)
-    if not is_intent:
-        return False
+    # An intent check is no longer needed here; this function's purpose is to refine
+    # a query already determined to have opening hours intent.
 
     # Weekday and relative-day markers (in all languages)
-    weekday_patterns = [
+    specific_date_patterns = [
+        # Weekdays
         r"\b(mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+        # Relative days
         r"\b(today|tomorrow|yesterday|next week|this week)\b",
+        # Chinese weekdays
         r"星期[一二三四五六日天]|周[一二三四五六日天]|週[一二三四五六日天]|礼拜[一二三四五六日天]|禮拜[一二三四五六日天]",
-        r"今天|今日|明天|聽日|后天|後日|下周|下星期|本周|本星期"
+        # Chinese relative days
+        r"今天|今日|明天|聽日|后天|後日|下周|下星期|本周|本星期",
+        # Explicit numeric dates
+        r"\d{1,2}\s*(月|日|号|號)",
+        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*\d{1,2}\b",
+        r"\b\d{1,2}/\d{1,2}\b",
     ]
-    for pat in weekday_patterns:
+    for pat in specific_date_patterns:
         if re.search(pat, m, re.I):
-            return False
+            return False # Found a specific date marker
 
-    # Explicit date markers
-    if re.search(r"\d{1,2}\s*(月|日|号|號)", m):
-        return False
-    if re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*\d{1,2}\b", m, re.I):
-        return False
-    if re.search(r"\b\d{1,2}/\d{1,2}\b", m):
-        return False
+    # --- MAJOR FIX ---
+    # Check for named holidays. If one is found, the query is specific.
+    # We use the consolidated list imported from opening_hours.py
+    for holiday_term in _HOLIDAY_KEYWORDS.keys():
+        # Use regex to match whole words for English terms to avoid partial matches like 'day' in 'today'
+        if holiday_term.isalpha() and re.search(r'\b' + re.escape(holiday_term) + r'\b', m, re.I):
+             return False
+        # For Chinese terms, simple substring search is fine
+        elif not holiday_term.isalpha() and holiday_term in m:
+             return False
 
-    # For EN: treat 'public holiday' or 'holiday' as general unless a date is present
-    if L == "en" and re.search(r"\b(public holiday|holiday|holidays?)\b", m, re.I):
-        # If also contains "on <date>", not general
-        if re.search(r"\bon\b.*\d{1,2}", m, re.I):
-            return False
-        return True
-
+    # If no specific date, weekday, or holiday markers are found, it's a general query.
     return True
 
 def detect_opening_hours_intent(message: str, lang: str, use_llm: bool = True) -> Tuple[bool, Dict[str, Any]]:
@@ -144,20 +116,18 @@ def detect_opening_hours_intent(message: str, lang: str, use_llm: bool = True) -
     if L.startswith("zh-hk"):
         base_terms = _ZH_HK_TERMS
         neg_terms = _NEG_ZH_HK
-        holiday_terms = _HOLIDAY_ZH_HK
     elif L.startswith("zh-cn") or L == "zh":
         base_terms = _ZH_CN_TERMS
         neg_terms = _NEG_ZH_CN
-        holiday_terms = _HOLIDAY_ZH_CN
     else:
         base_terms = _EN_TERMS
         neg_terms = _NEG_EN
-        holiday_terms = _HOLIDAY_EN
 
     base_score, base_hits = _score_regex(m, base_terms)
     time_score, time_hits = _score_regex(m, _TIME_HINTS)
     weather_score, weather_hits = _score_regex(m, _WEATHER_MARKERS)
-    holiday_score, holiday_hits = _score_regex(m, holiday_terms)
+    # Use the consolidated holiday list for scoring
+    holiday_score, holiday_hits = _score_regex(m, _HOLIDAY_TERMS_REGEX)
     neg_score, neg_hits = _score_regex(m, neg_terms)
 
     # Require at least one real signal (base/time/holiday), and suppress if negative terms are present.
