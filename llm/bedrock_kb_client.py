@@ -184,18 +184,19 @@ def _build_prompt_template(prefix: str, lang: str, extra_context: Optional[str])
     Build a prompt template for Bedrock KB generation that:
     - Keeps retrieval query clean (only the user's message is sent to input.text)
     - Injects our system rules and optional SYSTEM CONTEXT into the LLM prompt
-    Note: {{context}} and {{input}} are the placeholders Bedrock KB substitutes
-    with retrieved passages and the user query, respectively.
+    Required placeholders for Bedrock KB:
+      - $search_results$  -> retrieved passages
+      - $query$           -> the user query (input.text)
     """
     sc = ""
     if extra_context:
         sc = f"\nSYSTEM CONTEXT:\n{extra_context.strip()}\n"
-    # Optional guardrails are included in 'prefix'
+
     template = (
         f"{prefix.strip()}{sc}\n"
         "Use ONLY the retrieved context below to answer. If insufficient, output [NO_CONTEXT].\n\n"
-        "Retrieved context:\n{{context}}\n\n"
-        "User question:\n{{input}}\n\n"
+        "Retrieved context:\n$search_results$\n\n"
+        "User question:\n$query$\n\n"
         "Answer:"
     )
     return template
