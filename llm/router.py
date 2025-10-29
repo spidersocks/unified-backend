@@ -126,10 +126,15 @@ async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "docume
 
 # --- Answer marker and guardrail helpers (should be moved to llm/answer_utils.py) ---
 def extract_and_strip_marker(answer: str, marker: str) -> (str, bool):
-    pattern = re.compile(rf"\s*{re.escape(marker)}\s*$", re.IGNORECASE)
+    # --- FIX ---
+    # The '$' anchor at the end of the regex was removed.
+    # This ensures the marker is found and stripped even if it's not at the very end of the string.
+    pattern = re.compile(rf"\s*{re.escape(marker)}\s*", re.IGNORECASE)
     if answer and pattern.search(answer):
-        answer = pattern.sub("", answer)
-        return answer.rstrip(), True
+        # Use pattern.sub to replace the found marker with an empty string
+        # and then strip any potential leading/trailing whitespace from the whole answer.
+        cleaned_answer = pattern.sub("", answer).strip()
+        return cleaned_answer, True
     return answer, False
 
 def _any_doc_cited(citations, doc_paths: list) -> bool:
