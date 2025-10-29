@@ -60,24 +60,92 @@ _REL_EN = {"today": 0, "tomorrow": 1, "day after tomorrow": 2}
 
 # --- SINGLE SOURCE OF TRUTH FOR HOLIDAY KEYWORDS ---
 _HOLIDAY_KEYWORDS = {
-    "Lunar New Year": ["lunar new year", "chinese new year", "the first day of lunar new year", "年初一", "農曆新年", "农历新年"],
-    "Second Day of Lunar New Year": ["the second day of lunar new year", "年初二"],
-    "Third Day of Lunar New Year": ["the third day of lunar new year", "年初三"],
-    "Ching Ming Festival": ["ching ming", "tomb-sweeping", "清明", "清明節", "清明节"],
-    "Chung Yeung Festival": ["chung yeung", "重陽", "重阳", "重陽節", "重阳节"],
-    "Tuen Ng Festival": ["tuen ng", "dragon boat", "端午", "端午節", "端午节"],
-    "The day following the Chinese Mid-Autumn Festival": ["the day following the chinese mid-autumn festival", "中秋節翌日", "中秋节翌日"],
-    "Mid-Autumn Festival": ["mid-autumn", "mid autumn", "中秋", "中秋節", "中秋节"],
-    "Buddha's Birthday": ["buddha", "buddha's birthday", "佛誕", "佛诞"],
-    "National Day": ["national day", "國慶", "国庆", "國慶日", "国庆日"],
-    "Labour Day": ["labour day", "labor day", "勞動節", "劳动节"],
-    "HKSAR Establishment Day": ["establishment day", "hksar establishment", "回歸", "回归", "香港特別行政區成立紀念日", "香港特别行政区成立纪念日"],
-    "Good Friday": ["good friday", "耶穌受難日", "耶稣受难日"],
-    "Easter Monday": ["easter monday", "復活節星期一", "复活节星期一"],
-    "The first weekday after Christmas Day": ["the first weekday after christmas day", "聖誕節後首個工作天", "圣诞节后第一个工作日"],
-    "Christmas Day": ["christmas", "christmas day", "聖誕", "圣诞", "聖誕節", "圣诞节"],
+    # ----- ENGLISH, TRAD, SIMP -----
+    "Lunar New Year": [
+        "lunar new year", "chinese new year", "spring festival",
+        "the first day of lunar new year", "first day of lunar new year",
+        "年初一", "農曆新年", "农历新年"
+    ],
+    "Second Day of Lunar New Year": [
+        "second day of lunar new year", "the second day of lunar new year",
+        "年初二", "農曆年初二", "农历年初二"
+    ],
+    "Third Day of Lunar New Year": [
+        "third day of lunar new year", "the third day of lunar new year",
+        "年初三", "農曆年初三", "农历年初三"
+    ],
+    "Ching Ming Festival": [
+        "ching ming", "ching ming festival", "tomb-sweeping festival", "grave-sweeping festival",
+        "清明", "清明節", "清明节"
+    ],
+    "Ching Ming Festival (Substitute Holiday)": [
+        "ching ming (substitute)", "ching ming substitute holiday",
+        "ching ming festival (substitute)", "ching ming festival substitute holiday",
+        "清明節（補假）", "清明节（补假）"
+    ],
+    "Buddha's Birthday": [
+        "buddha's birthday", "buddha birthday", "buddha day", "birthday of buddha",
+        "佛誕", "佛诞"
+    ],
+    "Buddha's Birthday (Substitute Holiday)": [
+        "buddha's birthday (substitute)", "buddha birthday (substitute)", "buddha day (substitute)",
+        "佛誕（補假）", "佛诞（补假）"
+    ],
+    "Good Friday": [
+        "good friday", "耶穌受難日", "耶稣受难日"
+    ],
+    "Easter Monday": [
+        "easter monday", "復活節星期一", "复活节星期一"
+    ],
+    "Labour Day": [
+        "labour day", "labor day", "may day", "勞動節", "劳动节"
+    ],
+    "Tuen Ng Festival": [
+        "tuen ng festival", "tuen ng", "dragon boat festival", "dragon boat",
+        "端午", "端午節", "端午节"
+    ],
+    "Chung Yeung Festival": [
+        "chung yeung festival", "chung yeung", "double ninth festival", "double ninth",
+        "重陽", "重陽節", "重阳", "重阳节"
+    ],
+    "Chung Yeung Festival (Substitute Holiday)": [
+        "chung yeung festival (substitute)", "chung yeung (substitute)", "double ninth festival (substitute)",
+        "重陽節（補假）", "重阳节（补假）"
+    ],
+    "National Day": [
+        "national day", "china national day", "chinese national day", "國慶", "國慶日", "国庆", "国庆日"
+    ],
+    "HKSAR Establishment Day": [
+        "hksar establishment day", "establishment day", "hong kong sar day",
+        "回歸", "回歸紀念日", "香港特別行政區成立紀念日",
+        "回归", "回归纪念日", "香港特别行政区成立纪念日"
+    ],
+    "Mid-Autumn Festival": [
+        "mid-autumn festival", "mid autumn festival", "mid-autumn", "mid autumn",
+        "moon festival", "中秋", "中秋節", "中秋节"
+    ],
+    "The day following the Chinese Mid-Autumn Festival": [
+        "the day following the chinese mid-autumn festival", "day after mid-autumn festival",
+        "中秋節翌日", "中秋节翌日"
+    ],
+    "Christmas Day": [
+        "christmas", "christmas day", "xmas", "聖誕", "聖誕節", "圣诞", "圣诞节"
+    ],
+    "The first weekday after Christmas Day": [
+        "the first weekday after christmas day", "boxing day", "聖誕節後首個工作天", "圣诞节后第一个工作日"
+    ],
+    "1 January": [
+        "january 1", "1 january", "new year's day", "一月一日", "元旦"
+    ],
+    # Additional likely seen keys (exact match to holidays.HK for some years)
+    "農曆年初一": ["lunar new year", "chinese new year", "年初一", "農曆新年", "农历新年"],
+    "農曆年初二": ["second day of lunar new year", "年初二", "農曆年初二", "农历年初二"],
+    "農曆年初三": ["third day of lunar new year", "年初三", "農曆年初三", "农历年初三"],
+    "佛誕（補假）": ["buddha's birthday (substitute)", "佛誕", "佛誕補假", "佛诞", "佛诞补假"],
+    "清明節（補假）": ["ching ming (substitute)", "清明", "清明節補假", "清明节", "清明节补假"],
+    "重陽節（補假）": ["chung yeung (substitute)", "重陽", "重陽節補假", "重阳", "重阳节补假"],
+    "聖誕節後第一個周日": ["first sunday after christmas", "聖誕節後第一個周日", "圣诞节后第一个周日"],
 }
-
 # --- NEW: DICTIONARY FOR SPECIAL DAYS THAT ARE NOT PUBLIC HOLIDAYS ---
 # This allows us to parse days like "Christmas Eve" correctly.
 # The value is a function that takes a year and returns a (month, day) tuple.
