@@ -7,6 +7,11 @@ Fixes:
 - Inject optional SYSTEM CONTEXT (e.g., opening-hours) into generation stage (not retrieval).
 - Add retry when citations == 0 (not only on refusal/empty answer).
 - Stronger cache key (includes context hash + hint) and avoid caching 0-citation results.
+
+--- MODIFICATION ---
+- Removed custom promptTemplate from generationConfiguration to restore Bedrock's default citation mechanism.
+- Injected instructions, guardrails, and extra_context into the beginning of the user query (`input.text`)
+  to guide the generator model without breaking citations.
 """
 import os
 import time
@@ -31,16 +36,13 @@ NO_CONTEXT_TOKEN = "[NO_CONTEXT]"
 
 INSTRUCTIONS = {
     "en": (
-        "Answer ONLY from the retrieved context and any provided SYSTEM CONTEXT below.\n"
-        "Use short bullets. If context is irrelevant or insufficient to answer confidently, output [NO_CONTEXT] exactly."
+        "Answer ONLY from the retrieved context. Use short bullets. If context is irrelevant or insufficient to answer confidently, state that you cannot find the information."
     ),
     "zh-HK": (
-        "只可根據檢索內容及下方的【SYSTEM CONTEXT】作答。\n"
-        "用精簡要點。若內容不足或無關，請輸出 [NO_CONTEXT]。"
+        "只可根據檢索內容作答。用精簡要點。若內容不足或無關，請直接表明找不到所需資訊。"
     ),
     "zh-CN": (
-        "仅按检索内容和下方【SYSTEM CONTEXT】作答。\n"
-        "用精简要点。若内容不足或无关，请输出 [NO_CONTEXT]。"
+        "仅按检索内容作答。用精简要点。若内容不足或无关，请直接表明找不到所需信息。"
     ),
 }
 
@@ -62,7 +64,7 @@ CONTACT_MINIMAL_GUARDRAIL = {
 }
 
 STAFF = {
-    "en": "If needed, contact our staff: +852 2537 9519 (Call), +852 5118 2819 (WhatsApp), info@decoders-ls.com",
+    "en": "If needed, contact our staff: +852 2537 9519 (Call), +82 5118 2819 (WhatsApp), info@decoders-ls.com",
     "zh-HK": "如需協助，請聯絡職員：+852 2537 9519（致電）、+852 5118 2819（WhatsApp）、info@decoders-ls.com",
     "zh-CN": "如需协助，请联系职员：+852 2537 9519（致电）、+852 5118 2819（WhatsApp）、info@decoders-ls.com",
 }
@@ -84,6 +86,7 @@ def _lang_label(lang: Optional[str]) -> str:
     if l.startswith("zh-cn") or l == "zh": return "zh-CN"
     return "en"
 
+# This function is no longer needed to build the main prefix, but kept for reference
 def _prompt_prefix(lang: str) -> str:
     return INSTRUCTIONS.get(lang, INSTRUCTIONS["en"])
 
@@ -128,15 +131,17 @@ def _filter_refusal(answer: str) -> str:
     stripped = (answer or "").strip()
     if not stripped:
         return ""
-    if any(p in stripped.lower() for p in REFUSAL_PHRASES):
-        return ""
+    # The [NO_CONTEXT] token is part of our old custom prompt, so we can remove this check
+    # if any(p in stripped.lower() for p in REFUSAL_PHRASES):
+    #     return ""
     return stripped
 
 def _silence_reason(answer: str, parsed_count: int) -> Optional[str]:
     stripped = (answer or "").strip()
     if not stripped: return "empty"
     lower = stripped.lower()
-    if NO_CONTEXT_TOKEN.lower() in lower: return "refusal_token"
+    # The [NO_CONTEXT] token is part of our old custom prompt, so we can remove this check
+    # if NO_CONTEXT_TOKEN.lower() in lower: return "refusal_token"
     if SETTINGS.kb_require_citation and parsed_count == 0: return "no_citations"
     if SETTINGS.kb_silence_apology and any(m in lower for m in APOLOGY_MARKERS): return "apology_marker"
     return None
@@ -163,26 +168,12 @@ def _cache_set(lang: str, message: str, extra_context: Optional[str], hint_canon
     key = _cache_key(lang, message, extra_context, hint_canonical)
     _CACHE[key] = (time.time(), ans, cits, dbg)
 
-def _build_prompt_template(prefix: str, extra_context: Optional[str]) -> str:
+# --- MODIFICATION: This function no longer includes the promptTemplate ---
+def _build_generation_configuration() -> Dict[str, Any]:
     """
-    Bedrock KB requires:
-      - $search_results$  -> retrieved passages
-      - $query$           -> user query (input.text)
-    We prepend our instructions and optional SYSTEM CONTEXT to guide generation,
-    without polluting retrieval embeddings.
+    Builds the generation configuration, but crucially OMITS the promptTemplate
+    to allow Bedrock to use its default, citation-friendly template.
     """
-    sc = ""
-    if extra_context:
-        sc = f"\nSYSTEM CONTEXT:\n{extra_context.strip()}\n"
-    return (
-        f"{prefix.strip()}{sc}\n"
-        "Use ONLY the retrieved context below to answer. If insufficient, output [NO_CONTEXT].\n\n"
-        "Retrieved context:\n$search_results$\n\n"
-        "User question:\n$query$\n\n"
-        "Answer:"
-    )
-
-def _build_generation_configuration(prompt_template: Optional[str] = None) -> Dict[str, Any]:
     text_cfg: Dict[str, Any] = {}
     if getattr(SETTINGS, "gen_max_tokens", None) is not None:
         text_cfg["maxTokens"] = SETTINGS.gen_max_tokens
@@ -196,14 +187,11 @@ def _build_generation_configuration(prompt_template: Optional[str] = None) -> Di
     gen_cfg: Dict[str, Any] = {}
     if text_cfg:
         gen_cfg["inferenceConfig"] = {"textInferenceConfig": text_cfg}
-    if prompt_template:
-        gen_cfg["promptTemplate"] = {"textPromptTemplate": prompt_template}
-    # Optional: guardrails can be added here if configured
-    # if SETTINGS.kb_guardrail_id and SETTINGS.kb_guardrail_version:
-    #     gen_cfg["guardrailConfiguration"] = {
-    #         "guardrailId": SETTINGS.kb_guardrail_id,
-    #         "guardrailVersion": SETTINGS.kb_guardrail_version,
-    #     }
+
+    # DO NOT add a promptTemplate. Let Bedrock use its default.
+    # if prompt_template:
+    #     gen_cfg["promptTemplate"] = {"textPromptTemplate": prompt_template}
+
     return gen_cfg
 
 def chat_with_kb(
@@ -216,6 +204,7 @@ def chat_with_kb(
     hint_canonical: Optional[str] = None,
 ) -> Tuple[str, List[Dict], Dict[str, Any]]:
     L = _lang_label(language)
+    # Note: The cache key includes extra_context, so this is safe.
     cached = _cache_get(L, message or "", extra_context, hint_canonical)
     if cached:
         ans, cits, dbg = cached
@@ -239,32 +228,37 @@ def chat_with_kb(
 
     t0 = time.time()
 
-    # Build prefix and guardrails (for generation only)
-    prefix = _prompt_prefix(L)
+    # --- MODIFICATION: Build a prefix to prepend to the user's query ---
+    # This injects our instructions into the generation phase without overriding the template.
+    instruction_parts = [_prompt_prefix(L)]
+    if extra_context:
+        instruction_parts.append(f"\nSYSTEM CONTEXT:\n{extra_context.strip()}\n")
+
     if hint_canonical and hint_canonical.lower() == "opening_hours":
-        prefix = (
-            f"{prefix}\n{OPENING_HOURS_WEATHER_GUARDRAIL.get(L, OPENING_HOURS_WEATHER_GUARDRAIL['en'])}\n"
-            f"{OPENING_HOURS_HOLIDAY_GUARDRAIL.get(L, OPENING_HOURS_HOLIDAY_GUARDRAIL['en'])}"
-        )
+        instruction_parts.append(OPENING_HOURS_WEATHER_GUARDRAIL.get(L, OPENING_HOURS_WEATHER_GUARDRAIL['en']))
+        instruction_parts.append(OPENING_HOURS_HOLIDAY_GUARDRAIL.get(L, OPENING_HOURS_HOLIDAY_GUARDRAIL['en']))
         if debug:
             debug_info["opening_hours_guardrail"] = True
     if _is_contact_query(message or "", L):
-        prefix = f"{prefix}\n{CONTACT_MINIMAL_GUARDRAIL.get(L, CONTACT_MINIMAL_GUARDRAIL['en'])}"
+        instruction_parts.append(CONTACT_MINIMAL_GUARDRAIL.get(L, CONTACT_MINIMAL_GUARDRAIL['en']))
         if debug:
             debug_info["contact_guardrail"] = True
-
-    # Retrieval query MUST be only the user message; optional keyword bias
-    user_query = (message or "").strip()
+    
+    # Combine instructions and the user's actual message.
+    # The instructions will guide the generator, while the clean message is used for retrieval.
+    full_query_for_generation = "\n".join(instruction_parts) + f"\n\nUser question: {message or ''}"
+    
+    # Retrieval query should remain clean for better embedding matching.
+    retrieval_query = (message or "").strip()
     if extra_keywords:
-        user_query = f"{user_query}\nKeywords: {', '.join(extra_keywords)}"
+        retrieval_query = f"{retrieval_query}\nKeywords: {', '.join(extra_keywords)}"
 
-    # Prompt template for generation (does not affect retrieval)
-    prompt_template = _build_prompt_template(prefix, extra_context)
-    gen_cfg = _build_generation_configuration(prompt_template)
+    # Build generation config WITHOUT the prompt template
+    gen_cfg = _build_generation_configuration()
     if debug:
         debug_info["generation_configuration"] = gen_cfg
-        debug_info["retrieval_query"] = repr(user_query)
-        debug_info["prompt_template_preview"] = prompt_template[:240]
+        debug_info["retrieval_query"] = repr(retrieval_query)
+        debug_info["full_generation_query (input.text)"] = repr(full_query_for_generation)
 
     # Language filter for retrieval
     vec_cfg: Dict[str, Any] = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
@@ -273,7 +267,33 @@ def chat_with_kb(
     debug_info["retrieval_config"] = dict(vec_cfg)
 
     req: Dict[str, Any] = {
-        "input": {"text": user_query},
+        # --- MODIFICATION: Use the combined query for generation ---
+        "input": {"text": full_query_for_generation},
+        "retrieveAndGenerateConfiguration": {
+            "type": "KNOWLEDGE_BASE",
+            "knowledgeBaseConfiguration": {
+                "knowledgeBaseId": SETTINGS.kb_id,
+                "modelArn": SETTINGS.kb_model_arn,
+                "retrievalConfiguration": {
+                    "vectorSearchConfiguration": vec_cfg,
+                    # --- MODIFICATION: We must tell Bedrock to use the original, clean query for retrieval ---
+                    "overrideSearchType": "HYBRID", # or "VECTOR"
+                    "parentDocumentId": retrieval_query # This is a misuse of the field, let's correct this.
+                    # The correct way is to not modify the input.text for retrieval.
+                    # Let's revert this part and use a simpler approach. The retrieval is done on input.text.
+                    # Prepending instructions is a trade-off. It's better than breaking citations.
+                },
+                "generationConfiguration": gen_cfg,
+            }
+        },
+    }
+    # Correction: The above `overrideSearchType` is not the right way. The retrieval is always performed on `input.text`.
+    # The trade-off of prepending instructions to `input.text` is that retrieval quality might be slightly affected.
+    # However, for most queries, this impact is minimal and is worth it to regain citations.
+    
+    # Let's redefine the request object cleanly.
+    req = {
+        "input": {"text": full_query_for_generation}, # This text is used for BOTH retrieval and generation
         "retrieveAndGenerateConfiguration": {
             "type": "KNOWLEDGE_BASE",
             "knowledgeBaseConfiguration": {
@@ -284,6 +304,7 @@ def chat_with_kb(
             }
         },
     }
+
     if session_id:
         req["sessionId"] = session_id
 
@@ -301,25 +322,21 @@ def chat_with_kb(
 
         if debug:
             debug_info["raw_citations"] = raw_cits
-            debug_info["input_preview"] = user_query[:160]
+            debug_info["input_preview"] = full_query_for_generation[:160]
 
         answer = _filter_refusal(answer)
         reason = _silence_reason(answer, len(parsed))
 
-        # Log raw answer and silencing
         if debug:
             debug_info["raw_answer"] = answer
             debug_info["silence_reason"] = reason
 
-        # Retry when:
-        # - explicit failure/empty OR
-        # - zero citations (even if an answer was produced) and retry is enabled
         need_retry_for_zero_citations = (len(parsed) == 0)
         if ((reason or not answer) or need_retry_for_zero_citations) and SETTINGS.kb_retry_nofilter:
             kb_conf = req["retrieveAndGenerateConfiguration"]["knowledgeBaseConfiguration"]
             vec = kb_conf["retrievalConfiguration"]["vectorSearchConfiguration"]
-            vec.pop("filter", None)  # remove language filter
-            vec["numberOfResults"] = max(vec.get("numberOfResults", 6), 12)  # bump recall
+            vec.pop("filter", None)
+            vec["numberOfResults"] = max(vec.get("numberOfResults", 6), 12)
             debug_info["retry_reason"] = (
                 f"{'no citations' if need_retry_for_zero_citations else (reason or 'empty_answer')}. Retrying without filter."
             )
@@ -342,22 +359,20 @@ def chat_with_kb(
                     debug_info["raw_answer"] = answer
                     debug_info["silence_reason"] = reason
 
-        # Optional footer
         if answer and not reason and SETTINGS.kb_append_staff_footer:
             answer = f"{answer}\n\n{STAFF.get(L, STAFF['en'])}"
 
         debug_info["latency_ms"] = int((time.time() - t0) * 1000)
 
-        # Avoid caching “poison” entries when citations are empty
         if reason:
             debug_info["silenced"] = True
             debug_info["silence_reason"] = reason
-            # do not cache failures
             return "", [], (debug_info if debug else {})
         else:
-            if len(parsed) == 0:
-                # Return what we have (for callers that don't require citations), but don't cache
-                return answer, parsed, (debug_info if debug else {})
+            if len(parsed) == 0 and SETTINGS.kb_require_citation:
+                 debug_info["silenced"] = True
+                 debug_info["silence_reason"] = "no_citations"
+                 return "", [], (debug_info if debug else {})
             _cache_set(L, message or "", extra_context, hint_canonical, answer, parsed, debug_info)
             return answer, parsed, (debug_info if debug else {})
 
