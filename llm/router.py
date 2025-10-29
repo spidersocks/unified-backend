@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 from llm.bedrock_kb_client import chat_with_kb
 from llm.config import SETTINGS
-from llm.lang import detect_language
+from llm.lang import get_language_code  # CHANGED: Was 'detect_language'
 from llm import tags_index
 from llm.chat_history import save_message, get_recent_history, prune_history, build_context_string
 
@@ -218,30 +218,8 @@ BLOOKET_STRONG_PHRASES = {
     "zh-CN": ["blooket", "在线游戏", "布鲁克特", "blooket 指南", "blooket 教程", "blooket pdf"]
 }
 
-# --- PATCH: Structured context injection for opening hours (RAG) ---
-def extract_opening_context(message: str, lang: Optional[str] = None) -> str:
-    """Create system-injected context for opening hours/date/weather queries."""
-    from llm.opening_hours import _normalize_lang, _parse_datetime, _dow_window, _is_public_holiday, HK_TZ, _fmt_time, _fmt_date_human
-    from llm.hko import get_weather_hint_for_opening
-    import datetime as dt
-    L = _normalize_lang(lang)
-    now = dt.datetime.now(HK_TZ)
-    dtval = _parse_datetime(message or "", now, L) or now
-    open_t, close_t = _dow_window(dtval.weekday())
-    is_holiday, holiday_name = _is_public_holiday(dtval)
-    is_sunday = open_t is None or close_t is None
-    weather_hint = get_weather_hint_for_opening(L)
-    parts = []
-    parts.append(f"Resolved date: {dtval.strftime('%Y-%m-%d')} ({_fmt_date_human(dtval, L)})")
-    if is_holiday:
-        parts.append(f"Public holiday: Yes ({holiday_name})")
-    if is_sunday:
-        parts.append("Day: Sunday (center closed)")
-    if open_t and close_t and not is_holiday and not is_sunday:
-        parts.append(f"Open hours: {_fmt_time(open_t)}–{_fmt_time(close_t)}")
-    if weather_hint:
-        parts.append(f"Weather: {weather_hint}")
-    return "\n".join(parts)
+# --- REMOVED: The entire 'PATCH' block that redefined extract_opening_context was here.
+# It is no longer needed because the correct function is imported from llm.opening_hours.py.
 
 # --- FastAPI schemas ---
 class ChatRequest(BaseModel):
@@ -262,7 +240,8 @@ def chat(req: ChatRequest, request: Request):
     _log(f"/chat called: message={req.message!r}, language={req.language!r}, session_id={req.session_id!r}, debug={req.debug!r}")
     _log(f"Headers: {dict(request.headers)}")
     session_id = req.session_id or ("web:" + str(hash(request.client.host)))
-    lang = req.language or detect_language(req.message, accept_language=request.headers.get("accept-language"))
+    # CHANGED: Using get_language_code instead of detect_language
+    lang = req.language or get_language_code(req.message, accept_language=request.headers.get("accept-language"))
     _log(f"Detected language: {lang!r}")
 
     # --- PATCH: Opening hours intent routing with general/specific distinction ---
@@ -304,6 +283,8 @@ def chat(req: ChatRequest, request: Request):
 
     _log(f"Calling chat_with_kb with rag_query length={len(rag_query)}")
     try:
+        # Assuming from_number should be session_id for web chat too
+        from_number = session_id
         answer, citations, debug_info = chat_with_kb(
             rag_query,
             lang,
@@ -418,8 +399,9 @@ async def whatsapp_webhook_handler(request: Request):
                                 if from_number not in SETTINGS.whatsapp_test_numbers:
                                     _log(f"WARNING: Message from non-whitelisted number {from_number} ignored during testing.")
                                     return {"status": "ignored", "reason": "not in test numbers"}
-
-                                lang = detect_language(message_body)
+                                
+                                # CHANGED: Using get_language_code instead of detect_language
+                                lang = get_language_code(message_body)
                                 _log(f"Detected language: {lang}")
 
                                 # --- PATCH: Opening hours intent routing with general/specific distinction ---
