@@ -89,6 +89,19 @@ _SPECIAL_NAMED_DAYS: Dict[str, Callable[[int], Tuple[int, int]]] = {
     "平安夜": lambda year: (12, 24),
 }
 
+_MONTH_ABBR = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)"
+
+def _looks_like_absolute_date(msg: str) -> bool:
+    m = msg or ""
+    if re.search(r"\b\d{1,2}/\d{1,2}\b", m, re.I):
+        return True
+    if re.search(rf"\b{_MONTH_ABBR}[a-z]*\.?\s*\d{{1,2}}\b", m, re.I):
+        return True
+    if re.search(r"\d{1,2}\s*(月|日|号|號)", m):
+        return True
+    if _WD_PAT_EN.search(m) or _WD_PAT_ZH_HK.search(m):
+        return True
+    return False
 
 def _fmt_time(t: time) -> str:
     return f"{t.hour:02d}:{t.minute:02d}"
@@ -173,68 +186,109 @@ def _parse_special_named_day(message: str, base: datetime) -> Optional[datetime]
 
 def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[datetime, str]]:
     """
-    Resolve an OFFICIAL PUBLIC HOLIDAY date mentioned in the message.
-    Robust against naming differences (e.g., "Mid-Autumn Festival" vs.
-    "The day following the Chinese Mid-Autumn Festival").
+    Finds the date of an OFFICIAL PUBLIC HOLIDAY mentioned in the message.
+    Robust against calendar naming differences (e.g., 'Dragon Boat Festival' vs 'Tuen Ng Festival').
+    Searches this year and next year for the next occurrence on/after 'base'.
     """
     cal_this = _hk_calendar(base.year, base.year)
     cal_next = _hk_calendar(base.year + 1, base.year + 1)
-    matched_official = _detect_holiday_keyword(message)
-    if not matched_official:
-        # Fallback scan (original CRITICAL FIX #5) remains as last resort below
-        pass
-    else:
-        # Preferred path: fuzzy match calendar event names against the matched official name
-        future_matches: list[Tuple[datetime, str]] = []
-        for cal in (cal_this, cal_next):
-            if not cal:
-                continue
-            for dt_obj, off_name in cal.items():
-                if _names_match(off_name, matched_official):
-                    dt_hk = HK_TZ.localize(datetime.combine(dt_obj, time(12, 0)))
-                    if dt_hk.date() >= base.date():
-                        future_matches.append((dt_hk, off_name))
+    m_normalized = (message or "").lower()
 
-        if future_matches:
-            return min(future_matches, key=lambda x: x[0])
+    # Build keyword -> canonical map and a fast detector of holiday keywords in the message
+    keyword_to_official: Dict[str, str] = {}
+    for official_name, keywords_list in _HOLIDAY_KEYWORDS.items():
+        for keyword in keywords_list:
+            keyword_to_official[keyword.lower()] = official_name
 
-        # If nothing left this year, try next year again with fuzzy match (no future-date filter needed now)
-        if cal_next:
-            for dt_obj, off_name in cal_next.items():
-                if _names_match(off_name, matched_official):
-                    dt_hk = HK_TZ.localize(datetime.combine(dt_obj, time(12, 0)))
-                    return (dt_hk, off_name)
+    # Detect a canonical holiday from the user's message (via any keyword, incl. Chinese)
+    matched_official_name: Optional[str] = None
+    for kw, off_name in keyword_to_official.items():
+        if ' ' not in kw and re.search(r'[a-zA-Z]', kw):
+            if re.search(r'\b' + re.escape(kw) + r'\b', m_normalized):
+                matched_official_name = off_name
+                break
+        elif kw in m_normalized:
+            matched_official_name = off_name
+            break
 
-        # Calendar unavailable? Provide a best-effort fixed-date fallback for a few Gregorian holidays.
-        if not cal_this and not cal_next:
-            dt_fallback = _fixed_gregorian_fallback(matched_official, base)
-            if dt_fallback:
-                return dt_fallback, matched_official
-        # Otherwise give up and allow the broader scan below to try.
-    
-    # Original CRITICAL FIX #5: scan calendars using keyword matching per holiday entry
-    if cal_this or cal_next:
-        m_normalized = (message or "").lower()
-        future_holiday_matches: list[Tuple[datetime, str]] = []
+    # Helper: expand canonical name to alternative calendar labels and synonyms
+    def _candidate_calendar_synonyms(canonical: str) -> List[str]:
+        c = canonical.lower()
+        syns = {c}
+        # Add all known keywords for this canonical holiday
+        for s in _HOLIDAY_KEYWORDS.get(canonical, []):
+            syns.add(s.lower())
+        # Cross-link common alias cases where the official HK holiday name differs
+        # - Mid-Autumn Festival -> The day following the Chinese Mid-Autumn Festival (public holiday)
+        if c == "mid-autumn festival":
+            syns.add("the day following the chinese mid-autumn festival")
+        # - Lunar New Year (generic mention) -> First Day of LNY (public holiday)
+        if c == "lunar new year":
+            syns.add("the first day of lunar new year")
+        # - Christmas (generic) -> Christmas Day
+        if c == "christmas":
+            syns.add("christmas day")
+        return list(syns)
+
+    # Helper: find the earliest future calendar match by synonyms, across this and next year
+    def _find_future_match_by_synonyms(canonical_name: str) -> Optional[Tuple[datetime, str]]:
+        if not (cal_this or cal_next):
+            return None
         all_holidays = sorted((cal_this or {}).items()) + sorted((cal_next or {}).items())
-        for dt_obj, official_name in all_holidays:
+        synonyms = _candidate_calendar_synonyms(canonical_name)
+        future: List[Tuple[datetime, str]] = []
+        for dt_obj, cal_name in all_holidays:
+            cal_name_lc = str(cal_name).lower()
+            if any(s in cal_name_lc for s in synonyms):
+                dt_hk = HK_TZ.localize(datetime.combine(dt_obj, time(12, 0)))
+                if dt_hk.date() >= base.date():
+                    future.append((dt_hk, str(cal_name)))
+        if future:
+            return min(future, key=lambda x: x[0])
+        return None
+
+    # Primary path: if we detected a holiday keyword in the user message,
+    # resolve it to a calendar date using synonym-aware matching.
+    if matched_official_name:
+        m = _find_future_match_by_synonyms(matched_official_name)
+        if m:
+            return m
+        # If nothing matched, try next year explicitly (already included above), then give up.
+        return None
+
+    # Secondary path (calendar scan): If no keyword matched directly, scan all future holidays
+    # and use the keyword lists to see if the user's message mentions any of them.
+    if cal_this or cal_next:
+        all_holidays = sorted((cal_this or {}).items()) + sorted((cal_next or {}).items())
+        future_matches: List[Tuple[datetime, str]] = []
+        for dt_obj, cal_name in all_holidays:
             dt_hk = HK_TZ.localize(datetime.combine(dt_obj, time(12, 0)))
             if dt_hk.date() < base.date():
                 continue
-            keywords_for_holiday = _HOLIDAY_KEYWORDS.get(official_name)
-            if not keywords_for_holiday:
-                continue
-            for keyword in keywords_for_holiday:
-                k = keyword.lower()
-                if (' ' not in k and re.search(r'[a-zA-Z]', k)):
-                    if re.search(r'\b' + re.escape(k) + r'\b', m_normalized):
-                        future_holiday_matches.append((dt_hk, official_name))
-                        break
-                elif k in m_normalized:
-                    future_holiday_matches.append((dt_hk, official_name))
+            cal_name_lc = str(cal_name).lower()
+            # Map calendar name -> canonical by checking if any canonical's keywords appear in the calendar label
+            canonical_for_cal: Optional[str] = None
+            for canonical, kw_list in _HOLIDAY_KEYWORDS.items():
+                kw_list_lc = [kw.lower() for kw in kw_list]
+                if (canonical.lower() in cal_name_lc) or any(kw in cal_name_lc for kw in kw_list_lc):
+                    canonical_for_cal = canonical
                     break
-        if future_holiday_matches:
-            return min(future_holiday_matches, key=lambda x: x[0])
+            if not canonical_for_cal:
+                continue
+
+            # If the user's message mentions any keyword for that canonical holiday, we have a match
+            for kw in _HOLIDAY_KEYWORDS.get(canonical_for_cal, []):
+                kw_lc = kw.lower()
+                if ' ' not in kw_lc and re.search(r'[a-zA-Z]', kw_lc):
+                    if re.search(r'\b' + re.escape(kw_lc) + r'\b', m_normalized):
+                        future_matches.append((dt_hk, str(cal_name)))
+                        break
+                elif kw_lc in m_normalized:
+                    future_matches.append((dt_hk, str(cal_name)))
+                    break
+
+        if future_matches:
+            return min(future_matches, key=lambda x: x[0])
 
     return None
 
@@ -374,14 +428,35 @@ def _relative_offset(message: str, L: str) -> Optional[int]:
     return None
 
 def _parse_datetime(message: str, now: datetime, L: str) -> Optional[datetime]:
+    # 1) Relative offsets first (today/tomorrow/etc.)
     rel = _relative_offset(message or "", L)
     if rel is not None:
         base = (now + timedelta(days=rel)).astimezone(HK_TZ)
         t = _parse_time(message or "")
         return base.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0) if t else base.replace(hour=12, minute=0, second=0, microsecond=0)
 
-    if dateparser:
-        settings = {"TIMEZONE": "Asia/Hong_Kong", "RETURN_AS_TIMEZONE_AWARE": True, "PREFER_DATES_FROM": "future", "RELATIVE_BASE": now, "NORMALIZE": True, "DATE_ORDER": "DMY"}
+    # 2) Explicit day-of-month or weekday next
+    dom = _extract_day_of_month(message or "")
+    wd = _extract_weekday(message or "", L)
+    t = _parse_time(message or "")
+    if dom is not None or wd is not None:
+        base = now + timedelta(days=1)
+        for i in range(0, 60):
+            cand = (base + timedelta(days=i)).astimezone(HK_TZ)
+            if (dom is not None and cand.day != dom) or (wd is not None and cand.weekday() != wd):
+                continue
+            return cand.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0) if t else cand.replace(hour=12, minute=0, second=0, microsecond=0)
+
+    # 3) Only then try dateparser, and only if it looks like an absolute date
+    if dateparser and _looks_like_absolute_date(message or ""):
+        settings = {
+            "TIMEZONE": "Asia/Hong_Kong",
+            "RETURN_AS_TIMEZONE_AWARE": True,
+            "PREFER_DATES_FROM": "future",
+            "RELATIVE_BASE": now,
+            "NORMALIZE": True,
+            "DATE_ORDER": "DMY",
+        }
         langs = ["en"] if L == "en" else ["zh"]
         dt = dateparser.parse(message, settings=settings, languages=langs)
         if dt:
@@ -389,15 +464,6 @@ def _parse_datetime(message: str, now: datetime, L: str) -> Optional[datetime]:
             t = _parse_time(message or "")
             return dt.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0) if t else dt.replace(hour=12, minute=0, second=0, microsecond=0)
 
-    dom = _extract_day_of_month(message or "")
-    wd = _extract_weekday(message or "", L)
-    t = _parse_time(message or "")
-    if dom is None and wd is None: return None
-    base = now + timedelta(days=1)
-    for i in range(0, 60):
-        cand = (base + timedelta(days=i)).astimezone(HK_TZ)
-        if (dom is not None and cand.day != dom) or (wd is not None and cand.weekday() != wd): continue
-        return cand.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0) if t else cand.replace(hour=12, minute=0, second=0, microsecond=0)
     return None
 
 def _next_open_window(start: datetime) -> Tuple[datetime, time, time]:
@@ -461,6 +527,16 @@ def _get_opening_facts(message: str, lang: Optional[str] = None, is_general: boo
             parse_debug["holiday_name"] = holiday_reason
     
     parse_debug["is_fallback_to_now"] = (dt is None)
+    
+    if dt is None:
+        # Helpful debug: was a holiday keyword present in the message?
+        all_kw = {kw.lower() for v in _HOLIDAY_KEYWORDS.values() for kw in v}
+        msg_lc = (msg or "").lower()
+        parse_debug["holiday_keyword_present"] = any(
+            (re.search(r'\b'+re.escape(kw)+r'\b', msg_lc) if re.search(r'[a-zA-Z]', kw) else kw in msg_lc)
+            for kw in all_kw
+        )
+
     # --- Attempt 3: If still no date, use general-purpose date parsing. ---
     if dt is None:
         dt = _parse_datetime(msg, now, L)
@@ -502,6 +578,7 @@ def _get_opening_facts(message: str, lang: Optional[str] = None, is_general: boo
 
 def extract_opening_context(message: str, lang: Optional[str] = None) -> str:
     facts = _get_opening_facts(message, lang, is_general=False)
+    _log(f"Opening parse_debug: {facts.get('parse_debug')}")
     dt = facts["datetime"]
     L = facts["lang"]
     dbg = facts.get("parse_debug", {})

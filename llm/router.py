@@ -256,8 +256,8 @@ def chat(req: ChatRequest, request: Request):
     
     if is_hours_intent:
         # Check if this is a holiday-specific query that needs date parsing
-        _, intent_debug = debug_intent if 'debug_intent' in locals() else detect_opening_hours_intent(req.message, lang)
-        has_holiday_marker = len(intent_debug.get("holiday_hits", [])) > 0 if intent_debug else False
+        intent_debug_local = debug_intent or {}
+        has_holiday_marker = bool(intent_debug_local.get("holiday_hits"))
         
         # For holiday queries or specific date queries, always extract context
         if has_holiday_marker or not is_general_hours_query(req.message, lang):
@@ -420,6 +420,8 @@ async def whatsapp_webhook_handler(request: Request):
                                 opening_context = None
                                 hint_canonical = None
                                 if is_hours_intent:
+                                    intent_debug_local = debug_intent or {}
+                                    has_holiday_marker = bool(intent_debug_local.get("holiday_hits"))
                                     if is_general_hours_query(message_body, lang):
                                         opening_context = None
                                         hint_canonical = "opening_hours"
