@@ -437,8 +437,17 @@ def _get_opening_facts(message: str, lang: Optional[str] = None, is_general: boo
     parse_debug["final_datetime"] = final_dt.isoformat()
     parse_debug["is_fallback_to_now"] = (dt is None)
 
-    # ... rest of the function ...
+    # --- Post-processing and Fact Assembly ---
+    weather_hint = get_weather_hint_for_opening(L) if SETTINGS.opening_hours_weather_enabled else None
+    open_t, close_t = _dow_window(final_dt.weekday())
     
+    # If we resolved a date but don't have a holiday reason yet, check if it's a holiday.
+    # This covers cases like parsing "Dec 25" and then realizing it's Christmas.
+    if holiday_reason is None:
+        is_holiday, name = _is_public_holiday(final_dt)
+        if is_holiday:
+            holiday_reason = name
+
     return {
         "datetime": final_dt,
         "lang": L,
@@ -450,7 +459,7 @@ def _get_opening_facts(message: str, lang: Optional[str] = None, is_general: boo
         "weather_hint": weather_hint,
         "asked_specific_time": _contains_time_of_day(msg),
         "is_general_query": is_general,
-        "parse_debug": parse_debug,  # <-- ADD THIS FOR DEBUGGING
+        "parse_debug": parse_debug,
     }
 
 def extract_opening_context(message: str, lang: Optional[str] = None) -> str:
