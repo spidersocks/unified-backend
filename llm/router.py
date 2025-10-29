@@ -306,8 +306,8 @@ def chat(req: ChatRequest, request: Request):
         answer, citations, debug_info = chat_with_kb(
             rag_query,
             lang,
-            session_id,
-            debug=bool(req.debug or SETTINGS.debug_kb),
+            session_id=from_number,
+            debug=SETTINGS.debug_kb,
             extra_context=opening_context,
             hint_canonical=hint_canonical,
         )
@@ -459,7 +459,7 @@ async def whatsapp_webhook_handler(request: Request):
                                         rag_query,
                                         lang,
                                         session_id=from_number,
-                                        debug=bool(req.debug or SETTINGS.debug_kb),
+                                        debug=SETTINGS.debug_kb,
                                         extra_context=opening_context,
                                         hint_canonical=hint_canonical,
                                     )
