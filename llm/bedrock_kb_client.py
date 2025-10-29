@@ -34,42 +34,42 @@ bedrock_agent_client = boto3.client("bedrock-agent-runtime", region_name=SETTING
 # Client for Foundation Model APIs (InvokeModel)
 bedrock_runtime_client = boto3.client("bedrock-runtime", region_name=SETTINGS.aws_region, config=_boto_cfg)
 
-# --- ALL CONSTANTS AND HELPERS BELOW ARE PRESERVED FROM YOUR ORIGINAL FILE ---
+# --- MODIFIED: Persona, Strict Silence Instructions, and Guardrails ---
 
+# The instructions now demand a specific token for silence, which is more reliable.
 INSTRUCTIONS = {
     "en": (
-        "Answer ONLY from the retrieved context. Use short bullets. If context is irrelevant or insufficient to answer confidently, state that you cannot find the information."
+        "Use short, helpful bullets. If the context is irrelevant or insufficient to answer confidently, you MUST reply with ONLY the exact text `[NO_ANSWER]` and nothing else."
     ),
     "zh-HK": (
-        "只可根據檢索內容作答。用精簡要點。若內容不足或無關，請直接表明找不到所需資訊。"
+        "用精簡要點友善作答。若內容不足或無關，你*必須*只回答 `[NO_ANSWER]`，唔可以加任何其他文字。"
     ),
     "zh-CN": (
-        "仅按检索内容作答。用精简要点。若内容不足或无关，请直接表明找不到所需信息。"
+        "用精简要点友善作答。若内容不足或无关，你*必须*仅回答 `[NO_ANSWER]`，不要加任何其他文字。"
     ),
 }
 
-# --- NEW: Localized text for the prompt's structure ---
+# The role now establishes a clear persona as a "Little Scholars" admin agent.
 PROMPT_SCAFFOLD = {
     "en": {
-        "role": "You are a question-answering assistant. Your task is to answer the user's question based *only* on the provided search results. Follow all instructions provided.",
-        "use_results": "Here are the search results to use:",
-        "ask": "Based *only* on the information in the search results above, answer the following question:",
+        "role": "You are a helpful admin agent for 'Little Scholars', a Hong Kong youth education center. Your task is to answer parents' questions based *only* on the provided information. Answer in the first person, using 'we' and 'our'. Never mention that you are an AI or that the information comes from a document. Your tone should be helpful and direct.",
+        "use_results": "Here is the internal information to use:",
+        "ask": "Based *only* on the information above, answer the following parent's question:",
         "answer_label": "Answer:",
     },
     "zh-HK": {
-        "role": "你是一個問答助手。你的任務是僅根據提供的搜索結果來回答用戶的問題。請遵循所有提供的指示。",
-        "use_results": "請使用以下搜索結果：",
-        "ask": "僅根據上述搜索結果中的資訊，回答以下問題：",
+        "role": "你係「Little Scholars」（一間香港青少年教育中心）嘅行政助理。你嘅任務係*只*根據提供嘅資料回答家長問題。請用第一人稱（「我哋」）回答。絕對唔好提及你係AI或者資料來源。語氣要友善直接。",
+        "use_results": "請使用以下內部資料：",
+        "ask": "僅根據上述資料，回答家長嘅以下問題：",
         "answer_label": "答案：",
     },
     "zh-CN": {
-        "role": "你是一个问答助手。你的任务是仅根据提供的搜索结果来回答用户的问题。请遵循所有提供的指示。",
-        "use_results": "请使用以下搜索结果：",
-        "ask": "仅根据上述搜索结果中的信息，回答以下问题：",
+        "role": "你是‘Little Scholars’（一间香港青少年教育中心）的行政助理。你的任务是*仅*根据提供的信息回答家长的问题。请用第一人称（‘我们’）回答。绝不提及你是AI或信息来源。语气应友善直接。",
+        "use_results": "请使用以下内部信息：",
+        "ask": "仅根据上述信息，回答家长的以下问题：",
         "answer_label": "答案：",
     },
 }
-
 
 OPENING_HOURS_WEATHER_GUARDRAIL = {
     "en": "Important: Do NOT reference weather unless the user asked, or there is an active Black Rainstorm Signal or Typhoon Signal No. 8 (or above).",
@@ -94,6 +94,7 @@ STAFF = {
     "zh-CN": "如需协助，请联系职员：+852 2537 9519（致电）、+852 5118 2819（WhatsApp）、info@decoders-ls.com",
 }
 
+# --- RE-INTRODUCED: Apology markers as a fallback silencing mechanism ---
 APOLOGY_MARKERS = [
     "sorry","i am unable","i'm unable","i cannot","i can't", "not specified", "not mentioned",
     "抱歉","很抱歉","對不起","对不起",
@@ -128,12 +129,33 @@ def _norm_uri(loc: Dict) -> Optional[str]:
         return s3["uri"]
     return None
 
+# --- MODIFIED: Hybrid silencing logic using both token and apology markers ---
 def _silence_reason(answer: str, citation_count: int) -> Optional[str]:
+    """
+    Determines if a response should be silenced using a hybrid approach.
+    Silence is triggered by:
+    1. The model explicitly outputting the '[NO_ANSWER]' token (Primary).
+    2. The response containing a known apology phrase (Secondary Fallback).
+    3. The response being empty.
+    4. The response having no citations, if citations are required.
+    """
     stripped = (answer or "").strip()
-    if not stripped: return "empty"
+    
+    # 1. Primary check: The model has explicitly stated it cannot answer.
+    if stripped == "[NO_ANSWER]":
+        return "no_answer_token"
+    
+    # 2. Secondary check: Heuristic fallback for natural language apologies.
     lower = stripped.lower()
-    if SETTINGS.kb_require_citation and citation_count == 0: return "no_citations"
-    if SETTINGS.kb_silence_apology and any(m in lower for m in APOLOGY_MARKERS): return "apology_marker"
+    if SETTINGS.kb_silence_apology and any(m in lower for m in APOLOGY_MARKERS):
+        return "apology_marker"
+        
+    # 3. Other checks
+    if not stripped:
+        return "empty"
+    if SETTINGS.kb_require_citation and citation_count == 0:
+        return "no_citations"
+    
     return None
 
 def _cache_key(lang: str, message: str, extra_context: Optional[str], hint_canonical: Optional[str]) -> Tuple[str, str, str, str]:
@@ -157,7 +179,6 @@ def _cache_set(lang: str, message: str, extra_context: Optional[str], hint_canon
     key = _cache_key(lang, message, extra_context, hint_canonical)
     _CACHE[key] = (time.time(), ans, cits, dbg)
 
-# --- MODIFIED: Prompt builder is now fully localized ---
 def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, context_chunks: List[str]) -> str:
     """
     Constructs a highly structured, strict, and fully localized prompt for the InvokeModel API call.
@@ -257,7 +278,8 @@ def chat_with_kb(
 
             retrieval_results = retrieve_response.get('retrievalResults', [])
             if not retrieval_results:
-                return "", [], flow_debug_info
+                # If retrieval finds nothing, we can short-circuit and signal no answer.
+                return "[NO_ANSWER]", [], flow_debug_info
 
             retrieved_chunks_text: List[str] = []
             parsed_citations: List[Dict] = []
@@ -273,7 +295,6 @@ def chat_with_kb(
             flow_debug_info["parsed_citations"] = parsed_citations
 
             # --- STEP 2: GENERATE (using the localized prompt) ---
-            # MODIFIED: Pass the language 'L' to the prompt builder
             llm_prompt = build_llm_prompt(L, instruction_parts, message, retrieved_chunks_text)
             flow_debug_info["llm_prompt"] = llm_prompt
 
@@ -302,16 +323,18 @@ def chat_with_kb(
         debug_info["silence_reason"] = reason
 
         need_retry_for_zero_citations = (len(parsed) == 0)
-        if ((reason or not answer) or need_retry_for_zero_citations) and SETTINGS.kb_retry_nofilter:
+        # We retry if the answer is silenced OR if there are no citations (as before)
+        if (reason or need_retry_for_zero_citations) and SETTINGS.kb_retry_nofilter:
             debug_info["retry_reason"] = (
-                f"{'no citations' if need_retry_for_zero_citations else (reason or 'empty_answer')}. Retrying without filter."
+                f"{'no citations' if need_retry_for_zero_citations else reason}. Retrying without filter."
             )
             
             answer2, parsed2, retry_debug_info = perform_rag_flow(retry_mode=True)
             if debug: debug_info["retry_attempt"] = retry_debug_info
             reason2 = _silence_reason(answer2, len(parsed2))
             
-            if (not reason2 and answer2) and len(parsed2) > 0:
+            # We accept the retry result if it's NOT silenced and has citations
+            if not reason2 and len(parsed2) > 0:
                 answer, parsed, reason = answer2, parsed2, None
                 debug_info["retry_succeeded"] = True
                 debug_info["raw_answer"] = answer
