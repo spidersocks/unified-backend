@@ -1,6 +1,6 @@
 import os
-from dataclasses import dataclass, field # Import 'field'
-from typing import List # Import List
+from dataclasses import dataclass, field  # Import 'field'
+from typing import List  # Import List
 
 # Helper function to parse the WHATSAPP_TEST_NUMBERS environment variable
 def _get_whatsapp_test_numbers_from_env() -> List[str]:
@@ -18,11 +18,15 @@ class Settings:
     kb_id: str = os.environ.get("KB_ID", "")
     kb_model_arn: str = os.environ.get("KB_MODEL_ARN", "")
 
+    # LLM for lightweight tasks (e.g., rephrasing)
+    # Avoid using the KB model ARN here; this should be a modelId like "meta.llama3-70b-instruct-v1:0"
+    llm_model_id: str = os.environ.get("LLM_MODEL_ID", "meta.llama3-70b-instruct-v1:0")
+
     # S3 for KB data source
     kb_s3_bucket: str = os.environ.get("KB_S3_BUCKET", "")
     kb_s3_prefix: str = os.environ.get("KB_S3_PREFIX", "ls/kb/v1/").strip("/")
 
-    # Inference config for generator
+    # Inference config for generator (RAG)
     gen_max_tokens: int = int(os.environ.get("KB_GEN_MAX_TOKENS", "300"))
     gen_temperature: float = float(os.environ.get("KB_GEN_TEMPERATURE", "0.15"))
     gen_top_p: float = float(os.environ.get("KB_GEN_TOP_P", "0.9"))
@@ -56,14 +60,15 @@ class Settings:
     debug_kb_log_prompt: bool = os.environ.get("DEBUG_KB_LOG_PROMPT", "false").lower() in ("1","true","yes")
 
     # App behavior
-    default_languages: tuple[str, ...] = ("en", "zh-HK", "zh-CN") # Added type hint for clarity
+    default_languages: tuple[str, ...] = ("en", "zh-HK", "zh-CN")  # Added type hint for clarity
 
-    # --- NEW: WhatsApp Integration Settings ---
+    # --- WhatsApp Integration Settings ---
     whatsapp_verify_token: str = os.environ.get("WHATSAPP_VERIFY_TOKEN", "spidersocks")
     whatsapp_access_token: str = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
     whatsapp_phone_number_id: str = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
+    whatsapp_graph_version: str = os.environ.get("WHATSAPP_GRAPH_VERSION", "v18.0")
     # WHATSAPP_TEST_NUMBERS should be a comma-separated string, e.g., "+1234567890,+1122334455"
-    # Corrected: Use default_factory for mutable default (list)
+    # Use default_factory for mutable default (list)
     whatsapp_test_numbers: List[str] = field(default_factory=_get_whatsapp_test_numbers_from_env)
 
 

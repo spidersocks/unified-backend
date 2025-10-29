@@ -7,10 +7,15 @@ import requests
 # https://data.weather.gov.hk/weatherAPI/doc/HKO_Open_Data_API_Documentation.pdf
 #
 # Endpoints used:
-# - Weather warnings in force (structured; includes codes):
+# - Weather Warning Information (structured; includes codes + details):
 #   https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warningInfo&lang=en|tc|sc
+# - Weather Warning Summary (structured; compact, per-warning object):
+#   https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=en|tc|sc
 # - Special Weather Tips (textual fallback):
 #   https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=swt&lang=en|tc|sc
+#
+# Please include valid parameters in API requests. For details, refer to the
+# Hong Kong Observatory Open Data API Documentation.
 
 _HKO_BASE_URL = "https://data.weather.gov.hk/weatherAPI/opendata/weather.php"
 _TIMEOUT = float(os.environ.get("HKO_HTTP_TIMEOUT_SECS", "4.0"))
@@ -36,7 +41,12 @@ def _cached_get(params: Dict[str, str]) -> Optional[Any]:
     if ent and _now() - ent[0] <= _CACHE_TTL:
         return ent[1]
     try:
-        resp = requests.get(_HKO_BASE_URL, params=params, timeout=_TIMEOUT)
+        resp = requests.get(
+            _HKO_BASE_URL,
+            params=params,
+            timeout=_TIMEOUT,
+            headers={"Accept": "application/json", "User-Agent": "decoders-hko/1.0"},
+        )
         resp.raise_for_status()
         data = resp.json()
         _cache[key] = (_now(), data)
@@ -44,130 +54,204 @@ def _cached_get(params: Dict[str, str]) -> Optional[Any]:
     except Exception:
         return None
 
-# We ONLY surface severe conditions for opening-hours answers:
-# Black Rain or Typhoon Signal No. 8 (or above).
+# Severe only (for opening-hours messages):
+# - Black Rain (黑雨)
+# - Typhoon Signal No. 8 / 9 / 10 (八號/九號/十號風球), including "Gale or Storm Signal"
+# - "Pre-No. 8" special announcement (WTCPRE8)
 _SEVERE_KEYWORDS = [
-    # === English Keywords ===
-
-    # --- Black Rainstorm and Its Direct Precursor ---
+    # English
     "black rain", "black rainstorm", "black rainstorm warning", "black rainstorm signal",
-    "red rain", "red rainstorm", "red rainstorm warning", "red rainstorm signal", # Immediate precursor to Black Rain
+    "typhoon signal no. 8", "t8", "no. 8", "no.8", "signal no. 8", "gale or storm signal",
+    "typhoon signal no. 9", "t9", "no. 9", "no.9", "signal no. 9", "increasing gale or storm",
+    "typhoon signal no. 10", "t10", "no. 10", "no.10", "signal no. 10", "hurricane signal", "hurricane force",
+    "pre-no. 8 special announcement", "pre-8 announcement",
 
-    # --- Typhoon Signals (T8 and above) ---
-    "typhoon signal no. 8", "t8", "no. 8", "no.8", "signal no. 8",
-    "gale or storm signal", # Official name for T8
-    "typhoon signal no. 9", "t9", "no. 9", "no.9", "signal no. 9",
-    "increasing gale or storm", # Part of the T9 warning
-    "typhoon signal no. 10", "t10", "no. 10", "no.10", "signal no. 10",
-    "hurricane signal", "hurricane force", # Official name/description for T10
-
-    # --- Direct Precursors & Announcements for T8 ---
-    "typhoon signal no. 3", "t3", "no. 3", "no.3", "signal no. 3", # The primary precursor to T8
-    "strong wind signal", # Official name for T3
-    "pre-no. 8 special announcement", "pre-8 announcement", # Definitive announcement that T8 is imminent
-
-    # --- High-Threat Descriptive Terms ---
-    "super typhoon", "severe typhoon", # Typhoon classifications suggesting a high signal is likely
-    "landfall", "direct hit", # Actions suggesting a high signal is likely
-
-    # --- Action Verbs (used with the signals above) ---
-    "hoist", "issue", "raise", "consider hoisting", # Indicates a signal is or might become active
-    "lower", "cancel", # Indicates a signal is ending
-
-
-    # === Traditional Chinese (Cantonese / Hong Kong) Keywords ===
-
-    # --- 暴雨警告 (Rainstorm Warnings) ---
+    # Traditional Chinese
     "黑雨", "黑色暴雨", "黑色暴雨警告", "黑色暴雨警告信號",
-    "紅雨", "紅色暴雨", "紅色暴雨警告", "紅色暴雨警告信號", # 黑雨的直接前兆 (Direct precursor to Black Rain)
+    "八號", "八號風球", "八號波", "八號烈風或暴風信號", "八號熱帶氣旋警告",
+    "九號", "九號風球", "九號波", "九號烈風或暴風風力增強信號", "九號熱帶氣旋警告",
+    "十號", "十號風球", "十號波", "十號颶風信號", "十號熱帶氣旋警告",
+    "預警八號", "八號預警", "預先發出之八號熱帶氣旋警告信號",
 
-    # --- 熱帶氣旋警告 (Typhoon Signals, T8 and above) ---
-    "八號", "八號風球", "八號波", # "波" (bo1) is a common colloquialism
-    "八號烈風或暴風信號", "八號熱帶氣旋警告",
-    "九號", "九號風球", "九號波",
-    "九號烈風或暴風風力增強信號", "九號熱帶氣旋警告",
-    "十號", "十號風球", "十號波",
-    "十號颶風信號", "十號熱帶氣旋警告",
-
-    # --- T8的直接前兆及預警 (Direct Precursors & Announcements for T8) ---
-    "三號", "三號風球", "三號波", # 八號的主要前兆 (The primary precursor to T8)
-    "三號強風信號",
-    "預警八號", "八號預警", "預先發出之八號熱帶氣旋警告信號", # HKO's definitive pre-8 announcement
-
-    # --- 高威脅描述性術語 (High-Threat Descriptive Terms) ---
-    "超強颱風", "強颱風", # 颱風級別，預示可能懸掛高級別信號
-    "登陸", "直吹", "正面吹襲", # 颱風路徑，預示可能懸掛高級別信號
-
-    # --- 常用動詞 (Common Verbs) ---
-    "懸掛", "掛波", "掛風球", "考慮懸掛", # 表示信號可能或將會生效
-    "發出", "改發", # "發出" (issue), "改發" (change to)
-    "取消", "除下", # 表示信號結束
-
-
-    # === Simplified Chinese (Mandarin) Keywords ===
-
-    # --- 暴雨警告 (Rainstorm Warnings) ---
+    # Simplified Chinese
     "黑雨", "黑色暴雨", "黑色暴雨警告", "黑色暴雨警告信号",
-    "红雨", "红色暴雨", "红色暴雨警告", "红色暴雨警告信号", # 黑雨的直接前兆 (Direct precursor to Black Rain)
-
-    # --- 热带气旋警告 (Typhoon Signals, T8 and above) ---
-    "八号", "八号风球", "八号波",
-    "八号烈风或暴风信号", "八号热带气旋警告",
-    "九号", "九号风球", "九号波",
-    "九号烈风或暴风风力增强信号", "九号热带气旋警告",
-    "十号", "十号风球", "十号波",
-    "十号飓风信号", "十号热带气旋警告",
-
-    # --- T8的直接前兆及预警 (Direct Precursors & Announcements for T8) ---
-    "三号", "三号风球", "三号波", # 八号的主要前兆 (The primary precursor to T8)
-    "三号强风信号",
-    "预警八号", "八号预警", "预先发出之八号热带气旋警告信号", # HKO's definitive pre-8 announcement
-
-    # --- 高威胁描述性术语 (High-Threat Descriptive Terms) ---
-    "超强台风", "强台风", # 台风级别，预示可能悬挂高级别信号
-    "登陆", "直吹", "正面吹袭", # 台风路径，预示可能悬挂高级别信号
-
-    # --- 常用动词 (Common Verbs) ---
-    "悬挂", "挂球", "考虑悬挂", # 表示信号可能或将会生效
-    "发出", "改发", # "发出" (issue), "改发" (change to)
-    "取消", "除下", # 表示信号结束
+    "八号", "八号风球", "八号波", "八号烈风或暴风信号", "八号热带气旋警告",
+    "九号", "九号风球", "九号波", "九号烈风或暴风风力增强信号", "九号热带气旋警告",
+    "十号", "十号风球", "十号波", "十号飓风信号", "十号热带气旋警告",
+    "预警八号", "八号预警", "预先发出之八号热带气旋警告信号",
 ]
+
+# Explicit code-based ranking (strongest first)
+# Based on HKO docs: WTCSGNL subtype TC10/TC9/TC8{NE,SE,SW,NW}; WTCPRE8; WRAIN subtype WRAINB.
+_TY_CODES_10 = {"TC10"}
+_TY_CODES_9 = {"TC9"}
+_TY_CODES_8 = {"TC8NE", "TC8SE", "TC8SW", "TC8NW"}
+_PRE8_CODES = {"WTCPRE8"}
+_BLACK_RAIN_CODES = {"WRAINB"}
 
 def _contains_any(text: str, needles: List[str]) -> bool:
     low = (text or "").lower()
     return any(n.lower() in low for n in needles)
 
 def _flatten_warning_items(payload: Any) -> List[Dict[str, Any]]:
+    """
+    Accepts the response of dataType=warningInfo (usually {"details":[...]}),
+    or warnsum (object with keys per warning), or already a list.
+    Returns a flat list of dict records.
+    """
     out: List[Dict[str, Any]] = []
+    if payload is None:
+        return out
+
     if isinstance(payload, list):
         for it in payload:
             if isinstance(it, dict):
                 out.append(it)
-    elif isinstance(payload, dict):
-        for k in ("warningInfo", "data", "details", "records", "warnings"):
+        return out
+
+    if isinstance(payload, dict):
+        # warningInfo: "details": [ {...}, ... ]
+        for k in ("warningInfo", "details", "data", "records", "warnings"):
             v = payload.get(k)
             if isinstance(v, list):
                 for it in v:
                     if isinstance(it, dict):
                         out.append(it)
-        if not out and any(x in payload for x in ("code", "name", "type")):
+
+        # warnsum: object with warning-code keys, each containing an object
+        # e.g. {"WTS": {...}, "WTCSGNL": {...}}
+        if not out:
+            for k, v in payload.items():
+                if isinstance(v, dict) and any(x in v for x in ("code", "name", "type", "actionCode")):
+                    rec = dict(v)
+                    rec["_key"] = k
+                    out.append(rec)
+
+        # single object fallback
+        if not out and any(x in payload for x in ("code", "name", "type", "warningStatementCode")):
             out.append(payload)  # type: ignore
+
     return out
 
-def _pick_severe_warning(warnings: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    for w in warnings:
-        name = str(w.get("name") or w.get("warningName") or "")
-        typ  = str(w.get("type") or w.get("warningType") or "")
-        code = str(w.get("code") or w.get("warningCode") or w.get("subtype") or "")
-        hay = " ".join([name, typ, code]).strip()
-        if _contains_any(hay, _SEVERE_KEYWORDS):
-            return w
-    return None
+def _normalize_warning_record(w: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Produce a unified view for ranking/formatting.
+    Fields:
+      code: e.g. WRAINR / TC3 (may be absent)
+      subtype: WRAINB / TC8NE / etc.
+      wscode: warningStatementCode (for warningInfo details)
+      name/type: displayable name or type
+      contents_text: joined contents if present
+    """
+    code = str(w.get("code") or w.get("warningCode") or "").strip()
+    subtype = str(w.get("subtype") or "").strip()
+    wscode = str(w.get("warningStatementCode") or "").strip()
+    name = str(w.get("name") or w.get("warningName") or "").strip()
+    wtype = str(w.get("type") or w.get("warningType") or "").strip()
+    contents = ""
+    c = w.get("contents")
+    if isinstance(c, list):
+        contents = " ".join([str(x) for x in c if isinstance(x, str)]).strip()
+    elif isinstance(c, str):
+        contents = c.strip()
 
-def _format_warning_line(w: Dict[str, Any], lc: str) -> str:
-    name = str(w.get("name") or w.get("warningName") or w.get("type") or w.get("warningType") or "").strip()
-    code = str(w.get("code") or w.get("warningCode") or w.get("subtype") or "").strip()
-    label = name if name else code if code else ""
+    # Best display label
+    label = name or wtype or subtype or code or wscode
+
+    return {
+        "code": code,
+        "subtype": subtype,
+        "wscode": wscode,
+        "name": name,
+        "type": wtype,
+        "contents_text": contents,
+        "label": label,
+        "_raw": w,
+    }
+
+def _severity_rank(nw: Dict[str, Any]) -> int:
+    code = (nw.get("code") or "").upper()
+    sub = (nw.get("subtype") or "").upper()
+    wscode = (nw.get("wscode") or "").upper()
+    hay = " ".join([
+        nw.get("name") or "",
+        nw.get("type") or "",
+        code, sub, wscode,
+        nw.get("contents_text") or "",
+    ])
+
+    # Code/subtype driven (highest confidence)
+    if sub in _TY_CODES_10 or code in _TY_CODES_10:
+        return 100
+    if sub in _TY_CODES_9 or code in _TY_CODES_9:
+        return 90
+    if sub in _TY_CODES_8 or code in _TY_CODES_8:
+        return 80
+    if wscode in _PRE8_CODES or code in _PRE8_CODES or sub in _PRE8_CODES:
+        return 70
+    if sub in _BLACK_RAIN_CODES or code in _BLACK_RAIN_CODES:
+        return 60
+
+    # Textual keywords as fallback (e.g., WTCPRE8 may appear only in contents)
+    if _contains_any(hay, _SEVERE_KEYWORDS):
+        # Assign a conservative severity if detected only via text
+        # Try to differentiate T8+/T9/T10 if text hints present
+        low = hay.lower()
+        if "no. 10" in low or "t10" in low or "颶風信號" in low or "飓风信号" in low:
+            return 100
+        if "no. 9" in low or "t9" in low or "增強信號" in low:
+            return 90
+        if "no. 8" in low or "t8" in low or "烈風或暴風信號" in low:
+            return 80
+        if "pre-no. 8" in low or "預警八號" in low or "预警八号" in low:
+            return 70
+        if "black rain" in low or "黑雨" in low:
+            return 60
+        return 50
+
+    return 0
+
+def _pick_severe_warning(warnings: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    best = None
+    best_rank = 0
+    for w in warnings:
+        nw = _normalize_warning_record(w)
+        rank = _severity_rank(nw)
+        if rank > best_rank:
+            best_rank = rank
+            best = nw
+    return best
+
+def _format_warning_line(nw: Dict[str, Any], lc: str) -> str:
+    label = (nw.get("label") or "").strip()
+    # Refine label for common severe cases if possible
+    code = (nw.get("code") or "").upper()
+    sub = (nw.get("subtype") or "").upper()
+    wscode = (nw.get("wscode") or "").upper()
+    typ = (nw.get("type") or "").strip()
+
+    if any(x in {code, sub, wscode} for x in _TY_CODES_10):
+        label = typ or "Tropical Cyclone Warning Signal No. 10"
+    elif any(x in {code, sub, wscode} for x in _TY_CODES_9):
+        label = typ or "Tropical Cyclone Warning Signal No. 9"
+    elif any(x in {code, sub, wscode} for x in _TY_CODES_8):
+        label = typ or "Tropical Cyclone Warning Signal No. 8"
+    elif any(x in {code, sub, wscode} for x in _BLACK_RAIN_CODES):
+        # Prefer explicit "Black Rainstorm Warning Signal"
+        if lc == "tc":
+            label = "黑色暴雨警告信號"
+        elif lc == "sc":
+            label = "黑色暴雨警告信号"
+        else:
+            label = "Black Rainstorm Warning Signal"
+    elif any(x in {code, sub, wscode} for x in _PRE8_CODES):
+        if lc == "tc":
+            label = "預先發出之八號熱帶氣旋警告信號"
+        elif lc == "sc":
+            label = "预先发出之八号热带气旋警告信号"
+        else:
+            label = "Pre-No. 8 Special Announcement"
+
     if lc == "tc":
         prefix = "天氣提示："
     elif lc == "sc":
@@ -179,6 +263,19 @@ def _format_warning_line(w: Dict[str, Any], lc: str) -> str:
 def _get_severe_from_warninginfo(lang: Optional[str]) -> Optional[str]:
     lc = _lang_code(lang)
     data = _cached_get({"dataType": "warningInfo", "lang": lc})
+    if not data:
+        return None
+    warnings = _flatten_warning_items(data)
+    if not warnings:
+        return None
+    rel = _pick_severe_warning(warnings)
+    if not rel:
+        return None
+    return _format_warning_line(rel, lc)
+
+def _get_severe_from_warnsum(lang: Optional[str]) -> Optional[str]:
+    lc = _lang_code(lang)
+    data = _cached_get({"dataType": "warnsum", "lang": lc})
     if not data:
         return None
     warnings = _flatten_warning_items(data)
@@ -240,11 +337,20 @@ def _get_severe_from_swt(lang: Optional[str]) -> Optional[str]:
 
 def get_weather_hint_for_opening(lang: Optional[str]) -> Optional[str]:
     """
-    Only return a hint when there is a severe condition in effect or explicitly noted (Black Rain or T8+).
-    Never return generic tides/monsoon/thunderstorm info for opening-hours answers.
+    Return a short hint ONLY when a severe condition is in effect or explicitly noted:
+      - Black Rainstorm Warning (WRAINB), or
+      - Tropical Cyclone Signal No. 8/9/10 (TC8*/TC9/TC10), or
+      - Pre-No. 8 Special Announcement (WTCPRE8).
+    Prefer structured warnings (warningInfo or warnsum);
+    fall back to SWT text if it explicitly mentions severe signals.
     """
-    # Prefer structured warnings; fall back to SWT text if it explicitly mentions severe signals.
+    # 1) Prefer structured 'warningInfo'
     hint = _get_severe_from_warninginfo(lang)
     if hint:
         return hint
+    # 2) Try compact 'warnsum'
+    hint = _get_severe_from_warnsum(lang)
+    if hint:
+        return hint
+    # 3) Fallback to textual SWT
     return _get_severe_from_swt(lang)

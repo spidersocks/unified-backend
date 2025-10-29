@@ -5,6 +5,7 @@ Optimized for latency: fewer retrieved chunks, smaller max tokens, no unconditio
 import os
 import time
 import re
+import hashlib
 import boto3
 from botocore.config import Config
 from typing import Optional, Tuple, List, Dict, Any
@@ -92,7 +93,7 @@ APOLOGY_MARKERS = [
     "無提供相關信息","沒有相關信息","沒有資料","沒有相关资料","暂无相关信息","暂无资料",
 ]
 
-_CACHE: Dict[Tuple[str,str], Tuple[float, str, List[Dict], Dict[str,Any]]] = {}
+_CACHE: Dict[Tuple[str,str,str,str], Tuple[float, str, List[Dict], Dict[str,Any]]] = {}
 _CACHE_TTL_SECS = int(os.environ.get("KB_RESPONSE_CACHE_TTL_SECS", "120"))
 
 def _lang_label(lang: Optional[str]) -> str:
@@ -157,8 +158,14 @@ def _silence_reason(answer: str, parsed_count: int) -> Optional[str]:
     if SETTINGS.kb_silence_apology and any(m in lower for m in APOLOGY_MARKERS): return "apology_marker"
     return None
 
-def _cache_get(lang: str, message: str):
-    key = (lang, message.strip())
+def _cache_key(lang: str, message: str, extra_context: Optional[str], hint_canonical: Optional[str]) -> Tuple[str,str,str,str]:
+    ec = extra_context or ""
+    ec_hash = hashlib.sha256(ec.encode("utf-8")).hexdigest()[:12] if ec else ""
+    hc = hint_canonical or ""
+    return (lang, message.strip(), ec_hash, hc)
+
+def _cache_get(lang: str, message: str, extra_context: Optional[str], hint_canonical: Optional[str]):
+    key = _cache_key(lang, message, extra_context, hint_canonical)
     now = time.time()
     entry = _CACHE.get(key)
     if not entry: return None
@@ -168,8 +175,9 @@ def _cache_get(lang: str, message: str):
         return None
     return ans, cits, dbg
 
-def _cache_set(lang: str, message: str, ans: str, cits: List[Dict], dbg: Dict[str,Any]):
-    _CACHE[(lang, message.strip())] = (time.time(), ans, cits, dbg)
+def _cache_set(lang: str, message: str, extra_context: Optional[str], hint_canonical: Optional[str], ans: str, cits: List[Dict], dbg: Dict[str,Any]):
+    key = _cache_key(lang, message, extra_context, hint_canonical)
+    _CACHE[key] = (time.time(), ans, cits, dbg)
 
 def chat_with_kb(
     message: str,
@@ -181,7 +189,7 @@ def chat_with_kb(
     hint_canonical: Optional[str] = None,
 ) -> Tuple[str, List[Dict], Dict[str, Any]]:
     L = _lang_label(language)
-    cached = _cache_get(L, message or "")
+    cached = _cache_get(L, message or "", extra_context, hint_canonical)
     if cached:
         ans, cits, dbg = cached
         return ans, cits, (dbg if debug else {})
@@ -205,10 +213,7 @@ def chat_with_kb(
 
     t0 = time.time()
 
-    # Use raw user question for retrieval embedding
-    input_text = _prompt_prefix(L) + (extra_context + "\n" if extra_context else "") + (message or "")
-
-    # Optional guardrails (kept for generation stage only)
+    # Build prompt prefix + guardrails
     prefix = _prompt_prefix(L)
     if hint_canonical and hint_canonical.lower() == "opening_hours":
         prefix = f"{prefix}{OPENING_HOURS_WEATHER_GUARDRAIL.get(L, OPENING_HOURS_WEATHER_GUARDRAIL['en'])}\n{OPENING_HOURS_HOLIDAY_GUARDRAIL.get(L, OPENING_HOURS_HOLIDAY_GUARDRAIL['en'])}\n\n"
@@ -219,11 +224,15 @@ def chat_with_kb(
         if debug:
             debug_info["contact_guardrail"] = True
 
+    # Compose input for RAG (keep prefix and any structured context at the top)
+    input_text = prefix + ((extra_context + "\n\n") if extra_context else "") + (message or "")
+    if debug and SETTINGS.debug_kb_log_prompt:
+        debug_info["input_preview"] = input_text[:240]
+
     # Language-only filter
     vec_cfg: Dict = {"numberOfResults": max(1, SETTINGS.kb_vector_results)}
     if not SETTINGS.kb_disable_lang_filter:
         vec_cfg["filter"] = {"equals": {"key": "language", "value": L}}
-    debug_info["first_attempt_retrieval_config"] = dict(vec_cfg)
     debug_info["retrieval_config"] = dict(vec_cfg)
 
     req: Dict = {
@@ -234,7 +243,11 @@ def chat_with_kb(
                 "knowledgeBaseId": SETTINGS.kb_id,
                 "modelArn": SETTINGS.kb_model_arn,
                 "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
-                # Minimal body is enough; omit generationConfiguration unless you need custom decoding
+                "generationConfiguration": {
+                    "maxTokens": SETTINGS.gen_max_tokens,
+                    "temperature": SETTINGS.gen_temperature,
+                    "topP": SETTINGS.gen_top_p,
+                },
             }
         },
     }
@@ -249,7 +262,6 @@ def chat_with_kb(
 
         if debug:
             debug_info["raw_citations"] = raw_cits
-            debug_info["input_preview"] = input_text[:120]
 
         answer = _filter_refusal(answer)
         reason = _silence_reason(answer, len(parsed))
@@ -281,9 +293,9 @@ def chat_with_kb(
         if reason:
             debug_info["silenced"] = True
             debug_info["silence_reason"] = reason
-            _cache_set(L, message or "", "", [], debug_info)
+            _cache_set(L, message or "", extra_context, hint_canonical, "", [], debug_info)
             return "", [], (debug_info if debug else {})
-        _cache_set(L, message or "", answer, parsed, debug_info)
+        _cache_set(L, message or "", extra_context, hint_canonical, answer, parsed, debug_info)
         return answer, parsed, (debug_info if debug else {})
     except Exception as e:
         debug_info["error"] = f"{type(e).__name__}: {e}"
