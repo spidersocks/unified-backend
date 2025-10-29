@@ -179,6 +179,30 @@ def _cache_set(lang: str, message: str, extra_context: Optional[str], hint_canon
     key = _cache_key(lang, message, extra_context, hint_canonical)
     _CACHE[key] = (time.time(), ans, cits, dbg)
 
+def _build_generation_configuration() -> Dict[str, Any]:
+    """
+    Bedrock KB RetrieveAndGenerate expects generationConfiguration with inferenceConfig.textInferenceConfig.
+    Move maxTokens/temperature/topP under that shape to avoid ParamValidationError.
+    """
+    text_cfg: Dict[str, Any] = {}
+    if getattr(SETTINGS, "gen_max_tokens", None) is not None:
+        text_cfg["maxTokens"] = SETTINGS.gen_max_tokens
+    if getattr(SETTINGS, "gen_temperature", None) is not None:
+        text_cfg["temperature"] = SETTINGS.gen_temperature
+    if getattr(SETTINGS, "gen_top_p", None) is not None:
+        text_cfg["topP"] = SETTINGS.gen_top_p
+    # Optional: stop sequences if provided
+    if getattr(SETTINGS, "gen_stop_sequences", None):
+        text_cfg["stopSequences"] = SETTINGS.gen_stop_sequences
+
+    gen_cfg: Dict[str, Any] = {}
+    if text_cfg:
+        gen_cfg["inferenceConfig"] = {"textInferenceConfig": text_cfg}
+    # You may add guardrails/prompt templates here if needed:
+    # gen_cfg["guardrailConfiguration"] = {"guardrailId": "...", "guardrailVersion": "..."}
+    # gen_cfg["promptTemplate"] = {"textPromptTemplate": "..."}
+    return gen_cfg
+
 def chat_with_kb(
     message: str,
     language: Optional[str] = None,
@@ -235,6 +259,10 @@ def chat_with_kb(
         vec_cfg["filter"] = {"equals": {"key": "language", "value": L}}
     debug_info["retrieval_config"] = dict(vec_cfg)
 
+    gen_cfg = _build_generation_configuration()
+    if debug:
+        debug_info["generation_configuration"] = gen_cfg
+
     req: Dict = {
         "input": {"text": input_text},
         "retrieveAndGenerateConfiguration": {
@@ -243,11 +271,9 @@ def chat_with_kb(
                 "knowledgeBaseId": SETTINGS.kb_id,
                 "modelArn": SETTINGS.kb_model_arn,
                 "retrievalConfiguration": {"vectorSearchConfiguration": vec_cfg},
-                "generationConfiguration": {
-                    "maxTokens": SETTINGS.gen_max_tokens,
-                    "temperature": SETTINGS.gen_temperature,
-                    "topP": SETTINGS.gen_top_p,
-                },
+                # Use the new, valid shape for generationConfiguration:
+                # {"inferenceConfig": {"textInferenceConfig": {...}}}
+                "generationConfiguration": gen_cfg,
             }
         },
     }
