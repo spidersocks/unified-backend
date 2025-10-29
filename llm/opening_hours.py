@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 import re
 
 import pytz
@@ -15,7 +15,8 @@ except Exception:
 
 from functools import lru_cache
 from llm.hko import get_weather_hint_for_opening
-from llm.config import SETTINGS  # NEW
+from llm.intent import is_general_hours_query
+from llm.config import SETTINGS
 
 HK_TZ = pytz.timezone("Asia/Hong_Kong")
 
@@ -174,11 +175,14 @@ def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[date
     def find_in_calendar(cal, yr: int):
         if not cal:
             return None
+        # Find the earliest date matching the holiday name in the given year
+        future_holidays = []
         for dt0, name in cal.items():
             if target_kw in str(name).lower():
                 dt_hk = HK_TZ.localize(datetime(yr, dt0.month, dt0.day, 12, 0))
-                return dt_hk, str(name)
-        return None
+                if dt_hk.date() >= base.date():
+                    future_holidays.append((dt_hk, str(name)))
+        return min(future_holidays, key=lambda x: x[0]) if future_holidays else None
 
     hit = find_in_calendar(cal_this, base.year)
     if hit:
@@ -288,69 +292,30 @@ def _relative_offset(message: str, L: str) -> Optional[int]:
     return None
 
 def _parse_datetime(message: str, now: datetime, L: str) -> Optional[datetime]:
-    """
-    Parse a datetime in HK timezone.
-    Priority:
-      1) Explicit relative-day words (今天/明天/后天/聽日/後日 | today/tomorrow/day after tomorrow), noon by default.
-      2) dateparser (if available); overlay explicit time if present; otherwise set to noon (12:00).
-      3) Fallback via weekday or day-of-month heuristics; default time noon.
-    """
-    # 1) Relative-day words first
     rel = _relative_offset(message or "", L)
     if rel is not None:
         base = (now + timedelta(days=rel)).astimezone(HK_TZ)
         t = _parse_time(message or "")
-        if t:
-            base = base.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
-        else:
-            base = base.replace(hour=12, minute=0, second=0, microsecond=0)
-        return base
+        return base.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0) if t else base.replace(hour=12, minute=0, second=0, microsecond=0)
 
-    # 2) dateparser
     if dateparser:
-        settings = {
-            "TIMEZONE": "Asia/Hong_Kong",
-            "RETURN_AS_TIMEZONE_AWARE": True,
-            "PREFER_DATES_FROM": "future",
-            "RELATIVE_BASE": now,
-            "NORMALIZE": True,
-            "DATE_ORDER": "DMY",
-        }
+        settings = {"TIMEZONE": "Asia/Hong_Kong", "RETURN_AS_TIMEZONE_AWARE": True, "PREFER_DATES_FROM": "future", "RELATIVE_BASE": now, "NORMALIZE": True, "DATE_ORDER": "DMY"}
         langs = ["en"] if L == "en" else ["zh"]
         dt = dateparser.parse(message, settings=settings, languages=langs)
         if dt:
-            if not dt.tzinfo:
-                dt = HK_TZ.localize(dt)
-            else:
-                dt = dt.astimezone(HK_TZ)
+            dt = dt.astimezone(HK_TZ)
             t = _parse_time(message or "")
-            if t:
-                dt = dt.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
-            else:
-                dt = dt.replace(hour=12, minute=0, second=0, microsecond=0)
-            return dt
+            return dt.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0) if t else dt.replace(hour=12, minute=0, second=0, microsecond=0)
 
-    # 3) Heuristics by weekday or day-of-month
     dom = _extract_day_of_month(message or "")
     wd = _extract_weekday(message or "", L)
     t = _parse_time(message or "")
-
-    if dom is None and wd is None:
-        return None
-
+    if dom is None and wd is None: return None
     base = now + timedelta(days=1)
     for i in range(0, 60):
         cand = (base + timedelta(days=i)).astimezone(HK_TZ)
-        if dom is not None and cand.day != dom:
-            continue
-        if wd is not None and cand.weekday() != wd:
-            continue
-        if t:
-            cand = cand.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
-        else:
-            cand = cand.replace(hour=12, minute=0, second=0, microsecond=0)
-        return cand
-
+        if (dom is not None and cand.day != dom) or (wd is not None and cand.weekday() != wd): continue
+        return cand.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0) if t else cand.replace(hour=12, minute=0, second=0, microsecond=0)
     return None
 
 def _next_open_window(start: datetime) -> Tuple[datetime, time, time]:
@@ -369,179 +334,136 @@ def _next_open_window(start: datetime) -> Tuple[datetime, time, time]:
 def _localize_holiday_name(name_en: str, L: str) -> str:
     name = (name_en or "").strip()
     if L == "zh-HK":
-        mapping = {
-            "Ching Ming": "清明節",
-            "Chung Yeung": "重陽節",
-            "Mid-Autumn": "中秋節",
-            "Tuen Ng": "端午節",
-            "Buddha": "佛誕",
-            "National Day": "國慶日",
-            "Christmas": "聖誕節",
-            "Easter": "復活節",
-            "The day following the Chinese Mid-Autumn Festival": "中秋節翌日",
-            "The first weekday after Christmas Day": "聖誕節後首個工作天",
-        }
-        for k, v in mapping.items():
-            if k.lower() in name.lower():
-                return v
+        mapping = {"Ching Ming": "清明節", "Chung Yeung": "重陽節", "Mid-Autumn": "中秋節", "Tuen Ng": "端午節", "Buddha": "佛誕", "National Day": "國慶日", "Christmas": "聖誕節", "Easter": "復活節", "The day following the Chinese Mid-Autumn Festival": "中秋節翌日", "The first weekday after Christmas Day": "聖誕節後首個工作天"}
+    elif L == "zh-CN":
+        mapping = {"Ching Ming": "清明节", "Chung Yeung": "重阳节", "Mid-Autumn": "中秋节", "Tuen Ng": "端午节", "Buddha": "佛诞", "National Day": "国庆日", "Christmas": "圣诞节", "Easter": "复活节", "The day following the Chinese Mid-Autumn Festival": "中秋节翌日", "The first weekday after Christmas Day": "圣诞节后第一个工作日"}
+    else:
         return name
-    if L == "zh-CN":
-        mapping = {
-            "Ching Ming": "清明节",
-            "Chung Yeung": "重阳节",
-            "Mid-Autumn": "中秋节",
-            "Tuen Ng": "端午节",
-            "Buddha": "佛诞",
-            "National Day": "国庆日",
-            "Christmas": "圣诞节",
-            "Easter": "复活节",
-            "The day following the Chinese Mid-Autumn Festival": "中秋节翌日",
-            "The first weekday after Christmas Day": "圣诞节后第一个工作日",
-        }
-        for k, v in mapping.items():
-            if k.lower() in name.lower():
-                return v
-        return name
+    for k, v in mapping.items():
+        if k.lower() in name.lower(): return v
     return name
+
+def _contains_time_of_day(message: str) -> bool:
+    return bool(re.search(r"\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(am|pm)\b", message, flags=re.IGNORECASE) or re.search(r"[一二两三四五六七八九十〇零]{1,3}\s*(点|點|时|時)", message))
+
+# --- REFACTORED LOGIC ---
+
+def _get_opening_facts(message: str, lang: Optional[str] = None) -> Dict[str, Any]:
+    """
+    A single source of truth for all date, holiday, and weather analysis.
+    Parses the user message and returns a dictionary of facts.
+    """
+    L = _normalize_lang(lang)
+    now = datetime.now(HK_TZ)
+    
+    hol = _search_holiday_by_name(message or "", now)
+    dt, holiday_reason = (hol[0], hol[1]) if hol else (_parse_datetime(message or "", now, L), None)
+    
+    final_dt = dt or now
+    if not final_dt.tzinfo: final_dt = HK_TZ.localize(final_dt)
+
+    weather_hint = get_weather_hint_for_opening(L) if SETTINGS.opening_hours_weather_enabled else None
+    open_t, close_t = _dow_window(final_dt.weekday())
+    
+    if holiday_reason is None:
+        is_holiday, name = _is_public_holiday(final_dt)
+        if is_holiday: holiday_reason = name
+
+    return {
+        "datetime": final_dt,
+        "lang": L,
+        "open_time": open_t,
+        "close_time": close_t,
+        "is_sunday": open_t is None and close_t is None,
+        "is_holiday": bool(holiday_reason),
+        "holiday_name": holiday_reason,
+        "weather_hint": weather_hint,
+        "asked_specific_time": _contains_time_of_day(message or ""),
+        "is_general_query": is_general_hours_query(message, L)
+    }
 
 def extract_opening_context(message: str, lang: Optional[str] = None) -> str:
     """
     Returns a context string with resolved attendance facts for the LLM.
+    This function is now a thin wrapper around _get_opening_facts.
     """
-    L = _normalize_lang(lang)
-    now = datetime.now(HK_TZ)
-    dt = _parse_datetime(message or "", now, L) or now
-    open_t, close_t = _dow_window(dt.weekday())
-    is_holiday, holiday_name = _is_public_holiday(dt)
-    is_sunday = open_t is None or close_t is None
-    weather_hint = get_weather_hint_for_opening(L) if SETTINGS.opening_hours_weather_enabled else None
+    facts = _get_opening_facts(message, lang)
+    dt = facts["datetime"]
+    L = facts["lang"]
+    
     context_lines = []
+    if facts["weather_hint"]:
+        context_lines.append(f"Weather Status: {facts['weather_hint']}")
+        
     context_lines.append(f"Resolved date: {dt.strftime('%Y-%m-%d')} ({_fmt_date_human(dt, L)})")
-    if is_holiday:
-        context_lines.append(f"Public holiday: Yes ({holiday_name})")
-    if is_sunday:
+    
+    if facts["is_holiday"]:
+        context_lines.append(f"Public holiday: Yes ({facts['holiday_name']})")
+    
+    if facts["is_sunday"]:
         context_lines.append("Day: Sunday (center closed)")
-    if open_t and close_t and not is_holiday and not is_sunday:
-        context_lines.append(f"Open hours: {_fmt_time(open_t)}–{_fmt_time(close_t)}")
-    if weather_hint:
-        context_lines.append(f"Weather: {weather_hint}")
+    
+    if facts["open_time"] and facts["close_time"] and not facts["is_holiday"] and not facts["is_sunday"]:
+        context_lines.append(f"Open hours: {_fmt_time(facts['open_time'])}–{_fmt_time(facts['close_time'])}")
+    
     return "\n".join(context_lines)
-
-def _contains_time_of_day(message: str) -> bool:
-    # Only treat as specific time if there is an explicit time (hh:mm, 3pm, 三点/三點).
-    return bool(re.search(r"\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(am|pm)\b", message, flags=re.IGNORECASE) or
-                re.search(r"[一二两三四五六七八九十〇零]{1,3}\s*(点|點|时|時)", message))
 
 def compute_opening_answer(message: str, lang: Optional[str] = None, brief: bool = False) -> str:
     """
-    Deterministic opening-hours answer:
-    - Uses explicit relative-day words (zh/en) and never inherits current clock time unless a time was given.
-    - Weather hint is appended only when severe (Black Rain / Typhoon Signal No. 8+), and only if enabled.
-    - Avoids mentioning “not a public holiday” unless asked; only mention holidays when applicable.
+    Deterministic opening-hours answer using a unified facts object.
+    Prioritizes closure reasons: 1. Weather, 2. Holiday, 3. Sunday.
     """
-    L = _normalize_lang(lang)
-    now = datetime.now(HK_TZ)
-
-    hol = _search_holiday_by_name(message or "", now)
-    dt = None
-    holiday_reason = None
-    if hol:
-        dt, holiday_reason = hol
-    else:
-        dt = _parse_datetime(message or "", now, L)
-
-    if not dt:
-        dt = now.replace(hour=12, minute=0, second=0, microsecond=0)
-
-    if not dt.tzinfo:
-        dt = HK_TZ.localize(dt)
-
-    open_t, close_t = _dow_window(dt.weekday())
-    is_sunday = open_t is None or close_t is None
-
-    if holiday_reason is None:
-        is_holiday, name = _is_public_holiday(dt)
-        if is_holiday:
-            holiday_reason = name
-
-    asked_specific_time = _contains_time_of_day(message or "")
+    facts = _get_opening_facts(message, lang)
+    L = facts["lang"]
+    dt = facts["datetime"]
     date_h = _fmt_date_human(dt, L)
 
     def canonical_line() -> str:
-        if L == "zh-HK":
-            return "營業時間：星期一至五 09:00–18:00；星期六 09:00–16:00；香港公眾假期休息。"
-        if L == "zh-CN":
-            return "营业时间：周一至周五 09:00–18:00；周六 09:00–16:00；香港公众假期休息。"
-        return "Hours: Mon–Fri 09:00–18:00; Sat 09:00–16:00; closed on Hong Kong public holidays."
+        if L == "zh-HK": return "我們的營業時間是：星期一至五 09:00–18:00；星期六 09:00–16:00；星期日及香港公眾假期休息。"
+        if L == "zh-CN": return "我们的营业时间是：周一至周五 09:00–18:00；周六 09:00–16:00；周日及香港公众假期休息。"
+        return "Our hours are: Mon–Fri 09:00–18:00; Sat 09:00–16:00; closed on Sundays and Hong Kong public holidays."
 
-    def maybe_weather_hint() -> Optional[str]:
-        if not SETTINGS.opening_hours_weather_enabled:
-            return None
-        return get_weather_hint_for_opening(L)
+    # --- Priority 1: Severe Weather ---
+    if facts["weather_hint"]:
+        if L == "zh-HK": return f"{facts['weather_hint']}。因應惡劣天氣，中心暫停開放，所有課堂取消。"
+        if L == "zh-CN": return f"{facts['weather_hint']}。因应恶劣天气，中心暂停开放，所有课程取消。"
+        return f"{facts['weather_hint']}. Due to severe weather, the center is closed and all classes are suspended."
 
-    # Only include canonical_line for general queries
-    from llm.intent import is_general_hours_query
-    include_canonical = is_general_hours_query(message, L)
+    base_next = dt.replace(hour=9, minute=0) + timedelta(days=1)
+    nxt_day, n_open, n_close = _next_open_window(base_next)
+    
+    def next_open_line() -> str:
+        if L == "zh-HK": return f"下一個開放時段為 {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。"
+        if L == "zh-CN": return f"下一个开放时段为 {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。"
+        return f"We will next be open on {_fmt_date_human(nxt_day, L)} from {_fmt_time(n_open)}–{_fmt_time(n_close)}."
 
-    # Holiday
-    if holiday_reason:
-        hol_local = _localize_holiday_name(holiday_reason, L)
-        base_next = dt.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
-        nxt_day, n_open, n_close = _next_open_window(base_next)
-        if L == "zh-HK":
-            base = f"{date_h}為香港公眾假期（{hol_local}），中心休息。課堂暫停。\n下一個開放時段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。"
-            if include_canonical:
-                base += f"\n{canonical_line()}"
-        elif L == "zh-CN":
-            base = f"{date_h}为香港公众假期（{hol_local}），中心休息。课程暂停。\n下一个开放时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。"
-            if include_canonical:
-                base += f"\n{canonical_line()}"
-        else:
-            base = f"Closed on {date_h} due to Hong Kong public holiday: {hol_local}. Classes are suspended.\nNext open window: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}."
-            if include_canonical:
-                base += f"\n{canonical_line()}"
-        hint = maybe_weather_hint()
-        return base if not hint else f"{base}\n{hint}"
+    # --- Priority 2: Public Holiday ---
+    if facts["is_holiday"]:
+        hol_local = _localize_holiday_name(facts['holiday_name'], L)
+        if L == "zh-HK": base = f"{date_h} 為香港公眾假期（{hol_local}），中心休息，課堂暫停。\n{next_open_line()}"
+        elif L == "zh-CN": base = f"{date_h} 为香港公众假期（{hol_local}），中心休息，课程暂停。\n{next_open_line()}"
+        else: base = f"The center is closed on {date_h} for the {hol_local} public holiday. Classes are suspended.\n{next_open_line()}"
+        if facts["is_general_query"]: base += f"\n{canonical_line()}"
+        return base
 
-    # Sunday closed
-    if is_sunday:
-        base_next = dt.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
-        nxt_day, n_open, n_close = _next_open_window(base_next)
-        if L == "zh-HK":
-            base = f"{date_h}（星期日）中心休息。課堂暫停。\n下一個開放時段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。"
-            if include_canonical:
-                base += f"\n{canonical_line()}"
-        elif L == "zh-CN":
-            base = f"{date_h}（周日）中心休息。课程暂停。\n下一个开放时段：{_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}。"
-            if include_canonical:
-                base += f"\n{canonical_line()}"
-        else:
-            base = f"Closed on {date_h} (Sunday). Classes are suspended.\nNext open window: {_fmt_date_human(nxt_day, L)} {_fmt_time(n_open)}–{_fmt_time(n_close)}."
-            if include_canonical:
-                base += f"\n{canonical_line()}"
-        hint = maybe_weather_hint()
-        return base if not hint else f"{base}\n{hint}"
+    # --- Priority 3: Sunday ---
+    if facts["is_sunday"]:
+        if L == "zh-HK": base = f"{date_h}（星期日）中心休息，課堂暫停。\n{next_open_line()}"
+        elif L == "zh-CN": base = f"{date_h}（周日）中心休息，课程暂停。\n{next_open_line()}"
+        else: base = f"The center is closed on {date_h} (Sunday). Classes are suspended.\n{next_open_line()}"
+        if facts["is_general_query"]: base += f"\n{canonical_line()}"
+        return base
 
-    # Regular open day
-    if open_t and close_t:
-        if L == "zh-HK":
-            base = f"{date_h}中心開放，時間：{_fmt_time(open_t)}–{_fmt_time(close_t)}。"
-            if include_canonical and not asked_specific_time:
-                base += f"\n{canonical_line()}"
-        elif L == "zh-CN":
-            base = f"{date_h}中心开放，时间：{_fmt_time(open_t)}–{_fmt_time(close_t)}。"
-            if include_canonical and not asked_specific_time:
-                base += f"\n{canonical_line()}"
-        else:
-            base = f"Open on {date_h}. Hours: {_fmt_time(open_t)}–{_fmt_time(close_t)}."
-            if include_canonical and not asked_specific_time:
-                base += f"\n{canonical_line()}"
-        hint = maybe_weather_hint()
-        return base if not hint else f"{base}\n{hint}"
+    # --- Priority 4: Regular Open Day ---
+    if facts["open_time"] and facts["close_time"]:
+        open_str, close_str = _fmt_time(facts["open_time"]), _fmt_time(facts["close_time"])
+        if L == "zh-HK": base = f"{date_h} 中心開放，時間為 {open_str}–{close_str}。"
+        elif L == "zh-CN": base = f"{date_h} 中心开放，时间为 {open_str}–{close_str}。"
+        else: base = f"The center is open on {date_h}. Hours are {open_str}–{close_str}."
+        if facts["is_general_query"] and not facts["asked_specific_time"]: base += f"\n{canonical_line()}"
+        return base
 
-    # Fallback (should not happen)
-    if L == "zh-HK":
-        return "抱歉，未能解析該日期的營業安排。"
-    if L == "zh-CN":
-        return "抱歉，未能解析该日期的营业安排。"
+    # --- Fallback (should be rare) ---
+    if L == "zh-HK": return "抱歉，未能解析該日期的營業安排。"
+    if L == "zh-CN": return "抱歉，未能解析该日期的营业安排。"
     return "Sorry, I couldn’t resolve the opening arrangement for that date."
