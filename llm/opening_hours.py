@@ -109,6 +109,9 @@ _HOLIDAY_KEYWORDS = {
     "耶穌受難日": "Good Friday", "耶稣受难日": "Good Friday",
     "復活節星期一": "Easter Monday", "复活节星期一": "Easter Monday",
 
+    "christmas eve": "Christmas Eve",
+    "平安夜": "Christmas Eve",
+
     "christmas": "Christmas Day", "christmas day": "Christmas Day",
     "the first weekday after christmas day": "The first weekday after Christmas Day",
     "聖誕": "Christmas Day", "圣诞": "Christmas Day",
@@ -163,22 +166,34 @@ def _is_public_holiday(d: datetime) -> Tuple[bool, Optional[str]]:
     return False, None
 
 def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[datetime, str]]:
+    """
+    --- REFACTORED FOR ROBUSTNESS ---
+    Finds the LONGEST matching holiday keyword in the message to avoid ambiguity.
+    e.g., matches "lunar new year" over "new year".
+    """
     cal_this = _hk_calendar(base.year, base.year)
     cal_next = _hk_calendar(base.year + 1, base.year + 1)
     if not (cal_this or cal_next):
         return None
     
     m_normalized = (message or "").lower()
-    target_kw = None
+    
+    best_match_kw = ""
+    target_en_name = None
 
-    # Iterate through our canonical list of holiday keywords
+    # --- FIX: Simplified and corrected keyword matching logic ---
+    # The original logic was case-sensitive for multi-word English keywords.
+    # This new logic correctly checks all keywords against the lowercased message.
     for k, en_kw in _HOLIDAY_KEYWORDS.items():
-        # Check for English keywords (case-insensitive) or Chinese keywords (case-sensitive)
-        if (k.isalpha() and k in m_normalized) or (not k.isalpha() and k in message):
-            target_kw = en_kw.lower()
-            break
-    if not target_kw:
+        if k in m_normalized:
+            if len(k) > len(best_match_kw):
+                best_match_kw = k
+                target_en_name = en_kw
+
+    if not target_en_name:
         return None
+
+    target_kw_lower = target_en_name.lower()
 
     def find_in_calendar(cal, yr: int):
         if not cal:
@@ -186,7 +201,7 @@ def _search_holiday_by_name(message: str, base: datetime) -> Optional[Tuple[date
         # Find the earliest date matching the holiday name in the given year
         future_holidays = []
         for dt0, name in cal.items():
-            if target_kw in str(name).lower():
+            if target_kw_lower in str(name).lower():
                 dt_hk = HK_TZ.localize(datetime(yr, dt0.month, dt0.day, 12, 0))
                 if dt_hk.date() >= base.date():
                     future_holidays.append((dt_hk, str(name)))
@@ -358,24 +373,42 @@ def _contains_time_of_day(message: str) -> bool:
 
 def _get_opening_facts(message: str, lang: Optional[str] = None, is_general: bool = False) -> Dict[str, Any]:
     """
+    --- REWRITTEN FOR ROBUSTNESS ---
     A single source of truth for all date, holiday, and weather analysis.
-    Parses the user message and returns a dictionary of facts.
+    Uses a sequential, multi-attempt parsing strategy for maximum accuracy.
     """
     L = _normalize_lang(lang)
     now = datetime.now(HK_TZ)
-    
-    hol = _search_holiday_by_name(message or "", now)
-    dt, holiday_reason = (hol[0], hol[1]) if hol else (_parse_datetime(message or "", now, L), None)
-    
-    final_dt = dt or now
-    if not final_dt.tzinfo: final_dt = HK_TZ.localize(final_dt)
+    msg = message or ""
 
+    dt = None
+    holiday_reason = None
+
+    # --- Attempt 1: Search for a specific, named holiday using our curated list. ---
+    # This is the most reliable method for holiday queries.
+    holiday_match = _search_holiday_by_name(msg, now)
+    if holiday_match:
+        dt, holiday_reason = holiday_match
+    
+    # --- Attempt 2: If no named holiday, use general-purpose date parsing. ---
+    # This handles relative dates ("tomorrow"), weekdays ("next Mon"), and absolute dates ("Dec 25").
+    if dt is None:
+        dt = _parse_datetime(msg, now, L)
+
+    # --- Fallback: If all parsing fails, default to the current time. ---
+    final_dt = dt or now
+    if not final_dt.tzinfo: 
+        final_dt = HK_TZ.localize(final_dt)
+
+    # --- Post-processing and Fact Assembly ---
     weather_hint = get_weather_hint_for_opening(L) if SETTINGS.opening_hours_weather_enabled else None
     open_t, close_t = _dow_window(final_dt.weekday())
     
+    # If we resolved a date but don't have a holiday reason yet (e.g., from "Dec 25"), check if it's a holiday.
     if holiday_reason is None:
         is_holiday, name = _is_public_holiday(final_dt)
-        if is_holiday: holiday_reason = name
+        if is_holiday:
+            holiday_reason = name
 
     return {
         "datetime": final_dt,
@@ -386,7 +419,7 @@ def _get_opening_facts(message: str, lang: Optional[str] = None, is_general: boo
         "is_holiday": bool(holiday_reason),
         "holiday_name": holiday_reason,
         "weather_hint": weather_hint,
-        "asked_specific_time": _contains_time_of_day(message or ""),
+        "asked_specific_time": _contains_time_of_day(msg),
         "is_general_query": is_general
     }
 

@@ -8,30 +8,39 @@ from llm.opening_hours import _HOLIDAY_KEYWORDS
 # Broad catch-all intent detection for opening hours, attendance, and arrangements
 # Supports English, zh-HK (Traditional), zh-CN (Simplified)
 
-# NOTE: Keep terms focused on hours/closed/weekday/holiday/time. Avoid generic "class/lesson".
-_EN_TERMS = [
+# --- RESTRUCTURED TERMS FOR BETTER ACCURACY ---
+# Strong terms are high-confidence indicators of opening-hours intent.
+_EN_STRONG_TERMS = [
     r"\bopen(?:ing)?\b", r"\bhours?\b", r"\bclosed?\b", r"\bbusiness hours?\b",
-    r"\battend(?:ing)?\s+(?:class|lesson)\b",
+    r"\battend(?:ing)?\s+(?:class|lesson)\b", r"go to class",
+    r"\bpublic holiday\b", r"\bholiday\b",
+]
+# Weak terms are common but require other hints (like a time) to be confident.
+_EN_WEAK_TERMS = [
     r"\btomorrow\b", r"\btoday\b",
     r"\b(?:next|this)\s+(?:week|mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
     r"\b(mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
-    r"\bpublic holiday\b", r"\bholiday\b",
 ]
 
-_ZH_HK_TERMS = [
+_ZH_HK_STRONG_TERMS = [
     r"營業|營運|開放|開門|收(工|舖|店)|幾點(開|收)",
-    r"上課|上堂|返學|返課",   # removed generic 班/班級
+    r"上課|上堂|返學|返課",
     r"安排|改期",
-    r"今日|聽日|後日|下周|下星期|星期[一二三四五六日天]|周[一二三四五六日天]",
     r"公眾假期|假期",
 ]
+_ZH_HK_WEAK_TERMS = [
+    r"今日|聽日|後日|下周|下星期|星期[一二三四五六日天]|周[一二三四五六日天]",
+]
 
-_ZH_CN_TERMS = [
+_ZH_CN_STRONG_TERMS = [
     r"营业|开放|开门|关门|几点(开|关)",
-    r"上课|上学|上(?:不)?上课",  # removed generic 课程/班级
+    r"上课|上学|上(?:不)?上课",
+
     r"安排|改期",
-    r"今天|明天|后天|下周|星期[一二三四五六日天]|周[一二三四五六日天]",
     r"公众假期|公休日|假期",
+]
+_ZH_CN_WEAK_TERMS = [
+    r"今天|明天|后天|下周|星期[一二三四五六日天]|周[一二三四五六日天]",
 ]
 
 # Weather markers for adding the policy note
@@ -47,16 +56,15 @@ _TIME_HINTS = [
 ]
 
 # --- REMOVED REDUNDANT HOLIDAY LISTS ---
-# The _HOLIDAY_EN, _HOLIDAY_ZH_HK, and _HOLIDAY_ZH_CN lists were removed.
 # We now use the keys from the _HOLIDAY_KEYWORDS dictionary in opening_hours.py
-# as the single source of truth.
 _HOLIDAY_TERMS_REGEX = [re.escape(term) for term in _HOLIDAY_KEYWORDS.keys()]
 
 
 # Negative markers: if present, do NOT classify as opening-hours
-_NEG_EN = [r"\b(tuition|fee|fees|price|cost)\b", r"\bclass\s*size\b"]
-_NEG_ZH_HK = [r"學費|收費|費用|價錢|價格|班級人數|人數"]
-_NEG_ZH_CN = [r"学费|收费|费用|价钱|价格|班级人数|人数"]
+# --- ADDED "homework" and related terms to prevent misclassification ---
+_NEG_EN = [r"\b(tuition|fee|fees|price|cost)\b", r"\bclass\s*size\b", r"\bhomework\b", r"\bassignment\b"]
+_NEG_ZH_HK = [r"學費|收費|費用|價錢|價格|班級人數|人數", r"功課|家課|作業"]
+_NEG_ZH_CN = [r"学费|收费|费用|价钱|价格|班级人数|人数", r"功课|作业"]
 
 def _score_regex(message: str, patterns: list[str]) -> Tuple[int, list[str]]:
     hits = []
@@ -103,40 +111,63 @@ def is_general_hours_query(message: str, lang: str) -> bool:
         # Use regex to match whole words for English terms to avoid partial matches like 'day' in 'today'
         if holiday_term.isalpha() and re.search(r'\b' + re.escape(holiday_term) + r'\b', m, re.I):
              return False
-        # For Chinese terms, simple substring search is fine
-        elif not holiday_term.isalpha() and holiday_term in m:
+        # For Chinese terms or multi-word English terms, simple substring search is fine
+        elif not holiday_term.isalpha() and holiday_term in m.lower():
              return False
 
     # If no specific date, weekday, or holiday markers are found, it's a general query.
     return True
 
 def detect_opening_hours_intent(message: str, lang: str, use_llm: bool = True) -> Tuple[bool, Dict[str, Any]]:
+    """
+    --- REVISED LOGIC ---
+    Detects opening hours intent with higher precision by using strong/weak signals.
+    """
     m = message or ""
     L = (lang or "en").lower()
     if L.startswith("zh-hk"):
-        base_terms = _ZH_HK_TERMS
+        strong_terms = _ZH_HK_STRONG_TERMS
+        weak_terms = _ZH_HK_WEAK_TERMS
         neg_terms = _NEG_ZH_HK
     elif L.startswith("zh-cn") or L == "zh":
-        base_terms = _ZH_CN_TERMS
+        strong_terms = _ZH_CN_STRONG_TERMS
+        weak_terms = _ZH_CN_WEAK_TERMS
         neg_terms = _NEG_ZH_CN
     else:
-        base_terms = _EN_TERMS
+        strong_terms = _EN_STRONG_TERMS
+        weak_terms = _EN_WEAK_TERMS
         neg_terms = _NEG_EN
 
-    base_score, base_hits = _score_regex(m, base_terms)
+    strong_score, strong_hits = _score_regex(m, strong_terms)
+    weak_score, weak_hits = _score_regex(m, weak_terms)
     time_score, time_hits = _score_regex(m, _TIME_HINTS)
     weather_score, weather_hits = _score_regex(m, _WEATHER_MARKERS)
-    # Use the consolidated holiday list for scoring
     holiday_score, holiday_hits = _score_regex(m, _HOLIDAY_TERMS_REGEX)
     neg_score, neg_hits = _score_regex(m, neg_terms)
 
-    # Require at least one real signal (base/time/holiday), and suppress if negative terms are present.
-    score = base_score + (1 if time_score else 0) + (1 if holiday_score else 0)
-    is_intent = score >= 1 and neg_score == 0
+    # --- NEW SCORING RULE ---
+    # An intent is triggered if:
+    # 1. There are no negative markers (like 'homework', 'tuition fee').
+    # AND
+    # 2. At least one of the following is true:
+    #    a) A strong signal is present ('open', 'hours', 'attend class').
+    #    b) A named holiday is present ('Christmas', 'Lunar New Year').
+    #    c) A weak signal ('today', 'Monday') is combined with a time hint ('9am').
+    is_intent = neg_score == 0 and (
+        strong_score > 0
+        or holiday_score > 0
+        or (weak_score > 0 and time_score > 0)
+    )
+    
+    # The original score calculation is no longer used for the final decision,
+    # but can be useful for debugging.
+    total_score = strong_score + weak_score + time_score + holiday_score
 
     debug = {
-        "score": score,
-        "base_hits": base_hits,
+        "score": total_score,
+        "is_intent": is_intent,
+        "strong_hits": strong_hits,
+        "weak_hits": weak_hits,
         "time_hits": time_hits,
         "weather_hits": weather_hits,
         "holiday_hits": holiday_hits,
