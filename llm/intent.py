@@ -82,9 +82,7 @@ def is_general_hours_query(message: str, lang: str) -> bool:
     Used to distinguish 'What are your opening hours?' from 'Are you open on Christmas?'.
     """
     m = (message or "").lower()
-    # An intent check is no longer needed here; this function's purpose is to refine
-    # a query already determined to have opening hours intent.
-
+    
     # Weekday and relative-day markers (in all languages)
     specific_date_patterns = [
         # Weekdays
@@ -104,8 +102,26 @@ def is_general_hours_query(message: str, lang: str) -> bool:
         if re.search(pat, m, re.I):
             return False # Found a specific date marker
 
+    # Check for named holidays by attempting to parse them
+    # Import here to avoid circular imports
+    from datetime import datetime
+    import pytz
+    from llm.opening_hours import _search_holiday_by_name
+    
+    HK_TZ = pytz.timezone("Asia/Hong_Kong")
+    now = datetime.now(HK_TZ)
+    
+    # Try to parse the message as a holiday - if successful, it's specific
+    try:
+        holiday_match = _search_holiday_by_name(message, now)
+        if holiday_match:
+            return False  # Found a specific holiday
+    except Exception:
+        # If parsing fails, fall back to keyword matching
+        pass
+    
     # --- MAJOR FIX ---
-    # Check for named holidays. If one is found, the query is specific.
+    # Check for named holidays using keyword matching as fallback
     # We use the consolidated list imported from opening_hours.py
     for holiday_term in _ALL_HOLIDAY_KEYWORDS:
         # Use regex to match whole words for English terms to avoid partial matches like 'day' in 'today'

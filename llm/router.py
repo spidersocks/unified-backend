@@ -253,15 +253,21 @@ def chat(req: ChatRequest, request: Request):
     is_hours_intent, debug_intent = detect_opening_hours_intent(req.message, lang)
     opening_context = None
     hint_canonical = None
+    
     if is_hours_intent:
-        if is_general_hours_query(req.message, lang):
-            opening_context = None
-            hint_canonical = "opening_hours"
-            _log("Opening hours intent detected as GENERAL. No system context injected; LLM will answer from policy docs.")
-        else:
+        # Check if this is a holiday-specific query that needs date parsing
+        _, intent_debug = debug_intent if 'debug_intent' in locals() else detect_opening_hours_intent(req.message, lang)
+        has_holiday_marker = len(intent_debug.get("holiday_hits", [])) > 0 if intent_debug else False
+        
+        # For holiday queries or specific date queries, always extract context
+        if has_holiday_marker or not is_general_hours_query(req.message, lang):
             opening_context = extract_opening_context(req.message, lang)
             hint_canonical = "opening_hours"
             _log(f"Opening hours intent detected as SPECIFIC. Structured context for LLM:\n{opening_context}")
+        else:
+            opening_context = None
+            hint_canonical = "opening_hours"
+            _log("Opening hours intent detected as GENERAL. No system context injected; LLM will answer from policy docs.")
 
     use_history = (req.session_id is not None and not req.session_id.startswith("web:"))
     if use_history:
