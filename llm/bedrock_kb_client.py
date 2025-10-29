@@ -7,8 +7,8 @@ This approach carefully preserves the custom logic, guardrails, and retry mechan
 from the previous version.
 
 - STEP 1: `retrieve` is called using a clean query (user message + keywords) for high-quality results.
-- STEP 2: `invoke_model` is called with a detailed prompt that includes the original file's
-           custom instructions, guardrails, and the context chunks from Step 1.
+- STEP 2: `invoke_model` is called with a detailed, STRICT, and FULLY LOCALIZED prompt that includes the
+           original file's custom instructions, guardrails, and the context chunks from Step 1.
 - All existing helper functions, constants, retry logic, and caching are preserved.
 """
 import os
@@ -48,6 +48,29 @@ INSTRUCTIONS = {
     ),
 }
 
+# --- NEW: Localized text for the prompt's structure ---
+PROMPT_SCAFFOLD = {
+    "en": {
+        "role": "You are a question-answering assistant. Your task is to answer the user's question based *only* on the provided search results. Follow all instructions provided.",
+        "use_results": "Here are the search results to use:",
+        "ask": "Based *only* on the information in the search results above, answer the following question:",
+        "answer_label": "Answer:",
+    },
+    "zh-HK": {
+        "role": "你是一個問答助手。你的任務是僅根據提供的搜索結果來回答用戶的問題。請遵循所有提供的指示。",
+        "use_results": "請使用以下搜索結果：",
+        "ask": "僅根據上述搜索結果中的資訊，回答以下問題：",
+        "answer_label": "答案：",
+    },
+    "zh-CN": {
+        "role": "你是一个问答助手。你的任务是仅根据提供的搜索结果来回答用户的问题。请遵循所有提供的指示。",
+        "use_results": "请使用以下搜索结果：",
+        "ask": "仅根据上述搜索结果中的信息，回答以下问题：",
+        "answer_label": "答案：",
+    },
+}
+
+
 OPENING_HOURS_WEATHER_GUARDRAIL = {
     "en": "Important: Do NOT reference weather unless the user asked, or there is an active Black Rainstorm Signal or Typhoon Signal No. 8 (or above).",
     "zh-HK": "重要：除非用戶主動詢問天氣，或正生效黑雨或八號（或以上）風球，否則不要提及任何天氣資訊或天氣政策文件。",
@@ -67,7 +90,6 @@ CONTACT_MINIMAL_GUARDRAIL = {
 
 STAFF = {
     "en": "If needed, contact our staff: +852 2537 9519 (Call), +852 5118 2819 (WhatsApp), info@decoders-ls.com",
-    # Corrected the WhatsApp number in the original file
     "zh-HK": "如需協助，請聯絡職員：+852 2537 9519（致電）、+852 5118 2819（WhatsApp）、info@decoders-ls.com",
     "zh-CN": "如需协助，请联系职员：+852 2537 9519（致电）、+852 5118 2819（WhatsApp）、info@decoders-ls.com",
 }
@@ -135,27 +157,34 @@ def _cache_set(lang: str, message: str, extra_context: Optional[str], hint_canon
     key = _cache_key(lang, message, extra_context, hint_canonical)
     _CACHE[key] = (time.time(), ans, cits, dbg)
 
-# --- NEW HELPER: Builds the final prompt for the generation step ---
-def build_llm_prompt(instruction_parts: List[str], query: str, context_chunks: List[str]) -> str:
+# --- MODIFIED: Prompt builder is now fully localized ---
+def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, context_chunks: List[str]) -> str:
     """
-    Constructs the final prompt for the InvokeModel API call, combining
-    your custom instructions with the retrieved context.
+    Constructs a highly structured, strict, and fully localized prompt for the InvokeModel API call.
     """
+    scaffold = PROMPT_SCAFFOLD.get(lang, PROMPT_SCAFFOLD["en"])
     instructions = "\n".join(instruction_parts)
-    formatted_context = "\n\n---\n\n".join(context_chunks)
+    
+    formatted_context = ""
+    for i, chunk in enumerate(context_chunks):
+        # The XML tags are intentionally kept in English as they function like markup.
+        formatted_context += f"<search_result index=\"{i+1}\">\n{chunk}\n</search_result>\n\n"
 
     prompt = (
-        f"{instructions}\n\n"
-        f"**CONTEXT:**\n{formatted_context}\n\n"
-        f"**USER QUESTION:** {query}\n\n"
-        f"**ANSWER:**"
+        f"{scaffold['role']}\n\n"
+        f"<instructions>\n{instructions}\n</instructions>\n\n"
+        f"{scaffold['use_results']}\n"
+        f"<search_results>\n{formatted_context.strip()}\n</search_results>\n\n"
+        f"{scaffold['ask']}\n"
+        f"<question>\n{query}\n</question>\n\n"
+        f"{scaffold['answer_label']}"
     )
     return prompt
 
 def chat_with_kb(
     message: str,
     language: Optional[str] = None,
-    session_id: Optional[str] = None, # session_id is not used by Retrieve/InvokeModel, but kept for interface consistency
+    session_id: Optional[str] = None,
     debug: bool = False,
     extra_context: Optional[str] = None,
     extra_keywords: Optional[List[str]] = None,
@@ -185,7 +214,6 @@ def chat_with_kb(
 
     t0 = time.time()
 
-    # --- LOGIC PRESERVED: Build instruction parts and retrieval query from your file ---
     instruction_parts = [_prompt_prefix(L)]
     if extra_context:
         instruction_parts.append(f"\nSYSTEM CONTEXT:\n{extra_context.strip()}\n")
@@ -198,17 +226,14 @@ def chat_with_kb(
         instruction_parts.append(CONTACT_MINIMAL_GUARDRAIL.get(L, CONTACT_MINIMAL_GUARDRAIL['en']))
         if debug: debug_info["contact_guardrail"] = True
 
-    # This is the clean query for the retrieval step
     retrieval_query = (message or "").strip()
     if extra_keywords:
         retrieval_query = f"{retrieval_query}\nKeywords: {', '.join(extra_keywords)}"
     
     debug_info["retrieval_query"] = repr(retrieval_query)
     
-    # --- CORE LOGIC REPLACEMENT: Manual Retrieve and Generate ---
     try:
         def perform_rag_flow(retry_mode: bool = False) -> Tuple[str, List[Dict], Dict[str, Any]]:
-            """Encapsulates the RAG flow to allow for easy retries."""
             flow_debug_info = {}
             
             # --- STEP 1: RETRIEVE ---
@@ -232,9 +257,8 @@ def chat_with_kb(
 
             retrieval_results = retrieve_response.get('retrievalResults', [])
             if not retrieval_results:
-                return "", [], flow_debug_info # No results, return empty
+                return "", [], flow_debug_info
 
-            # Process results for generation and citation
             retrieved_chunks_text: List[str] = []
             parsed_citations: List[Dict] = []
             for result in retrieval_results:
@@ -248,8 +272,9 @@ def chat_with_kb(
             flow_debug_info["retrieved_chunk_count"] = len(retrieved_chunks_text)
             flow_debug_info["parsed_citations"] = parsed_citations
 
-            # --- STEP 2: GENERATE ---
-            llm_prompt = build_llm_prompt(instruction_parts, message, retrieved_chunks_text)
+            # --- STEP 2: GENERATE (using the localized prompt) ---
+            # MODIFIED: Pass the language 'L' to the prompt builder
+            llm_prompt = build_llm_prompt(L, instruction_parts, message, retrieved_chunks_text)
             flow_debug_info["llm_prompt"] = llm_prompt
 
             body = json.dumps({
@@ -269,7 +294,6 @@ def chat_with_kb(
             
             return answer, parsed_citations, flow_debug_info
 
-        # Initial attempt
         answer, parsed, attempt_debug_info = perform_rag_flow(retry_mode=False)
         if debug: debug_info["initial_attempt"] = attempt_debug_info
 
@@ -277,27 +301,22 @@ def chat_with_kb(
         debug_info["raw_answer"] = answer
         debug_info["silence_reason"] = reason
 
-        # --- LOGIC PRESERVED: Your exact retry condition ---
         need_retry_for_zero_citations = (len(parsed) == 0)
         if ((reason or not answer) or need_retry_for_zero_citations) and SETTINGS.kb_retry_nofilter:
             debug_info["retry_reason"] = (
                 f"{'no citations' if need_retry_for_zero_citations else (reason or 'empty_answer')}. Retrying without filter."
             )
             
-            # Retry attempt
             answer2, parsed2, retry_debug_info = perform_rag_flow(retry_mode=True)
             if debug: debug_info["retry_attempt"] = retry_debug_info
-
             reason2 = _silence_reason(answer2, len(parsed2))
             
-            # Only use retry result if it's valid and better
             if (not reason2 and answer2) and len(parsed2) > 0:
                 answer, parsed, reason = answer2, parsed2, None
                 debug_info["retry_succeeded"] = True
                 debug_info["raw_answer"] = answer
                 debug_info["silence_reason"] = reason
 
-        # --- LOGIC PRESERVED: Final checks and formatting ---
         if reason:
             debug_info["silenced"] = True
             debug_info["silence_reason"] = reason
