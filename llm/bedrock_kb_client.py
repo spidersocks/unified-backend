@@ -16,6 +16,8 @@ import boto3
 from botocore.config import Config
 from typing import Optional, Tuple, List, Dict, Any
 from llm.config import SETTINGS
+import pprint
+import traceback
 
 # Configure Bedrock client timeouts + limited retries to reduce tail latency
 _boto_cfg = Config(
@@ -261,7 +263,7 @@ def chat_with_kb(
     gen_cfg = _build_generation_configuration(prompt_template)
     if debug:
         debug_info["generation_configuration"] = gen_cfg
-        debug_info["retrieval_query"] = user_query
+        debug_info["retrieval_query"] = repr(user_query)
         debug_info["prompt_template_preview"] = prompt_template[:240]
 
     # Language filter for retrieval
@@ -285,9 +287,14 @@ def chat_with_kb(
     if session_id:
         req["sessionId"] = session_id
 
+    if debug:
+        debug_info["bedrock_request"] = pprint.pformat(req)
+
     try:
         # First attempt
         resp = rag.retrieve_and_generate(**req)
+        if debug:
+            debug_info["bedrock_response"] = pprint.pformat(resp)
         answer = ((resp.get("output") or {}).get("text") or "").strip()
         raw_cits = resp.get("citations", []) or []
         parsed = _parse_citations(raw_cits)
@@ -298,6 +305,11 @@ def chat_with_kb(
 
         answer = _filter_refusal(answer)
         reason = _silence_reason(answer, len(parsed))
+
+        # Log raw answer and silencing
+        if debug:
+            debug_info["raw_answer"] = answer
+            debug_info["silence_reason"] = reason
 
         # Retry when:
         # - explicit failure/empty OR
@@ -314,6 +326,8 @@ def chat_with_kb(
             debug_info["retry_retrieval_config"] = dict(vec)
 
             resp2 = rag.retrieve_and_generate(**req)
+            if debug:
+                debug_info.setdefault("retry", {})["bedrock_response"] = pprint.pformat(resp2)
             answer2 = ((resp2.get("output") or {}).get("text") or "").strip()
             raw2 = resp2.get("citations", []) or []
             parsed2 = _parse_citations(raw2)
@@ -324,6 +338,9 @@ def chat_with_kb(
             if (not reason2 and answer2) and len(parsed2) > 0:
                 answer, parsed, reason = answer2, parsed2, None
                 debug_info["retry_succeeded"] = True
+                if debug:
+                    debug_info["raw_answer"] = answer
+                    debug_info["silence_reason"] = reason
 
         # Optional footer
         if answer and not reason and SETTINGS.kb_append_staff_footer:
@@ -345,5 +362,7 @@ def chat_with_kb(
             return answer, parsed, (debug_info if debug else {})
 
     except Exception as e:
-        debug_info["error"] = f"{type(e).__name__}: {e}"
+        err_trace = traceback.format_exc()
+        debug_info["error"] = f"{type(e).__name__}: {e}\n{err_trace}"
+        print(f"[BEDROCK ERROR] {debug_info['error']}", flush=True)
         return "", [], (debug_info if debug else {})
