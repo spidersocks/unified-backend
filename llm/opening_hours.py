@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, time
-from typing import Optional, Tuple, Dict, Any, Callable
+from typing import Optional, Tuple, Dict, Any, Callable, List
 import re
 
 import pytz
