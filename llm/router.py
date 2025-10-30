@@ -246,7 +246,7 @@ def chat(req: ChatRequest, request: Request):
     _log(f"Headers: {dict(request.headers)}")
     session_id = req.session_id or ("web:" + str(hash(request.client.host)))
     # CHANGED: Using get_language_code instead of detect_language
-    lang = req.language or get_language_code(req.message, accept_language=request.headers.get("accept-language"))
+    lang = req.language or get_language_code(req.message, accept_language_header=request.headers.get("accept-language"))
     _log(f"Detected language: {lang!r}")
 
     # --- PATCH: Opening hours intent routing with general/specific distinction ---
