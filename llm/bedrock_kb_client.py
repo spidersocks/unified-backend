@@ -71,6 +71,30 @@ PROMPT_SCAFFOLD = {
     },
 }
 
+# --- NEW: CRITICAL GUARDRAIL FOR SCHEDULING & LEAVE ---
+# This is the primary prompt-based guardrail to enforce the silence requirement.
+CRITICAL_SCHEDULING_GUARDRAIL = {
+    "en": (
+        "ABSOLUTE RULE: You are an admin assistant, NOT an admin. You CANNOT arrange, approve, or schedule anything. "
+        "If the user asks to book, reschedule, cancel, or request leave/absence for a specific date or time (e.g., 'next Friday', 'tomorrow', 'Dec 25'), "
+        "or asks about teacher/class availability or specific people, you MUST reply with ONLY the exact text `[NO_ANSWER]` and nothing else. "
+        "Do NOT provide policy information in response to a specific request. Only provide policy for general questions like 'What is the leave policy?'."
+    ),
+    "zh-HK": (
+        "絕對規則：你係行政助理，唔係管理員。你*唔可以*安排、批准或預約任何嘢。 "
+        "如果家長要求預約、改期、取消、或為特定日子（例如「下星期五」、「聽日」、「12月25日」）請假， "
+        "或者問關於老師/課堂嘅空檔或特定人物，你*必須*只回答 `[NO_ANSWER]`，唔可以加任何其他文字。 "
+        "絕對唔可以用政策資料嚟回答一個具體嘅請求。只有喺一般問題（例如「你哋嘅請假政策係點？」）先可以提供政策。"
+    ),
+    "zh-CN": (
+        "绝对规则：你是行政助理，不是管理员。你*不能*安排、批准或预约任何事。 "
+        "如果家长要求预约、改期、取消、或为特定日期（例如“下周五”、“明天”、“12月25日”）请假， "
+        "或询问关于老师/课程的空闲情况或特定人员，你*必须*仅回答 `[NO_ANSWER]`，不要加任何其他文字。 "
+        "绝对不可以用政策信息来回答一个具体的请求。只有在一般性问题（例如“你们的请假政策是怎样的？”）时才可提供政策。"
+    ),
+}
+
+
 OPENING_HOURS_WEATHER_GUARDRAIL = {
     "en": "Important: Do NOT reference weather unless the user asked, or there is an active Black Rainstorm Signal or Typhoon Signal No. 8 (or above).",
     "zh-HK": "重要：除非用戶主動詢問天氣，或正生效黑雨或八號（或以上）風球，否則不要提及任何天氣資訊或天氣政策文件。",
@@ -184,8 +208,11 @@ def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, contex
     Constructs a highly structured, strict, and fully localized prompt for the InvokeModel API call.
     """
     scaffold = PROMPT_SCAFFOLD.get(lang, PROMPT_SCAFFOLD["en"])
-    instructions = "\n".join(instruction_parts)
-    
+
+    # --- MODIFICATION: Always prepend the critical scheduling guardrail for maximum priority ---
+    final_instructions = [CRITICAL_SCHEDULING_GUARDRAIL.get(lang, CRITICAL_SCHEDULING_GUARDRAIL["en"])] + instruction_parts
+    instructions = "\n\n".join(final_instructions) # Use double newline for better separation
+
     formatted_context = ""
     for i, chunk in enumerate(context_chunks):
         # The XML tags are intentionally kept in English as they function like markup.
@@ -343,7 +370,8 @@ def chat_with_kb(
         if reason:
             debug_info["silenced"] = True
             debug_info["silence_reason"] = reason
-            return "", [], (debug_info if debug else {})
+            # --- MODIFICATION: Return the explicit [NO_ANSWER] token on silence ---
+            return "[NO_ANSWER]", [], (debug_info if debug else {})
         
         if answer and SETTINGS.kb_append_staff_footer:
             answer = f"{answer}\n\n{STAFF.get(L, STAFF['en'])}"
@@ -357,4 +385,5 @@ def chat_with_kb(
         err_trace = traceback.format_exc()
         debug_info["error"] = f"{type(e).__name__}: {e}\n{err_trace}"
         print(f"[BEDROCK ERROR] {debug_info['error']}", flush=True)
-        return "", [], (debug_info if debug else {})
+        # --- MODIFICATION: Return the explicit [NO_ANSWER] token on error ---
+        return "[NO_ANSWER]", [], (debug_info if debug else {})
