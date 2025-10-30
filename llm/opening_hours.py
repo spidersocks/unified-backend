@@ -22,6 +22,9 @@ HK_TZ = pytz.timezone("Asia/Hong_Kong")
 if holidays is None:
     print("[OPENING_HOURS] ERROR: 'holidays' package not installed. HK public holiday resolution disabled.", flush=True)
 
+def _log(msg):
+    print(f"[OPENING_HOURS] {msg}", flush=True)
+
 # Business hours
 WEEKDAY_OPEN = time(9, 0)    # Mon-Fri
 WEEKDAY_CLOSE = time(18, 0)
