@@ -5,7 +5,7 @@ canonical: ParentAdminQnAExamples
 folder: faq
 aliases: native speaker; teacher qualification; assessment fee; class size; makeup
   policy; typhoon; rainstorm; payment; FPS; Christmas hours; writing class; interview
-  class; timetable; speech training
+  class; timetable; speech training; class logistics; drop-off; sibling attendance; WhatsApp consultant
 ---
 # Parent–Admin Q&A (Gold Standard Responses)
 
@@ -65,3 +65,13 @@ A: Both are phonics programmes for children who can name all the letters. Sound 
 
 Q: When can children start writing short stories?  
 A: After Smart Spell Level 4, children can start writing short sentences. After Level 5, they learn to compose a short story on their own.
+
+---
+
+# Class logistics / sibling attendance
+
+Q: My older child may have sports practice on Saturday and I’m not sure of the time. Can I bring my younger child to class first?  
+A: Dear parent,  
+As our class arrangements are tailored to each child’s situation and classroom resources, we can’t confirm this online.  
+Please contact our course consultant directly via official WhatsApp. They’ll promptly coordinate the best class arrangement for your children.  
+Thank you for your understanding!

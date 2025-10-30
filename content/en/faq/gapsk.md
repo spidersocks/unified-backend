@@ -97,6 +97,13 @@ A: Teachers conduct lessons in Mandarin throughout, providing explanations or br
 
 ---
 
+# GAPSK Exam Date & Arrangements
+
+Q: Is the GAPSK exam at the end of this month?  
+A: Thank you for your question! Our team will contact you soon to provide details.
+
+---
+
 # Placement & Assessment
 We recommend a short diagnostic assessment to place your child at the appropriate level. Placement ensures lessons match the child's current ability and keeps learning efficient.
 
