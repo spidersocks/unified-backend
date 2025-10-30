@@ -71,26 +71,26 @@ PROMPT_SCAFFOLD = {
     },
 }
 
-# --- NEW: CRITICAL GUARDRAIL FOR SCHEDULING & LEAVE ---
-# This is the primary prompt-based guardrail to enforce the silence requirement.
+# --- MODIFIED: CRITICAL GUARDRAIL FOR SCHEDULING & LEAVE ---
+# Added a clarification to allow answering general opening hours questions.
 CRITICAL_SCHEDULING_GUARDRAIL = {
     "en": (
         "ABSOLUTE RULE: You are an admin assistant, NOT an admin. You CANNOT arrange, approve, or schedule anything. "
-        "If the user asks to book, reschedule, cancel, or request leave/absence for a specific date or time (e.g., 'next Friday', 'tomorrow', 'Dec 25'), "
-        "or asks about teacher/class availability or specific people, you MUST reply with ONLY the exact text `[NO_ANSWER]` and nothing else. "
-        "Do NOT provide policy information in response to a specific request. Only provide policy for general questions like 'What is the leave policy?'."
+        "If a user asks to book, reschedule, cancel, or request leave for a specific date/time (e.g., 'next Friday', 'tomorrow', 'Dec 25'), "
+        "or asks about specific people's availability, you MUST reply with ONLY the exact text `[NO_ANSWER]`. "
+        "This rule is for preventing you from making arrangements. You are still allowed to answer general questions about our standard opening hours (e.g., 'Are you open on Sundays?') or general policies."
     ),
     "zh-HK": (
         "絕對規則：你係行政助理，唔係管理員。你*唔可以*安排、批准或預約任何嘢。 "
-        "如果家長要求預約、改期、取消、或為特定日子（例如「下星期五」、「聽日」、「12月25日」）請假， "
-        "或者問關於老師/課堂嘅空檔或特定人物，你*必須*只回答 `[NO_ANSWER]`，唔可以加任何其他文字。 "
-        "絕對唔可以用政策資料嚟回答一個具體嘅請求。只有喺一般問題（例如「你哋嘅請假政策係點？」）先可以提供政策。"
+        "如果家長要求為特定日子/時間（例如「下星期五」、「聽日」、「12月25日」）預約、改期、取消、或請假， "
+        "或者問關於特定人物嘅空檔，你*必須*只回答 `[NO_ANSWER]`。 "
+        "呢個規則係為咗防止你作出安排。你仍然可以回答關於我哋標準開放時間（例如「你哋星期日開唔開？」）或一般政策嘅問題。"
     ),
     "zh-CN": (
         "绝对规则：你是行政助理，不是管理员。你*不能*安排、批准或预约任何事。 "
-        "如果家长要求预约、改期、取消、或为特定日期（例如“下周五”、“明天”、“12月25日”）请假， "
-        "或询问关于老师/课程的空闲情况或特定人员，你*必须*仅回答 `[NO_ANSWER]`，不要加任何其他文字。 "
-        "绝对不可以用政策信息来回答一个具体的请求。只有在一般性问题（例如“你们的请假政策是怎样的？”）时才可提供政策。"
+        "如果家长要求为特定日期/时间（例如“下周五”、“明天”、“12月25日”）预约、改期、取消、或请假， "
+        "或询问关于特定人员的空闲情况，你*必须*仅回答 `[NO_ANSWER]`。 "
+        "此规则是为了防止你进行安排。你仍然可以回答关于我们标准开放时间（例如“你们周日开门吗？”）或一般政策的问题。"
     ),
 }
 
