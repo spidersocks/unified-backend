@@ -213,3 +213,64 @@ def mentions_attendance(message: str, lang: str) -> bool:
     if L.startswith("zh-cn") or L == "zh":
         return bool(re.search(r"上课|上学", m))
     return bool(re.search(r"\battend(?:ing)?\s+(?:class|lesson)\b", m, flags=re.IGNORECASE))
+
+# Lightweight “soft” classifiers used only to steer the prompt (not to gate)
+_POLITENESS_ONLY_EN = re.compile(r"^\s*(thanks|thank you|ty|thx|appreciate(?: it)?|cheers)\s*[.!]*\s*$", re.I)
+_POLITENESS_ONLY_ZH_HK = re.compile(r"^\s*(多謝|謝謝|唔該|唔該晒)\s*[！!。.\s]*$", re.I)
+_POLITENESS_ONLY_ZH_CN = re.compile(r"^\s*(谢谢|多谢|辛苦了|麻烦了)\s*[！!。.\s]*$", re.I)
+
+# Scheduling/leave verbs
+_SCHED_ZH_HK = [r"請假", r"改期", r"改時間", r"改堂", r"取消", r"缺席", r"退堂"]
+_SCHED_ZH_CN = [r"请假", r"改期", r"改时间", r"改堂", r"取消", r"缺席", r"退课"]
+_SCHED_EN = [r"\breschedul(?:e|ing)\b", r"\bcancel(?:ling|ation)?\b", r"\btake\s+leave\b", r"\brequest\s+leave\b", r"\b(absent|absence)\b"]
+
+# Date/time markers
+_DATE_MARKERS = [
+    r"\b\d{1,2}/\d{1,2}\b", r"\d{1,2}\s*(月|日|号|號)", r"(星期|周|週)[一二三四五六日天]",
+    r"\b(mon|tue|wed|thu|fri|sat|sun)\b", r"\b(today|tomorrow)\b",
+    r"\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(am|pm)\b",
+    r"今天|今日|明天|後日|后天|聽日|下(周|星期|週)",
+]
+
+# Policy markers (English and Chinese)
+_POLICY_EN = [r"\bpolicy\b", r"\bwhat\s+is\s+the\s+policy\b", r"\brules?\b", r"\bhow\s+do(?:es)?\s+.*(reschedul|make-?up|absence)\b"]
+_POLICY_ZH_HK = [r"政策", r"安排", r"規則", r"規定", r"補課政策", r"請假政策", r"改期政策", r"補課安排", r"請假安排", r"改期安排"]
+_POLICY_ZH_CN = [r"政策", r"安排", r"规则", r"规定", r"补课政策", r"请假政策", r"改期政策", r"补课安排", r"请假安排", r"改期安排"]
+
+def _score(m: str, pats: List[str]) -> int:
+    return sum(bool(re.search(p, m, re.I)) for p in pats)
+
+def is_politeness_only(message: str, lang: str) -> bool:
+    m = (message or "").strip()
+    L = (lang or "en").lower()
+    if L.startswith("zh-hk"): return bool(_POLITENESS_ONLY_ZH_HK.match(m))
+    if L.startswith("zh-cn") or L == "zh": return bool(_POLITENESS_ONLY_ZH_CN.match(m))
+    return bool(_POLITENESS_ONLY_EN.match(m))
+
+def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
+    """
+    Soft classification: returns booleans used to steer prompt only.
+    - has_sched_verbs: mentions leave/reschedule/cancel
+    - has_date_time: mentions specific date/weekday/time
+    - has_policy_intent: asks for policy/arrangements/rules around reschedule/leave
+    - politeness_only: message is pure politeness (no other content)
+    """
+    m = message or ""
+    L = (lang or "en").lower()
+    if L.startswith("zh-hk"):
+        sched = _score(m, _SCHED_ZH_HK) > 0
+        policy = _score(m, _POLICY_ZH_HK) > 0
+    elif L.startswith("zh-cn") or L == "zh":
+        sched = _score(m, _SCHED_ZH_CN) > 0
+        policy = _score(m, _POLICY_ZH_CN) > 0
+    else:
+        sched = _score(m, _SCHED_EN) > 0
+        policy = _score(m, _POLICY_EN) > 0
+    date_time = _score(m, _DATE_MARKERS) > 0
+    politeness = is_politeness_only(m, lang)
+    return {
+        "has_sched_verbs": sched,
+        "has_date_time": date_time,
+        "has_policy_intent": policy,
+        "politeness_only": politeness,
+    }

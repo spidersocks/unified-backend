@@ -22,6 +22,7 @@ from typing import Optional, Tuple, List, Dict, Any
 from llm.config import SETTINGS
 import pprint
 import traceback
+from llm.intent import classify_scheduling_context, is_politeness_only
 
 # --- MODIFICATION: Add a client for the Bedrock Runtime (for InvokeModel) ---
 _boto_cfg = Config(
@@ -75,22 +76,25 @@ PROMPT_SCAFFOLD = {
 # Added a clarification to allow answering general opening hours questions.
 CRITICAL_SCHEDULING_GUARDRAIL = {
     "en": (
-        "ABSOLUTE RULE: You are an admin assistant, NOT an admin. You CANNOT arrange, approve, or schedule anything. "
-        "If a user asks to book, reschedule, cancel, or request leave for a specific date/time (e.g., 'next Friday', 'tomorrow', 'Dec 25'), "
-        "or asks about specific people's availability, you MUST reply with ONLY the exact text `[NO_ANSWER]`. "
-        "This rule is for preventing you from making arrangements. You are still allowed to answer general questions about our standard opening hours (e.g., 'Are you open on Sundays?') or general policies."
+        "ABSOLUTE RULES (Scheduling & Politeness):\n"
+        "1) You are an admin assistant, NOT an admin. Do NOT arrange, approve, confirm or modify bookings.\n"
+        "2) If the user is asking to book/reschedule/cancel/leave for a specific date/time (e.g., next Friday, 10/11, 3pm) and is NOT explicitly asking about policy, reply only with [NO_ANSWER].\n"
+        "3) If the user mentions a date/time or a specific student but explicitly asks about our policy (e.g., 'what is the policy on rescheduling?'), answer the policy question from context, and clearly avoid making any arrangements.\n"
+        "4) Politeness-only replies like 'You're welcome' or '不客氣/不客气' are ONLY for messages that contain nothing but a thank-you. If the message includes any other content (dates, leave/reschedule/cancel), DO NOT answer with a politeness-only reply."
     ),
     "zh-HK": (
-        "絕對規則：你係行政助理，唔係管理員。你*唔可以*安排、批准或預約任何嘢。 "
-        "如果家長要求為特定日子/時間（例如「下星期五」、「聽日」、「12月25日」）預約、改期、取消、或請假， "
-        "或者問關於特定人物嘅空檔，你*必須*只回答 `[NO_ANSWER]`。 "
-        "呢個規則係為咗防止你作出安排。你仍然可以回答關於我哋標準開放時間（例如「你哋星期日開唔開？」）或一般政策嘅問題。"
+        "絕對規則（行程安排與禮貌）：\n"
+        "1）你係行政助理，唔係管理員。唔可以安排／批准／確認／更改任何預約。\n"
+        "2）如家長為特定日期／時間提出預約／改期／取消／請假，而並非詢問政策，*只*回覆 [NO_ANSWER]。\n"
+        "3）如訊息包含日期／學生，但明確問政策（例如「改期政策係點？」），請根據內容回答政策，並清楚表明不作任何安排。\n"
+        "4）像「不客氣」等純禮貌回覆，只適用於訊息本身只有致謝。若訊息含有其他內容（日期、請假、改期、取消），切勿使用純禮貌回覆。"
     ),
     "zh-CN": (
-        "绝对规则：你是行政助理，不是管理员。你*不能*安排、批准或预约任何事。 "
-        "如果家长要求为特定日期/时间（例如“下周五”、“明天”、“12月25日”）预约、改期、取消、或请假， "
-        "或询问关于特定人员的空闲情况，你*必须*仅回答 `[NO_ANSWER]`。 "
-        "此规则是为了防止你进行安排。你仍然可以回答关于我们标准开放时间（例如“你们周日开门吗？”）或一般政策的问题。"
+        "绝对规则（行程与礼貌）：\n"
+        "1）你是行政助理，不是管理员。不可安排／批准／确认／更改任何预约。\n"
+        "2）如家长为特定日期／时间提出预约／改期／取消／请假，而不是询问政策，*仅*回复 [NO_ANSWER]。\n"
+        "3）如消息包含日期／学生，但明确询问政策（如“改期政策是什么？”），请根据内容回答政策，并明确说明不进行任何安排。\n"
+        "4）“不客气”等纯礼貌回复仅用于消息只有致谢时。若消息包含其他内容（日期、请假、改期、取消），切勿使用纯礼貌回复。"
     ),
 }
 
@@ -204,18 +208,33 @@ def _cache_set(lang: str, message: str, extra_context: Optional[str], hint_canon
     _CACHE[key] = (time.time(), ans, cits, dbg)
 
 def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, context_chunks: List[str]) -> str:
-    """
-    Constructs a highly structured, strict, and fully localized prompt for the InvokeModel API call.
-    """
     scaffold = PROMPT_SCAFFOLD.get(lang, PROMPT_SCAFFOLD["en"])
 
-    # --- MODIFICATION: Always prepend the critical scheduling guardrail for maximum priority ---
-    final_instructions = [CRITICAL_SCHEDULING_GUARDRAIL.get(lang, CRITICAL_SCHEDULING_GUARDRAIL["en"])] + instruction_parts
-    instructions = "\n\n".join(final_instructions) # Use double newline for better separation
+    # Always include core scheduling & politeness guardrail
+    final_instructions = [CRITICAL_SCHEDULING_GUARDRAIL.get(lang, CRITICAL_SCHEDULING_GUARDRAIL["en"])]
+
+    # --- NEW: Soft steering based on message classification (no gating) ---
+    try:
+        cls = classify_scheduling_context(query or "", lang)
+    except Exception:
+        cls = {"has_sched_verbs": False, "has_date_time": False, "has_policy_intent": False, "politeness_only": False}
+
+    if cls.get("has_sched_verbs") and cls.get("has_date_time") and not cls.get("has_policy_intent"):
+        # Hint model to produce [NO_ANSWER] (we do not enforce here in code)
+        final_instructions.append("This message looks like a scheduling action request (date/time + reschedule/leave). Provide only [NO_ANSWER].")
+    if cls.get("has_policy_intent"):
+        # Hint model to answer policy even if a date/name is present
+        final_instructions.append("User appears to be asking about policy. Answer the relevant policy from context. Do NOT make or confirm any arrangements.")
+    if not cls.get("politeness_only"):
+        # Prevent 'You're welcome' hijack
+        final_instructions.append("Do NOT use a politeness-only reply. The message contains other content beyond a simple thank-you.")
+
+    # Add the rest of instructions (language persona, etc.)
+    final_instructions.extend(instruction_parts)
+    instructions = "\n\n".join(final_instructions)
 
     formatted_context = ""
     for i, chunk in enumerate(context_chunks):
-        # The XML tags are intentionally kept in English as they function like markup.
         formatted_context += f"<search_result index=\"{i+1}\">\n{chunk}\n</search_result>\n\n"
 
     prompt = (

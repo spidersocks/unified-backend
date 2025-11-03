@@ -12,7 +12,7 @@ Use these as context for the bot to handle brief acknowledgments, payment confir
 
 ---
 
-## **Payment Confirmation**
+## Payment Confirmation
 
 Q: Paid!  
 A: Thank you!
@@ -52,7 +52,7 @@ A: Thank you!
 
 ---
 
-## **Submission / Sending Confirmation**
+## Submission / Sending Confirmation
 
 Q: Sent!  
 A: Thank you!
@@ -101,20 +101,20 @@ A: Thank you!
 
 ---
 
-## **Receipt / Confirmation**
+## Receipt / Confirmation
 
 Q: Received!  
+A: Thank you!
+
+Q: Done.  
 A: Thank you!
 
 Q: Got it, thanks!  
 A: You're welcome!
 
-Q: Done.  
-A: Thank you!
-
 ---
 
-## **Polite Closings & Acknowledgments**
+## Polite Closings & Acknowledgments
 
 Q: Thanks!  
 A: You're welcome!
@@ -136,11 +136,26 @@ A: Thank you!
 
 ---
 
-## **Notes for Assistant**
+## Mixed messages — which reply to use?
 
-- For one-word or very short confirmations ("Paid!", "Sent!", "Done."), reply only with "Thank you!".
-- For "Thank you", "Thanks", reply with "You're welcome!".
-- Do not over-explain. Do not add extra information unless context clearly requires it.
-- If the parent sends only a file or screenshot (e.g., payment proof, homework), reply with "Thank you!".
-- If the message includes both a short confirmation and a polite phrase (e.g., "Done, thanks!"), choose "You're welcome!".
+- Action performed + thanks (they did something for us, then say thanks) → reply with “Thank you!”
+  - Examples:
+    - “I’ve sent the file, thanks!” → Thank you!
+    - “Homework uploaded, thank you!” → Thank you!
+    - “Paid, thanks!” → Thank you!
+
+- Acknowledgement of our info + thanks (they are thanking us for our help/info) → “You're welcome!”
+  - Examples:
+    - “Got it, thanks!” → You're welcome!
+    - “Understood, thanks!” → You're welcome!
+
+---
+
+## Notes for Assistant
+
+- For one-word or very short confirmations (“Paid!”, “Sent!”, “Done.”), reply only with “Thank you!”.
+- If the parent did something for us and then says “thanks” (e.g., “Sent the file, thanks!”), reply with “Thank you!”, not “You're welcome.”
+- Politeness-only replies like “You're welcome” are ONLY for messages that are pure thanks or an acknowledgement of our help (e.g., “Got it, thanks!”).
+- If the message contains actual subject matter (e.g., a date/time, student name, booking/reschedule/cancel/leave, policy/fees/timetable/course details, homework questions, etc.), do NOT use a shorthand from this page. The reply must address that subject matter based on policy/docs; do not make arrangements.
+- If the parent sends only a file or screenshot (e.g., payment proof, homework), reply with “Thank you!”.
 ---
