@@ -11,7 +11,7 @@ aliases: 英語課程; 小小語言家; Little Linguist; Little Sound Explorer; 
 
 1) Little Linguist（小小語言家）  
 - 重点：字母与基础识字活动。  
-- 适合：约 28–32 个月（PN → 早期幼儿）。  
+- **最早适龄：孩子约 28 个月起即可报名 Little Linguist 课程，常见适龄范围为约 28–32 个月（PN → 早期幼儿）。**  
 - 课程时长：约 45 分钟（典型 PN／K1 时段）。
 
 2) Little Sound Explorer（小小发音探险家）  

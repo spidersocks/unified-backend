@@ -11,7 +11,7 @@ We run a progressive set of English classes that build listening, phonics, readi
 
 1) Little Linguist  
 - Focus: Alphabet knowledge and early literacy routines.  
-- Suitable for: ~28–32 months (PN → early toddlers).  
+- **Earliest suitable age:** Children are welcome to join Little Linguist from around 28 months old. The typical suitable range is approximately 28–32 months (PN → early toddlers).  
 - Duration: 45 minutes (typical PN/K1 session lengths).
 
 2) Little Sound Explorer  

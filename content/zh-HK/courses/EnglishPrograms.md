@@ -11,7 +11,7 @@ aliases: 英語課程; Little Linguist; Little Sound Explorer; Smart Spell; Lang
 
 1) Little Linguist（小小語言家）  
 - 焦點：識字與字母認識。  
-- 適合：約 28–32 個月（PN／幼兒初期）。  
+- **最早適齡：小朋友約 28 個月大即可入讀 Little Linguist，常見適合年齡約為 28–32 個月（PN／幼兒初期）。**  
 - 課堂長度：約 45 分鐘。
 
 2) Little Sound Explorer（小小發音探索）  
