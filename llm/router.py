@@ -315,9 +315,9 @@ def chat(req: ChatRequest, request: Request):
         raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
 
     _log(f"LLM raw answer: {answer!r}")
-    _log(f"LLM citations: {json.dumps(citations, indent=2)}")
+    _log(f"LLM citations: {json.dumps(citations, ensure_ascii=False, indent=2)}")
     if debug_info:
-        _log(f"LLM debug_info: {json.dumps(debug_info, indent=2)}")
+        _log(f"LLM debug_info: {json.dumps(debug_info, ensure_ascii=False, indent=2)}")
 
     if not citations or contains_apology_or_noinfo(answer):
         _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
@@ -498,9 +498,9 @@ async def whatsapp_webhook_handler(request: Request):
                                     _log(f"ERROR saving/pruning DynamoDB history: {e}\n{traceback.format_exc()}")
 
                                 _log(f"LLM raw answer: {answer!r}")
-                                _log(f"LLM citations: {json.dumps(citations, indent=2)}")
+                                _log(f"LLM citations: {json.dumps(citations, ensure_ascii=False, indent=2)}")
                                 if debug_info:
-                                    _log(f"LLM debug_info: {json.dumps(debug_info, indent=2)}")
+                                    _log(f"LLM debug_info: {json.dumps(debug_info, ensure_ascii=False, indent=2)}")
                                 silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
                                 is_followup = is_followup_message(message_body)
                                 if not answer and silent_reason == "no_citations" and is_followup and history:
