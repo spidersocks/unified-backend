@@ -3,9 +3,7 @@ language: en
 type: faq
 canonical: ParentAdminQnAExamples
 folder: faq
-aliases: native speaker; teacher qualification; assessment fee; class size; makeup
-  policy; typhoon; rainstorm; payment; FPS; Christmas hours; writing class; interview
-  class; timetable; speech training; class logistics; drop-off; sibling attendance; WhatsApp consultant
+aliases: native speaker; teacher qualification; assessment fee; class size; makeup policy; typhoon; rainstorm; payment; FPS; Christmas hours; writing class; interview class; timetable; speech training; class logistics; drop-off; sibling attendance; WhatsApp consultant
 ---
 # Parent–Admin Q&A (Gold Standard Responses)
 
@@ -21,8 +19,8 @@ A: Thanks for your interest. Please complete the registration form. After you re
 Q: How many kids are there in a group/class?  
 A: We normally have 4–6 students in a group.
 
-Q: Need to take leave next week.  
-A: You are entitled to 2 complimentary make‑ups for every 8 paid sessions OR 3 make‑ups for every 10 paid sessions (no extra charge). All courses must be completed within 3 months from the first lesson of the course. We recommend taking make‑ups to stay on track.
+Q: What is your make-up/absence policy?  
+A: For every 8 paid classes, you are entitled to 2 free make‑ups; for every 10 paid classes, 3 free make‑ups (no extra charge). All courses must be completed within 3 months from the first lesson. We recommend taking make‑ups to stay on track.
 
 Q: Sorry, we cannot meet your offered timeslot. Any other time?  
 A: The offered class is the most suitable one. Please note the assessment result is valid for 3 months; it becomes invalid afterwards.
@@ -31,7 +29,7 @@ Q: How much is your English course fee?
 A: English group course fee is HK$4,500 for 8 sessions (45 minutes/session), or HK$7,500–$8,500 for 10 sessions (1 hour/session), depending on the teacher.
 
 Q: Can you send me your English class timetable?  
-A: We first conduct a short assessment. After that, we will know the most suitable class and then offer an available timetable.
+A: We first conduct a short assessment. After that, we can offer an available timetable for a suitable class.
 
 Q: Typhoon/Rainstorm — will class continue?  
 A: We operate during Amber/Red rainstorms and during Typhoon Signals T1 and T3. If travel is unsafe for young children, please contact us for arrangements. We do not hold classes when Black Rain or Typhoon Signal No. 8 (or higher) is hoisted.
@@ -75,3 +73,23 @@ A: Dear parent,
 As our class arrangements are tailored to each child’s situation and classroom resources, we can’t confirm this online.  
 Please contact our course consultant directly via official WhatsApp. They’ll promptly coordinate the best class arrangement for your children.  
 Thank you for your understanding!
+
+---
+
+# Scheduling / Leave — Examples & Policy Reply Rules
+
+For notifications or action requests (reply only with [NO_ANSWER]):
+- “Need to take leave next week.” → [NO_ANSWER]
+- “Sorry 11/5 Julian can’t attend lesson.” → [NO_ANSWER]
+- “Can you cancel this Friday 3pm class?” → [NO_ANSWER]
+
+For policy questions (may reply with policy; avoid making arrangements):
+- “Tristan will be away on 19 Dec. What’s your rescheduling policy?”  
+  Suggested bullet points (from Absence & Make‑up Policy):
+  - Please notify us at least 4 hours in advance for cancellations;
+  - Make‑ups should be scheduled within the course period (typical free quota: 8 sessions → 2, 10 sessions → 3);
+  - Missed classes without notice are charged and not made up;
+  - Sick leave requires a doctor’s certificate for make‑up;
+  - All courses must be completed within 3 months from the first lesson.  
+  (Do not make or confirm any bookings via chat; staff will follow up.)
+---
