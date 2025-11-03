@@ -4,6 +4,7 @@ from typing import Tuple, Dict, Any, List
 # Import the single source of truth for holiday keywords from opening_hours
 # This prevents inconsistencies between intent detection and date parsing.
 from llm.opening_hours import _HOLIDAY_KEYWORDS
+from llm.config import SETTINGS  # NEW: use config flag instead of undefined `use_llm`
 
 # Broad catch-all intent detection for opening hours, attendance, and arrangements
 # Supports English, zh-HK (Traditional), zh-CN (Simplified)
@@ -221,7 +222,8 @@ def detect_opening_hours_intent(message: str, lang: str) -> Tuple[bool, Dict[str
         "llm_confidence": None,
     }
 
-    if use_llm and not is_intent:
+    # FIX: Replace undefined `use_llm` with configured flag (kept as placeholder for future use)
+    if SETTINGS.opening_hours_use_llm_intent and not is_intent:
         # Reserved for future LLM assist
         pass
 
