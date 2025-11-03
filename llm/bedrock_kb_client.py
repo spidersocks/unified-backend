@@ -79,22 +79,25 @@ CRITICAL_SCHEDULING_GUARDRAIL = {
         "ABSOLUTE RULES (Scheduling & Politeness):\n"
         "1) You are an admin assistant, NOT an admin. Do NOT arrange, approve, confirm or modify bookings.\n"
         "2) If the user is asking to book/reschedule/cancel/leave for a specific date/time (e.g., next Friday, 10/11, 3pm) and is NOT explicitly asking about policy, reply only with [NO_ANSWER].\n"
-        "3) If the user mentions a date/time or a specific student but explicitly asks about our policy (e.g., 'what is the policy on rescheduling?'), answer the policy question from context, and clearly avoid making any arrangements.\n"
-        "4) Politeness-only replies like 'You're welcome' or '不客氣/不客气' are ONLY for messages that contain nothing but a thank-you. If the message includes any other content (dates, leave/reschedule/cancel), DO NOT answer with a politeness-only reply."
+        "3) If the user asks about availability, time slots, timetable/schedule, teacher availability, or start date for a specific child (including messages mentioning a child’s name or 'after/completed assessment'), reply only with [NO_ANSWER]. These are admin‑handled.\n"
+        "4) If the user mentions a date/time or a specific student but explicitly asks about our policy (e.g., 'what is the policy on rescheduling?'), answer the policy question from context, and clearly avoid making any arrangements.\n"
+        "5) Politeness-only replies like 'You're welcome' or '不客氣/不客气' are ONLY for messages that contain nothing but a thank-you. If the message includes any other content (dates, leave/reschedule/cancel), DO NOT answer with a politeness-only reply."
     ),
     "zh-HK": (
         "絕對規則（行程安排與禮貌）：\n"
         "1）你係行政助理，唔係管理員。唔可以安排／批准／確認／更改任何預約。\n"
         "2）如家長為特定日期／時間提出預約／改期／取消／請假，而並非詢問政策，*只*回覆 [NO_ANSWER]。\n"
-        "3）如訊息包含日期／學生，但明確問政策（例如「改期政策係點？」），請根據內容回答政策，並清楚表明不作任何安排。\n"
-        "4）像「不客氣」等純禮貌回覆，只適用於訊息本身只有致謝。若訊息含有其他內容（日期、請假、改期、取消），切勿使用純禮貌回覆。"
+        "3）如家長查問『有冇時段／時間表／檔期／老師檔期／幾時開始上課』，或訊息提及具體學生名字、或『完成／之後評估』等，均屬行政安排範疇，*只*回覆 [NO_ANSWER]。\n"
+        "4）如訊息包含日期／學生，但明確問政策（例如「改期政策係點？」），請根據內容回答政策，並清楚表明不作任何安排。\n"
+        "5）像「不客氣」等純禮貌回覆，只適用於訊息本身只有致謝。若訊息含有其他內容（日期、請假、改期、取消），切勿使用純禮貌回覆。"
     ),
     "zh-CN": (
         "绝对规则（行程与礼貌）：\n"
         "1）你是行政助理，不是管理员。不可安排／批准／确认／更改任何预约。\n"
         "2）如家长为特定日期／时间提出预约／改期／取消／请假，而不是询问政策，*仅*回复 [NO_ANSWER]。\n"
-        "3）如消息包含日期／学生，但明确询问政策（如“改期政策是什么？”），请根据内容回答政策，并明确说明不进行任何安排。\n"
-        "4）“不客气”等纯礼貌回复仅用于消息只有致谢时。若消息包含其他内容（日期、请假、改期、取消），切勿使用纯礼貌回复。"
+        "3）如家长询问『是否有可用时段／时间表／档期／老师档期／开课时间』，或消息提及具体学生姓名、或『完成／之后评估』等，一律视为行政安排，*仅*回复 [NO_ANSWER]。\n"
+        "4）如消息包含日期／学生，但明确询问政策（如“改期政策是什么？”），请根据内容回答政策，并明确说明不进行任何安排。\n"
+        "5）“不客气”等纯礼貌回复仅用于消息只有致谢时。若消息包含其他内容（日期、请假、改期、取消），切勿使用纯礼貌回复。"
     ),
 }
 
@@ -217,11 +220,13 @@ def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, contex
     try:
         cls = classify_scheduling_context(query or "", lang)
     except Exception:
-        cls = {"has_sched_verbs": False, "has_date_time": False, "has_policy_intent": False, "politeness_only": False}
+        cls = {"has_sched_verbs": False, "has_date_time": False, "has_policy_intent": False, "politeness_only": False, "availability_request": False}
 
-    if cls.get("has_sched_verbs") and cls.get("has_date_time") and not cls.get("has_policy_intent"):
+    availability_trigger = bool(cls.get("availability_request"))
+
+    if cls.get("has_sched_verbs") and (cls.get("has_date_time") or availability_trigger) and not cls.get("has_policy_intent"):
         # Hint model to produce [NO_ANSWER] (we do not enforce here in code)
-        final_instructions.append("This message looks like a scheduling action request (date/time + reschedule/leave). Provide only [NO_ANSWER].")
+        final_instructions.append("This message looks like a scheduling action or availability/time-slot request. Provide only [NO_ANSWER]. Do not describe policy or processes.")
     if cls.get("has_policy_intent"):
         # Hint model to answer policy even if a date/name is present
         final_instructions.append("User appears to be asking about policy. Answer the relevant policy from context. Do NOT make or confirm any arrangements.")

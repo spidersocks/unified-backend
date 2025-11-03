@@ -42,6 +42,34 @@ _ZH_CN_WEAK_TERMS = [
     r"今天|明天|后天|下周|星期[一二三四五六日天]|周[一二三四五六日天]",
 ]
 
+# NEW: Availability / timetable / start-date inquiry markers (scheduling handled by admin)
+_AVAIL_EN = [
+    r"\bavailable\b", r"\bavailability\b", r"\bany (class|slot|time ?slot|timeslot)\b",
+    r"\btimetable\b", r"\bschedule\b", r"\bwhat times\b", r"\bstart date\b",
+    r"\bwhich time\b", r"\btime works\b", r"\bteacher availability\b",
+]
+_AVAIL_ZH_HK = [
+    r"有冇(堂|時段|時間|位)", r"時間表", r"時間安排", r"檔期", r"可唔可以.*時間", r"幾時開始(上|開)課",
+    r"老師(幾時|時間)有空|導師(幾時|時間)得閒|老師檔期|導師檔期",
+]
+_AVAIL_ZH_CN = [
+    r"(有|有没有)(课|课程|时段|时间|名额)", r"时间表", r"课程安排", r"档期", r"可以.*时间", r"什么时候开始(上|开)课",
+    r"(老师|教师)(什么时候|什么时间)有空|老师档期|教师档期",
+]
+
+# NEW: Post-assessment markers (indicates admin should check placements/timetable)
+_POST_ASSESS_EN = [r"\bafter (the )?assessment\b", r"\bpost-?assessment\b", r"\bcompleted (the )?assessment\b"]
+_POST_ASSESS_ZH_HK = [r"評估(之後|後)", r"完成(了)?評估", r"做完評估"]
+_POST_ASSESS_ZH_CN = [r"评估(之后|后)", r"完成(了)?评估", r"做完评估"]
+
+# NEW: Child/student reference markers to raise confidence it's a specific scheduling request
+_STUDENT_REF_EN = [
+    r"\bfor\s+[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b",  # "for Owen", "for Owen Chan"
+    r"\bmy (son|daughter|kid|child)\b", r"\bstudent\b", r"\bfor him\b", r"\bfor her\b",
+]
+_STUDENT_REF_ZH_HK = [r"為?(\S+)?(小朋友|小童|小孩|仔|女|學生)", r"我(個|的)?(仔|女|小朋友)", r"替.*(仔|女)"]
+_STUDENT_REF_ZH_CN = [r"为?(\S+)?(小朋友|孩子|小孩|学生)", r"我(家)?(儿子|女儿|孩子)", r"替.*(儿子|女儿)"]
+
 # Weather markers for adding the policy note
 _WEATHER_MARKERS = [
     r"typhoon|rainstorm|t[13]|\bt8\b|black rain|amber|red",
@@ -135,7 +163,7 @@ def is_general_hours_query(message: str, lang: str) -> bool:
     # If no specific date, weekday, or holiday markers are found, it's a general query.
     return True
 
-def detect_opening_hours_intent(message: str, lang: str, use_llm: bool = True) -> Tuple[bool, Dict[str, Any]]:
+def detect_opening_hours_intent(message: str, lang: str) -> Tuple[bool, Dict[str, Any]]:
     """
     --- REVISED LOGIC ---
     Detects opening hours intent with higher precision by using strong/weak signals.
@@ -253,24 +281,44 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
     - has_sched_verbs: mentions leave/reschedule/cancel
     - has_date_time: mentions specific date/weekday/time
     - has_policy_intent: asks for policy/arrangements/rules around reschedule/leave
+    - availability_request: availability/timetable/slot/start-date/teacher availability
+    - post_assessment: mentions 'after/completed assessment'
+    - student_ref: refers to a specific child (name/pronoun/son/daughter)
     - politeness_only: message is pure politeness (no other content)
     """
     m = message or ""
     L = (lang or "en").lower()
     if L.startswith("zh-hk"):
-        sched = _score(m, _SCHED_ZH_HK) > 0
+        base_sched = _score(m, _SCHED_ZH_HK) > 0
         policy = _score(m, _POLICY_ZH_HK) > 0
+        avail = _score(m, _AVAIL_ZH_HK) > 0
+        post = _score(m, _POST_ASSESS_ZH_HK) > 0
+        student = _score(m, _STUDENT_REF_ZH_HK) > 0
     elif L.startswith("zh-cn") or L == "zh":
-        sched = _score(m, _SCHED_ZH_CN) > 0
+        base_sched = _score(m, _SCHED_ZH_CN) > 0
         policy = _score(m, _POLICY_ZH_CN) > 0
+        avail = _score(m, _AVAIL_ZH_CN) > 0
+        post = _score(m, _POST_ASSESS_ZH_CN) > 0
+        student = _score(m, _STUDENT_REF_ZH_CN) > 0
     else:
-        sched = _score(m, _SCHED_EN) > 0
+        base_sched = _score(m, _SCHED_EN) > 0
         policy = _score(m, _POLICY_EN) > 0
+        avail = _score(m, _AVAIL_EN) > 0
+        post = _score(m, _POST_ASSESS_EN) > 0
+        student = _score(m, _STUDENT_REF_EN) > 0
+
     date_time = _score(m, _DATE_MARKERS) > 0
     politeness = is_politeness_only(m, lang)
+
+    # KEY: Treat availability+(post-assessment OR student-ref) as an admin scheduling request
+    sched = base_sched or (avail and (post or student))
+
     return {
         "has_sched_verbs": sched,
         "has_date_time": date_time,
         "has_policy_intent": policy,
+        "availability_request": avail,
+        "post_assessment": post,
+        "student_ref": student,
         "politeness_only": politeness,
     }
