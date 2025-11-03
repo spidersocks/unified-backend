@@ -3,11 +3,14 @@ language: en
 type: policy
 canonical: absence_makeup
 folder: policies
-aliases: absence; make‑up; makeup; make up lesson; quota; admin fee; HK$100; notice;
-  sick leave
+aliases: absence; make‑up; makeup; make up lesson; quota; admin fee; HK$100; notice; sick leave
 category: makeup
 ---
 # Absence & Make-up Policy
+
+Assistant Notes (do not send to parents)
+- Do NOT send this policy in response to a dated leave/reschedule/cancel notification (e.g., “11/5 Julian can’t attend”). In such cases, reply only with [NO_ANSWER].
+- Send this policy only when the parent explicitly asks about policy (e.g., “What’s your rescheduling policy?”). Never confirm/arrange bookings in chat.
 
 Absence and Make-up policy:
 - If your child cannot attend lesson, please notify us at least four hours before lesson. If we are not informed, the lesson will be charged.
@@ -22,3 +25,4 @@ Absence and Make-up policy:
 - If your child cannot attend lessons for a period of two weeks or less, and you would like to retain your child's time-slots in the workshop, please inform us in advance and in writing (preferably by email), and whenever possible, we will make special arrangements for your child.
 - If your child cannot attend lessons for a period of three weeks or more, your child's time-slot may be released. (Please contact us for further arrangements.)
 - Paid courses have the following validity: all courses must be completed within 3 months (counting from the first lesson of a course)
+---
