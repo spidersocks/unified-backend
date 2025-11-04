@@ -92,7 +92,7 @@ _DATED_LEAVE_PATTERNS = [
 
 _ADMIN_SCHED_DOCS = [
     "/en/policies/AdminSchedulingRouting.md",
-    "/zh-HK/policies/AdminSchedulingRouting.md", 
+    "/zh-HK/policies/AdminSchedulingRouting.md",
     "/zh-CN/policies/AdminSchedulingRouting.md",
 ]
 
