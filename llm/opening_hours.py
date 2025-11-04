@@ -417,7 +417,10 @@ def _fixed_gregorian_fallback(official_name: str, base: datetime) -> Optional[da
         return cand
     return None
 
-_ORD_DAY_PAT = re.compile(r"\b(?:(?:the\s+)?)((?:[12]?\d|3[01]))(?:st|nd|rd|th)?\b", re.I)
+_ORD_DAY_PAT = re.compile(
+    r"\b(?:on\s+)?(?:the\s+)?((?:[12]?\d|3[01]))(st|nd|rd|th)\b",
+    re.IGNORECASE
+)
 _TIME_PAT = re.compile(r"\b(\d{1,2}):(\d{2})\b|\b(\d{1,2})\s*(am|pm)\b", re.I)
 
 _ZH_NUM = {"零":0,"〇":0,"一":1,"二":2,"两":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9,"十":10}
@@ -466,6 +469,7 @@ def _parse_time_zh(msg: str) -> Optional[time]:
     return None
 
 def _extract_day_of_month(msg: str) -> Optional[int]:
+    # Only accept explicit ordinals (1st/2nd/3rd/…)
     m = _ORD_DAY_PAT.search(msg or "")
     if m:
         try:

@@ -56,13 +56,19 @@ _WEATHER_MARKERS = [
 
 # Negative markers to avoid misclassifying non-hours topics as hours
 # Expanded with availability/scheduling phrasing to reduce false positives
+# Add cost/time‑unit negatives so “per 1 hour / 50 mins” does NOT look like opening hours
 _NEG_EN = [
     r"\b(tuition|fee|fees|price|cost)\b", r"\bclass\s*size\b", r"\bhomework\b", r"\bassignment\b",
     r"\b(time\s*slot|timeslot|slot)s?\b", r"\bavailability\b", r"\bavailable\b",
     r"\btimetable\b", r"\bschedule\b",
     r"\bstart(?:s)?\s+at\b", r"\bfit[s]?\b", r"\bsuit[s]?\b",
     r"\bfor\s+(?:my\s+(?:son|daughter|kid|child)|[A-Z][a-z]+)\b",
+    # NEW: guard against billing/time-unit phrasing
+    r"\bhow\s+much\b",
+    r"\bper\s+(?:hour|hr|minute|min)s?\b",
+    r"\b\d+\s*(?:hour|hours|hr|hrs|minute|minutes|min|mins)\b",
 ]
+
 _NEG_ZH_HK = [
     r"學費|收費|費用|價錢|價格|班級人數|人數", r"功課|家課|作業",
     r"(時段|檔期|時間表|時間安排)", r"(有冇|可唔可以).*(時段|時間)",
