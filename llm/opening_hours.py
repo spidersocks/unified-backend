@@ -93,6 +93,66 @@ _SPECIAL_NAMED_DAYS: Dict[str, Callable[[int], Tuple[int, int]]] = {
 }
 
 _MONTH_ABBR = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)"
+_WD_WORDS_EN = r"(monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
+
+def summarize_user_date_intent(message: str, lang: Optional[str] = None) -> str:
+    """
+    Extracts and summarizes any explicit Month/Day and weekday mentions from the user's message.
+    This is a neutral hint for the LLM when the intent is scheduling/action (not opening-hours).
+    We do NOT compute 'open/closed' or any policy — just echo what was mentioned.
+    """
+    msg = (message or "")
+    L = _normalize_lang(lang)
+
+    # Month Day like "Nov 12" / "November 12"
+    month_day_pat = re.compile(rf"\b{_MONTH_ABBR}[a-z]*\.?\s*\d{{1,2}}\b", re.I)
+    month_day_hits = [m.group(0).strip() for m in month_day_pat.finditer(msg)]
+
+    # Weekdays (EN and Chinese)
+    wd_hits_en = []
+    for m in re.finditer(_WD_PAT_EN, msg or ""):
+        wd_hits_en.append(m.group(1).capitalize())
+    wd_hits_zh = []
+    for m in _WD_PAT_ZH_HK.finditer(msg or ""):
+        wd_hits_zh.append(m.group(1))
+
+    # Generic "holiday" mention (helps explain why they want to change)
+    has_holiday_word = bool(re.search(r"\bholiday\b|公眾假期|公众假期|假期", msg, re.I))
+
+    # Compose a localized, neutral summary
+    if L == "zh-HK":
+        parts = []
+        if month_day_hits:
+            parts.append(f"家長提及日期：{', '.join(month_day_hits)}")
+        if wd_hits_en or wd_hits_zh:
+            all_wd = []
+            if wd_hits_en: all_wd.extend(wd_hits_en)
+            if wd_hits_zh: all_wd.extend(wd_hits_zh)
+            parts.append(f"提及星期：{', '.join(all_wd)}")
+        if has_holiday_word:
+            parts.append("訊息提到『假期』。")
+        return "；".join(parts) or "家長訊息提及更改上課日期。"
+    if L == "zh-CN":
+        parts = []
+        if month_day_hits:
+            parts.append(f"家长提及日期：{', '.join(month_day_hits)}")
+        if wd_hits_en or wd_hits_zh:
+            all_wd = []
+            if wd_hits_en: all_wd.extend(wd_hits_en)
+            if wd_hits_zh: all_wd.extend(wd_hits_zh)
+            parts.append(f"提及星期：{', '.join(all_wd)}")
+        if has_holiday_word:
+            parts.append("消息提到“假期”。")
+        return "；".join(parts) or "家长消息提及更改上课日期。"
+    # EN
+    parts = []
+    if month_day_hits:
+        parts.append(f"User mentions date(s): {', '.join(month_day_hits)}")
+    if wd_hits_en:
+        parts.append(f"User mentions weekday(s): {', '.join(wd_hits_en)}")
+    if has_holiday_word:
+        parts.append("User mentions a holiday.")
+    return " | ".join(parts) or "User mentions changing the lesson day."
 
 def _looks_like_absolute_date(msg: str) -> bool:
     m = msg or ""

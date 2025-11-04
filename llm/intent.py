@@ -348,6 +348,36 @@ _POLITENESS_ONLY_EN = re.compile(r"^\s*(thanks|thank you|ty|thx|appreciate(?: it
 _POLITENESS_ONLY_ZH_HK = re.compile(r"^\s*(多謝|謝謝|唔該|唔該晒)\s*[！!。.\s]*$", re.I)
 _POLITENESS_ONLY_ZH_CN = re.compile(r"^\s*(谢谢|多谢|辛苦了|麻烦了)\s*[！!。.\s]*$", re.I)
 
+_RESCHED_EXTRA_EN = [
+    r"\b(change|move|switch|reschedul(?:e|ing)|rearrange)\s+(?:the\s+)?(class|lesson|time|date|day)\b",
+    r"\b(can|could|may)\s+(?:he|she|my (son|daughter|kid|child)|[A-Z][a-z]+)\s+(?:come|attend)\s+(?:on|another)\s+(day|tuesday|wednesday|thursday|monday|friday|saturday|sunday)\b",
+    r"\b(another|a different)\s+day\b",
+    r"\b(move|switch)\s+to\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+]
+
+# Cantonese / Traditional Chinese
+_RESCHED_EXTRA_ZH_HK = [
+    # Direct verbs for moving/switching days/times/lessons
+    r"(改期|改時間|改堂|轉日|換日|移到|調到|調期|改去)",
+    # “Can we change to weekday X … (attend/come/lesson)”
+    r"(可唔可以|得唔得|可否).*(星期[一二三四五六日天]|禮拜[一二三四五六日天]).*(上課|上堂|嚟)",
+    # “Switch/move to weekday X”
+    r"(改|轉|換|移|調).*(去|到).*(星期[一二三四五六日天]|禮拜[一二三四五六日天])",
+    # “另一日/另一天/其他日子”
+    r"(另一|另|第二)日|另一天|其他日子",
+]
+
+_RESCHED_EXTRA_ZH_CN = [
+    # Direct verbs for moving/switching days/times/lessons
+    r"(改期|改时间|改堂|换天|换日|调到|挪到|改到)",
+    # “Can we change to weekday X … (attend/come/lesson)”
+    r"(能不能|可不可以|可以吗|是否可以).*(周[一二三四五六日天]|星期[一二三四五六日天]).*(上课|来)",
+    # “Switch/move to weekday X”
+    r"(改|换|调|挪).*(去|到).*(周[一二三四五六日天]|星期[一二三四五六日天])",
+    # “另一天/换一天/其他一天/别的日子”
+    r"(另|换|别|其他)一[天日]|别的日子|其他日子",
+]
+
 # Scheduling/leave verbs
 _SCHED_ZH_HK = [r"請假", r"改期", r"改時間", r"改堂", r"取消", r"缺席", r"退堂"]
 _SCHED_ZH_CN = [r"请假", r"改期", r"改时间", r"改堂", r"取消", r"缺席", r"退课"]
@@ -379,30 +409,27 @@ def is_politeness_only(message: str, lang: str) -> bool:
 def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
     """
     Soft classification: returns booleans used to steer prompt only.
-    - has_sched_verbs: mentions leave/reschedule/cancel
-    - has_date_time: mentions specific date/weekday/time
-    - has_policy_intent: asks for policy/arrangements/rules around reschedule/leave
-    - availability_request: availability/timetable/slot/start-date/teacher availability
-    - post_assessment: mentions 'after/completed assessment'
-    - student_ref: refers to a specific child (name/pronoun/son/daughter)
-    - politeness_only: message is pure politeness (no other content)
     """
     m = message or ""
     L = (lang or "en").lower()
     if L.startswith("zh-hk"):
         base_sched = _score(m, _SCHED_ZH_HK) > 0
+        # NEW: include extra reschedule/change-day phrasing
+        base_sched = base_sched or (_score(m, _RESCHED_EXTRA_ZH_HK) > 0)
         policy = _score(m, _POLICY_ZH_HK) > 0
         avail = _score(m, _AVAIL_ZH_HK) > 0
         post = _score(m, _POST_ASSESS_ZH_HK) > 0
         student = _score(m, _STUDENT_REF_ZH_HK) > 0
     elif L.startswith("zh-cn") or L == "zh":
         base_sched = _score(m, _SCHED_ZH_CN) > 0
+        base_sched = base_sched or (_score(m, _RESCHED_EXTRA_ZH_CN) > 0)
         policy = _score(m, _POLICY_ZH_CN) > 0
         avail = _score(m, _AVAIL_ZH_CN) > 0
         post = _score(m, _POST_ASSESS_ZH_CN) > 0
         student = _score(m, _STUDENT_REF_ZH_CN) > 0
     else:
         base_sched = _score(m, _SCHED_EN) > 0
+        base_sched = base_sched or (_score(m, _RESCHED_EXTRA_EN) > 0)
         policy = _score(m, _POLICY_EN) > 0
         avail = _score(m, _AVAIL_EN) > 0
         post = _score(m, _POST_ASSESS_EN) > 0
@@ -411,7 +438,7 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
     date_time = _score(m, _DATE_MARKERS) > 0
     politeness = is_politeness_only(m, lang)
 
-    # KEY: Treat availability+(post-assessment OR student-ref) as an admin scheduling request
+    # Treat availability + (post-assessment OR student-ref) as an admin scheduling request
     sched = base_sched or (avail and (post or student))
 
     return {
