@@ -284,14 +284,26 @@ def is_followup_message(msg: str) -> bool:
         return True
     return False
 
+# NEW: Expanded with Chinese variants (zh-HK and zh-CN)
 NOINFO_PHRASES = [
+    # English
     "not explicitly stated", "not specified", "not mentioned", "no information", "not provided", "no details",
     "not found", "refer to tuition listing",
     "up-to-date fees", "available time slots", "no answer available", "unable to find", "unable to provide",
-    "no details available", "please refer to", "no specific information", "the search results do not specify", "no start date mentioned",
-    "we don't have specific information", "we do not have specific information",
-    "we don't have details", "we do not have details", "no info on", "no details on",
-    "information not available", "details not available", "no availability information",
+    "no details available", "please refer to", "no specific information", "the search results do not specify",
+    "no start date mentioned", "we don't have specific information", "we do not have specific information",
+    "we don't have details", "we do not have details", "no info on", "no details on", "information not available",
+    "details not available", "no availability information",
+    # Traditional Chinese (zh-HK)
+    "未有具體資料", "未有資料", "未提供資料", "未能提供", "無法提供", "未有相關資料", "未有相關資訊",
+    "暫無資料", "暫時沒有資料", "未有說明", "資料未有說明", "文件未有說明", "未有註明", "未有列出",
+    "文件未有提及", "未有提及", "沒有提及", "找不到", "查不到", "未找到", "沒有記錄", "資料不詳",
+    "資訊不足", "資料不足", "請參閱", "沒有具體資訊", "暫無相關資料", "暫無相關資訊",
+    # Simplified Chinese (zh-CN)
+    "没有具体信息", "没有资料", "未提供信息", "未能提供", "无法提供", "没有相关信息", "无相关信息",
+    "暂无信息", "暂时没有信息", "未说明", "资料未说明", "文档未说明", "未注明", "未列出",
+    "文档未提及", "未提及", "没有提及", "找不到", "查不到", "未找到", "没有记录", "信息不详",
+    "信息不足", "资料不足", "请参阅", "没有具体资讯", "暂无相关信息", "暂无相关资料",
 ]
 
 def contains_apology_or_noinfo(answer: str) -> bool:
