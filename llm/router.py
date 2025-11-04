@@ -3,13 +3,10 @@ from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 from llm.bedrock_kb_client import chat_with_kb
 from llm.config import SETTINGS
-from llm.lang import get_language_code  # CHANGED: Was 'detect_language'
+from llm.lang import get_language_code
 from llm import tags_index
 from llm.chat_history import save_message, get_recent_history, prune_history, build_context_string
-
-# CHANGED: import scheduling classifier
 from llm.intent import detect_opening_hours_intent, is_general_hours_query, classify_scheduling_context
-# CHANGED: import summarize_user_date_intent
 from llm.opening_hours import compute_opening_answer, extract_opening_context, center_is_open_now, summarize_user_date_intent
 
 import httpx
@@ -18,8 +15,27 @@ import re
 import time
 import sys
 import traceback
-import asyncio  # NEW: for scheduling ack tasks
-from collections import deque  # NEW
+import asyncio
+from collections import deque
+
+def _cites_admin_routing(citations: List[Dict[str, Any]]) -> bool:
+    if not citations:
+        return False
+    for c in citations:
+        uri = (c.get("uri") or "")
+        if "/faq/admin_scheduling_routing.md" in uri:
+            return True
+    return False
+
+_LEAVE_EN = re.compile(
+    r"\b(can'?t|cannot|won'?t)\s+(attend|come|make\s+(?:it|the\s+class|the\s+lesson))\b"
+    r"|won'?t\s+be\s+able\s+to\s+attend\b"
+    r"|will\s+be\s+away\b",
+    re.IGNORECASE
+)
+
+def _looks_like_leave_notification(text: str) -> bool:
+    return bool(_LEAVE_EN.search(text or ""))
 
 # --- Llama client helper (should be moved to llm/llama_client.py) ---
 def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop: list = None) -> str:
@@ -439,10 +455,16 @@ def chat(req: ChatRequest, request: Request):
     # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
     if not citations or contains_apology_or_noinfo(answer):
         _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
-        if is_hours_intent and not (
-            sched_cls.get("has_sched_verbs") or sched_cls.get("availability_request") or sched_cls.get("admin_action_request")
-            or sched_cls.get("staff_contact_request") or sched_cls.get("individual_homework_request")
-        ):
+        block_hours_fallback = (
+            sched_cls.get("has_sched_verbs")
+            or sched_cls.get("availability_request")
+            or sched_cls.get("admin_action_request")
+            or sched_cls.get("staff_contact_request")
+            or sched_cls.get("individual_homework_request")
+            or _cites_admin_routing(citations)
+            or _looks_like_leave_notification(rag_query)
+        )
+        if is_hours_intent and not block_hours_fallback:
             answer = compute_opening_answer(req.message, lang)
             citations = []
             debug_info = {"source": "deterministic_opening_hours_fallback"}
@@ -657,10 +679,16 @@ async def whatsapp_webhook_handler(request: Request):
                                 # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
                                 if not citations or contains_apology_or_noinfo(answer):
                                     _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
-                                    if is_hours_intent and not (
-                                        sched_cls.get("has_sched_verbs") or sched_cls.get("availability_request") or sched_cls.get("admin_action_request")
-                                        or sched_cls.get("staff_contact_request") or sched_cls.get("individual_homework_request")
-                                    ):
+                                    block_hours_fallback = (
+                                        sched_cls.get("has_sched_verbs")
+                                        or sched_cls.get("availability_request")
+                                        or sched_cls.get("admin_action_request")
+                                        or sched_cls.get("staff_contact_request")
+                                        or sched_cls.get("individual_homework_request")
+                                        or _cites_admin_routing(citations)
+                                        or _looks_like_leave_notification(rag_query)
+                                    )
+                                    if is_hours_intent and not block_hours_fallback:
                                         answer = compute_opening_answer(message_body, lang)
                                         citations = []
                                         debug_info = {"source": "deterministic_opening_hours_fallback"}
