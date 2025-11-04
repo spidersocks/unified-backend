@@ -71,5 +71,9 @@ class Settings:
     # Use default_factory for mutable default (list)
     whatsapp_test_numbers: List[str] = field(default_factory=_get_whatsapp_test_numbers_from_env)
 
+    # --- NEW: Admin cooling configuration ---
+    # Seconds to keep the bot silent after detecting an admin/human message
+    admin_cooldown_secs: int = int(os.environ.get("ADMIN_COOLDOWN_SECS", "900"))  # default 15 minutes
+
 
 SETTINGS = Settings()

@@ -17,6 +17,7 @@ import time
 import sys
 import traceback
 import asyncio  # NEW: for scheduling ack tasks
+from collections import deque  # NEW
 
 # --- Llama client helper (should be moved to llm/llama_client.py) ---
 def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop: list = None) -> str:
@@ -77,6 +78,36 @@ def _log(msg):
     print(f"[LLM ROUTER] {msg}", file=sys.stderr, flush=True)
 
 # --- WhatsApp helpers (should be moved to llm/whatsapp_utils.py) ---
+# Track message IDs our bot sent via Cloud API to distinguish from admin-sent
+_BOT_MSG_IDS: Dict[str, float] = {}  # msg_id -> ts
+# Track last detected admin activity per recipient (phone/session)
+_LAST_ADMIN_ACTIVITY: Dict[str, float] = {}  # recipient_id -> ts
+# Keep structure small by pruning old bot IDs
+def _record_bot_msg_id(msg_id: Optional[str]):
+    if not msg_id:
+        return
+    _BOT_MSG_IDS[msg_id] = time.time()
+    # Simple prune: drop entries older than 24h or if over 500 entries
+    if len(_BOT_MSG_IDS) > 500:
+        cutoff = time.time() - 24 * 3600
+        to_del = [mid for mid, ts in _BOT_MSG_IDS.items() if ts < cutoff]
+        for mid in to_del:
+            _BOT_MSG_IDS.pop(mid, None)
+
+def _mark_admin_activity(recipient_id: Optional[str]):
+    if not recipient_id:
+        return
+    _LAST_ADMIN_ACTIVITY[recipient_id] = time.time()
+    # Cancel any pending ack for this chat
+    _cancel_pending_ack(recipient_id)
+    _log(f"[COOL] Marked admin activity for {recipient_id}. Cooling for {SETTINGS.admin_cooldown_secs}s")
+
+def _in_admin_cooldown(session_id: str) -> bool:
+    ts = _LAST_ADMIN_ACTIVITY.get(session_id)
+    if not ts:
+        return False
+    return (time.time() - ts) < SETTINGS.admin_cooldown_secs
+
 async def _send_whatsapp_message(to: str, message_body: str):
     if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
         _log("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send message.")
@@ -97,7 +128,14 @@ async def _send_whatsapp_message(to: str, message_body: str):
         try:
             response = await client.post(url, headers=headers, json=payload, timeout=30)
             response.raise_for_status()
-            _log(f"[WA] SUCCESS: WhatsApp message sent to {to}. Response: {response.json()}")
+            data = response.json()
+            _log(f"[WA] SUCCESS: WhatsApp message sent to {to}. Response: {data}")
+            try:
+                # Record bot message id so status webhooks for this id are recognized as bot
+                msg_id = (data.get("messages") or [{}])[0].get("id")
+                _record_bot_msg_id(msg_id)
+            except Exception:
+                pass
         except Exception as e:
             _log(f"[WA] ERROR: Failed to send WhatsApp message: {e}")
 
@@ -121,7 +159,13 @@ async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "docume
         try:
             response = await client.post(url, headers=headers, json=payload, timeout=30)
             response.raise_for_status()
-            _log(f"[WA] SUCCESS: WhatsApp document sent to {to}. Response: {response.json()}")
+            data = response.json()
+            _log(f"[WA] SUCCESS: WhatsApp document sent to {to}. Response: {data}")
+            try:
+                msg_id = (data.get("messages") or [{}])[0].get("id")
+                _record_bot_msg_id(msg_id)
+            except Exception:
+                pass
         except Exception as e:
             _log(f"[WA] ERROR: Failed to send WhatsApp document: {e}")
 
@@ -145,6 +189,10 @@ async def _ack_worker(session_id: str, lang: str, base_ts: float, delay_secs: in
     try:
         if delay_secs > 0:
             await asyncio.sleep(delay_secs)
+        # Suppress ack if admin cooldown engaged meanwhile
+        if _in_admin_cooldown(session_id):
+            _log(f"[ACK] Suppress ack due to admin cooldown for {session_id}")
+            return
         # Before sending, ensure no newer user messages have arrived and the bot hasn't sent a non-empty reply
         history = get_recent_history(session_id, limit=10, oldest_first=True)
         newer_user = any(item["role"] == "user" and float(item["ts"]) > base_ts for item in history)
@@ -161,7 +209,6 @@ async def _ack_worker(session_id: str, lang: str, base_ts: float, delay_secs: in
     except Exception as e:
         _log(f"[ACK] Error sending ack: {e}")
     finally:
-        # Clean up task handle
         if _ACK_TASKS.get(session_id):
             _ACK_TASKS.pop(session_id, None)
 
@@ -171,10 +218,14 @@ def _maybe_schedule_auto_ack_whatsapp(session_id: str, lang: str, base_ts: float
     - During working hours (open): wait 30 minutes (1800s).
     - Outside working hours: send immediately (0 delay).
     """
+    # Never schedule an ack if admin cooling is active
+    if _in_admin_cooldown(session_id):
+        _log(f"[ACK] Not scheduling ack due to admin cooldown for {session_id}")
+        return
+
     during_hours = center_is_open_now(lang)
     delay_secs = 1800 if during_hours else 0
 
-    # Cancel any existing pending ack for this session and schedule anew
     _cancel_pending_ack(session_id)
     task = asyncio.create_task(_ack_worker(session_id, lang, base_ts, delay_secs))
     _ACK_TASKS[session_id] = task
@@ -439,6 +490,7 @@ def chat(req: ChatRequest, request: Request):
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
 
 # WhatsApp handler uses the same guardrails as above.
+@router.post("/whatsapp_webhook")
 async def whatsapp_webhook_handler(request: Request):
     try:
         payload = await request.json()
@@ -448,7 +500,22 @@ async def whatsapp_webhook_handler(request: Request):
             for entry in payload["entry"]:
                 for change in entry.get("changes", []):
                     if change.get("field") == "messages":
-                        value = change.get("value", {})
+                        value = change.get("value", {})  # Cloud API bundles both messages and statuses here
+
+                        # --- NEW: Handle business message status updates (detect admin activity) ---
+                        for st in value.get("statuses", []) or []:
+                            try:
+                                msg_id = st.get("id") or st.get("message_id")
+                                recipient_id = st.get("recipient_id")
+                                # If this status refers to a message ID we didn't send via this backend,
+                                # assume it's an admin/human outbound message -> start cooldown.
+                                if msg_id and msg_id not in _BOT_MSG_IDS:
+                                    _mark_admin_activity(recipient_id)
+                                else:
+                                    _log(f"[COOL] Status for bot message id={msg_id} (ignored)")
+                            except Exception as e:
+                                _log(f"[COOL] Error processing status webhook: {e}")
+
                         messages = value.get("messages", [])
                         contacts = value.get("contacts", [])
 
@@ -459,9 +526,22 @@ async def whatsapp_webhook_handler(request: Request):
                             message_type = message.get("type")
                             _log(f"Message details: from={from_number}, type={message_type}, contact={contact}")
 
-                            # NEW: Cancel any pending ack as soon as a new inbound message arrives
+                            # Cancel any pending ack as soon as a new inbound message arrives
                             if from_number:
                                 _cancel_pending_ack(from_number)
+
+                            # If admin cooldown is active for this chat, stay silent (do not LLM, do not ack)
+                            if from_number and _in_admin_cooldown(from_number):
+                                _log(f"[COOL] Admin cooldown active for {from_number}. Bot remains silent.")
+                                # Optionally save the inbound message to history for context
+                                try:
+                                    now_ts = time.time()
+                                    body_preview = message.get("text", {}).get("body") if message_type == "text" else f"<{message_type}>"
+                                    save_message(from_number, "user", body_preview or "", get_language_code(body_preview or ""), now_ts)
+                                    prune_history(from_number, keep=6)
+                                except Exception as e:
+                                    _log(f"[COOL] Error saving history during cooldown: {e}")
+                                return {"status": "cooldown_active", "message": "Bot silenced due to recent admin activity"}
 
                             if message_type == "text":
                                 message_body = message["text"].get("body")
@@ -549,9 +629,9 @@ async def whatsapp_webhook_handler(request: Request):
 
                                 # Save history
                                 try:
-                                    now = time.time()
-                                    save_message(from_number, "user", message_body, lang, now)
-                                    save_message(from_number, "bot", answer or "", lang, now + 0.01)
+                                    now_ts = time.time()
+                                    save_message(from_number, "user", message_body, lang, now_ts)
+                                    save_message(from_number, "bot", answer or "", lang, now_ts + 0.01)
                                     prune_history(from_number, keep=6)
                                     _log(f"Saved and pruned DynamoDB history for session_id={from_number}")
                                 except Exception as e:
@@ -603,9 +683,8 @@ async def whatsapp_webhook_handler(request: Request):
                                     await _send_whatsapp_message(from_number, answer)
                                 else:
                                     _log("LLM provided no answer. No WhatsApp reply sent.")
-
-                                    # NEW: schedule (or immediate) auto-ack since we stayed silent
-                                    _maybe_schedule_auto_ack_whatsapp(from_number, lang, base_ts=now)
+                                    # Do not schedule ack if in cooldown
+                                    _maybe_schedule_auto_ack_whatsapp(from_number, lang, base_ts=now_ts)
 
                                 return {"status": "ok", "message": "Message processed"}
                             else:
