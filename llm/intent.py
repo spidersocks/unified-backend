@@ -198,6 +198,45 @@ _ADMIN_RELAY_ZH_CN = [
     r"(请|帮|麻烦).*问(老师|教师).*(去|做|安排|提醒)",
 ]
 
+# NEW: Homework markers and individualized-advice patterns
+_HOMEWORK_EN = [
+    r"\bhomework\b",
+    r"\bread(?:ing)?\s+assignment\b",
+    r"\bworksheet\b",
+    r"\bphonics\b",
+    r"\bpronounc",  # pronounce/pronunciation
+]
+_HOMEWORK_ZH_HK = [
+    r"功課|家課|作業|閱讀作業|閱讀功課|閱讀任務|拼音|發音|讀音",
+]
+_HOMEWORK_ZH_CN = [
+    r"作业|功课|阅读作业|阅读功课|阅读任务|拼音|发音|读音",
+]
+
+# “How to do / ideal way / should we ... / adult guidance / can't read/pronounce” style
+_INDIV_ADVICE_EN = [
+    r"\bhow\s+should\b",
+    r"\bhow\s+to\b",
+    r"\bwhat\s+is\s+the\s+(best|ideal)\s+way\b",
+    r"\bshould\s+(?:i|we|he|she|my (son|daughter|kid|child))\b",
+    r"\b(adult|parent|teacher)\s+guidance\b",
+    r"\bguide\s+(him|her|my (son|daughter|kid|child))\b",
+    r"\bcan't\s+read\b",
+    r"\bcan(?:not|'t)\s+pronounc",
+]
+_INDIV_ADVICE_ZH_HK = [
+    r"(點樣|如何|應該|點做)",
+    r"(需要|要唔要)(大人|家長|老師)指導",
+    r"(唔識讀|唔識發音|讀唔到|讀唔出|發音有問題)",
+    r"(指導|帶住|帶領)(佢|小朋友)",
+]
+_INDIV_ADVICE_ZH_CN = [
+    r"(怎么|如何|应该|怎样|咋做)",
+    r"(需要|要不要)(大人|家长|老师)指导",
+    r"(不会读|不会发音|读不了|读不出|发音有问题)",
+    r"(指导|带着|带领)(他|她|孩子|小朋友)",
+]
+
 def _has_admin_action_request(message: str, lang: str) -> bool:
     m = message or ""
     L = (lang or "en").lower()
@@ -221,6 +260,7 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
     - student_ref: refers to a specific child (name/pronoun/son/daughter)
     - politeness_only: message is pure politeness (no other content)
     - admin_action_request: user asks us to pass/relay/ask/tell a teacher/staff to do something
+    - individual_homework_request: asks for student‑specific homework/teaching guidance (admin/teacher only)
     """
     m = message or ""
     L = (lang or "en").lower()
@@ -230,18 +270,31 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         avail = _score(m, _AVAIL_ZH_HK) > 0
         post = _score(m, _POST_ASSESS_ZH_HK) > 0
         student = _score(m, _STUDENT_REF_ZH_HK) > 0
+        # NEW: homework/advice detection
+        hw = _score(m, _HOMEWORK_ZH_HK) > 0
+        adv = _score(m, _INDIV_ADVICE_ZH_HK) > 0
+        # simple pronoun hit helps indicate a specific child in Cantonese/Chinese
+        pron = bool(re.search(r"(佢|小朋友|學生)", m))
     elif L.startswith("zh-cn") or L == "zh":
         base_sched = _score(m, _SCHED_ZH_CN) > 0
         policy = _score(m, _POLICY_ZH_CN) > 0
         avail = _score(m, _AVAIL_ZH_CN) > 0
         post = _score(m, _POST_ASSESS_ZH_CN) > 0
         student = _score(m, _STUDENT_REF_ZH_CN) > 0
+        # NEW: homework/advice detection
+        hw = _score(m, _HOMEWORK_ZH_CN) > 0
+        adv = _score(m, _INDIV_ADVICE_ZH_CN) > 0
+        pron = bool(re.search(r"(他|她|孩子|小朋友|学生)", m))
     else:
         base_sched = _score(m, _SCHED_EN) > 0
         policy = _score(m, _POLICY_EN) > 0
         avail = _score(m, _AVAIL_EN) > 0
         post = _score(m, _POST_ASSESS_EN) > 0
         student = _score(m, _STUDENT_REF_EN) > 0
+        # NEW: homework/advice detection
+        hw = _score(m, _HOMEWORK_EN) > 0
+        adv = _score(m, _INDIV_ADVICE_EN) > 0
+        pron = bool(re.search(r"\b(he|him|his|she|her|hers|my (son|daughter|kid|child))\b", m, re.I))
 
     date_time = _score(m, _DATE_MARKERS) > 0
     politeness = is_politeness_only(m, lang)
@@ -252,6 +305,9 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
     # NEW: pass-on/relay request
     admin_action = _has_admin_action_request(m, L)
 
+    # NEW: Individualized homework/teaching advice (requires admin/teacher)
+    individual_hw = bool(hw and (adv or student or pron))
+
     return {
         "has_sched_verbs": sched,
         "has_date_time": date_time,
@@ -261,6 +317,7 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         "student_ref": student,
         "politeness_only": politeness,
         "admin_action_request": admin_action,
+        "individual_homework_request": individual_hw,  # NEW
     }
 
 def detect_opening_hours_intent(message: str, lang: str) -> Tuple[bool, Dict[str, Any]]:

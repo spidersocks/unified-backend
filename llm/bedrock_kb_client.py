@@ -135,6 +135,24 @@ APOLOGY_MARKERS = [
     "無提供相關信息","沒有相關信息","沒有資料","沒有相关资料","暂无相关信息","暂无资料",
 ]
 
+HOMEWORK_INDIVIDUAL_GUARDRAIL = {
+    "en": (
+        "Student-specific homework or teaching advice: If the parent asks how to handle a specific child's homework/reading/"
+        "assignment (e.g., guidance, pronunciation help, whether adults should guide), you MUST reply only with [NO_ANSWER]. "
+        "Do NOT offer any advice, steps, or opinions. Our staff will coordinate with the class teacher/director."
+    ),
+    "zh-HK": (
+        "學生個別功課／教學建議：如家長詢問針對某位小朋友的功課／閱讀／作業應如何處理（例如需否大人指導、"
+        "發音點樣練、做法等），*必須*只回覆 [NO_ANSWER]。不要提供任何建議、步驟或意見。"
+        "由職員再跟授課老師／主管聯絡。"
+    ),
+    "zh-CN": (
+        "学生个别作业／教学建议：如家长询问如何处理某位孩子的作业／阅读（如是否需要大人指导、如何练发音、"
+        "具体做法等），*必须*仅回复 [NO_ANSWER]。不要提供任何建议、步骤或意见。"
+        "由工作人员与授课老师／负责人跟进。"
+    ),
+}
+
 _CACHE: Dict[Tuple[str, str, str, str], Tuple[float, str, List[Dict], Dict[str, Any]]] = {}
 _CACHE_TTL_SECS = int(os.environ.get("KB_RESPONSE_CACHE_TTL_SECS", "120"))
 
@@ -223,12 +241,14 @@ def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, contex
     try:
         cls = classify_scheduling_context(query or "", lang)
     except Exception:
-        cls = {"has_sched_verbs": False, "has_date_time": False, "has_policy_intent": False, "politeness_only": False, "availability_request": False, "admin_action_request": False}
+        cls = {"has_sched_verbs": False, "has_date_time": False, "has_policy_intent": False, "politeness_only": False, "availability_request": False, "admin_action_request": False, "individual_homework_request": False}
 
     if cls.get("has_sched_verbs") and (cls.get("has_date_time") or cls.get("availability_request")) and not cls.get("has_policy_intent"):
         final_instructions.append("This looks like a scheduling action or availability/time-slot request. Provide only [NO_ANSWER]. Do not describe policy or processes.")
     if cls.get("admin_action_request") and not cls.get("has_policy_intent"):
         final_instructions.append("User asks to pass/relay a message to teacher/staff. Provide only [NO_ANSWER]. Do NOT relay messages.")
+    if cls.get("individual_homework_request"):
+        final_instructions.append(HOMEWORK_INDIVIDUAL_GUARDRAIL.get(lang, HOMEWORK_INDIVIDUAL_GUARDRAIL["en"]))
     if cls.get("has_policy_intent"):
         final_instructions.append("User is asking about policy. Answer from context. Do NOT make or confirm any arrangements.")
     if not cls.get("politeness_only"):
