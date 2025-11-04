@@ -12,7 +12,6 @@ from llm.config import SETTINGS
 # Strong terms: high-confidence indicators of opening-hours intent
 _EN_STRONG_TERMS = [
     r"\bopen(?:ing)?\b", r"\bhours?\b", r"\bclosed?\b", r"\bbusiness hours?\b",
-    r"\battend(?:ing)?\s+(?:class|lesson)\b", r"go to class",
     r"\bpublic holiday\b", r"\bholiday\b",
 ]
 # Weak terms: require time or other hints to be confident
@@ -24,7 +23,6 @@ _EN_WEAK_TERMS = [
 
 _ZH_HK_STRONG_TERMS = [
     r"營業|營運|開放|開門|收(工|舖|店)|幾點(開|收)",
-    r"上課|上堂|返學|返課",
     # Removed: r"安排|改期" (this is scheduling, not opening-hours)
     r"公眾假期|假期",
 ]
@@ -34,7 +32,6 @@ _ZH_HK_WEAK_TERMS = [
 
 _ZH_CN_STRONG_TERMS = [
     r"营业|开放|开门|关门|几点(开|关)",
-    r"上课|上学|上(?:不)?上课",
     # Removed: r"安排|改期" (this is scheduling, not opening-hours)
     r"公众假期|公休日|假期",
 ]
@@ -149,7 +146,7 @@ def detect_opening_hours_intent(message: str, lang: str) -> Tuple[bool, Dict[str
     }
 
     # HARD GUARD: If this looks like availability/scheduling, force NOT opening-hours
-     try:
+    try:
         cls = classify_scheduling_context(message or "", lang or "en")
         if (cls.get("availability_request") or cls.get("has_sched_verbs")
             or cls.get("admin_action_request") or cls.get("staff_contact_request")
@@ -279,18 +276,26 @@ _RESCHED_EXTRA_ZH_CN = [
     r"(另|换|别|其他)一[天日]|别的日子|其他日子",
 ]
 
-# Scheduling/leave verbs (expanded with 'suspend/stop' variants)
+# Scheduling/leave verbs (expanded with 'suspend/stop' variants and absence notifications)
 _SCHED_ZH_HK = [
     r"請假", r"改期", r"改時間", r"改堂", r"取消", r"缺席", r"退堂",
     r"(暫\s*停|停止|停課|停堂|暫停安排|暫停上課)",
+    r"(唔嚟|唔來|去唔到|來唔切|嚟唔切).*(上課|上堂)?",
+    r"(缺席|未能出席)",
 ]
 _SCHED_ZH_CN = [
     r"请假", r"改期", r"改时间", r"改堂", r"取消", r"缺席", r"退课",
     r"(暂\s*停|停止|停课|暂停安排|暂停上课)",
+    r"(来不了|來不了|去不了|不能来|不能來|不能上课|不能上課)",
+    r"(缺席|未能出席)",
 ]
 _SCHED_EN = [
     r"\breschedul(?:e|ing)\b", r"\bcancel(?:ling|ation)?\b", r"\btake\s+leave\b",
     r"\brequest\s+leave\b", r"\b(absent|absence)\b", r"\b(suspend|put on hold|pause)\b",
+    r"\b(can\'?t|cannot|won\'?t)\s+(attend|come|make it)\b",
+    r"\bwon\'?t be able to attend\b",
+    r"\bwill be away\b",
+    r"\b(be|is|are) away\b",
 ]
 
 # Date/time markers (for has_date_time) — expanded to include month names

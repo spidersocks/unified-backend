@@ -79,6 +79,42 @@ def call_llm_rephrase(history_context: str, lang: str) -> str:
 def _log(msg):
     print(f"[LLM ROUTER] {msg}", file=sys.stderr, flush=True)
 
+# --- Dated leave/cancel/away detection patterns ---
+_DATED_LEAVE_PATTERNS = [
+    # Date pattern followed by absence/cancel language
+    r"\d{1,2}/\d{1,2}.*\b(can\'?t|cannot|won\'?t)\s+(attend|come|make it)\b",
+    r"\d{1,2}/\d{1,2}.*\b(will be away|be away|is away|are away)\b",
+    r"\d{1,2}/\d{1,2}.*\b(absent|absence|cancel|leave)\b",
+    # Weekday followed by absence/cancel
+    r"\b(mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b.*\b(can\'?t|cannot|won\'?t)\s+(attend|come|make it)\b",
+    r"\b(next|this)\s+(mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b.*\b(cancel|absence|leave)\b",
+]
+
+_ADMIN_SCHED_DOCS = [
+    "/en/policies/AdminSchedulingRouting.md",
+    "/zh-HK/policies/AdminSchedulingRouting.md", 
+    "/zh-CN/policies/AdminSchedulingRouting.md",
+]
+
+def _is_dated_leave_notification(message: str) -> bool:
+    """Check if message appears to be a dated leave/absence notification."""
+    m = (message or "").lower()
+    for pat in _DATED_LEAVE_PATTERNS:
+        if re.search(pat, m, re.IGNORECASE):
+            return True
+    return False
+
+def _cites_admin_scheduling(citations: list) -> bool:
+    """Check if any citation is from AdminSchedulingRouting docs."""
+    if not citations:
+        return False
+    for c in citations:
+        uri = c.get("uri", "") or ""
+        for doc in _ADMIN_SCHED_DOCS:
+            if uri and uri.endswith(doc):
+                return True
+    return False
+
 # --- WhatsApp helpers (should be moved to llm/whatsapp_utils.py) ---
 # Track message IDs our bot sent via Cloud API to distinguish from admin-sent
 _BOT_MSG_IDS: Dict[str, float] = {}  # msg_id -> ts
@@ -439,10 +475,17 @@ def chat(req: ChatRequest, request: Request):
     # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
     if not citations or contains_apology_or_noinfo(answer):
         _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
-        if is_hours_intent and not (
+        # Strict safety check: DO NOT compute opening-hours fallback if ANY of these conditions are true:
+        # 1. classify_scheduling_context flags any scheduling/admin/availability/homework/staff-contact
+        # 2. KB citations include AdminSchedulingRouting docs
+        # 3. The message appears to be a dated leave/cancel/away notification
+        should_silence = (
             sched_cls.get("has_sched_verbs") or sched_cls.get("availability_request") or sched_cls.get("admin_action_request")
             or sched_cls.get("staff_contact_request") or sched_cls.get("individual_homework_request")
-        ):
+            or _cites_admin_scheduling(citations)
+            or _is_dated_leave_notification(rag_query)
+        )
+        if is_hours_intent and not should_silence:
             answer = compute_opening_answer(req.message, lang)
             citations = []
             debug_info = {"source": "deterministic_opening_hours_fallback"}
@@ -657,10 +700,17 @@ async def whatsapp_webhook_handler(request: Request):
                                 # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
                                 if not citations or contains_apology_or_noinfo(answer):
                                     _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
-                                    if is_hours_intent and not (
+                                    # Strict safety check: DO NOT compute opening-hours fallback if ANY of these conditions are true:
+                                    # 1. classify_scheduling_context flags any scheduling/admin/availability/homework/staff-contact
+                                    # 2. KB citations include AdminSchedulingRouting docs
+                                    # 3. The message appears to be a dated leave/cancel/away notification
+                                    should_silence = (
                                         sched_cls.get("has_sched_verbs") or sched_cls.get("availability_request") or sched_cls.get("admin_action_request")
                                         or sched_cls.get("staff_contact_request") or sched_cls.get("individual_homework_request")
-                                    ):
+                                        or _cites_admin_scheduling(citations)
+                                        or _is_dated_leave_notification(rag_query)
+                                    )
+                                    if is_hours_intent and not should_silence:
                                         answer = compute_opening_answer(message_body, lang)
                                         citations = []
                                         debug_info = {"source": "deterministic_opening_hours_fallback"}
