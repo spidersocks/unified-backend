@@ -164,6 +164,105 @@ def is_general_hours_query(message: str, lang: str) -> bool:
     # If no specific date, weekday, or holiday markers are found, it's a general query.
     return True
 
+# English: require an explicit relay verb directed at teacher/staff, not generic questions like “Are your teachers ...”
+# We deliberately require a “helper preface” (please/kindly/could you/can you/help) AND a relay verb,
+# plus a teacher/staff audience. If using “ask”, require “… ask … teacher … to …” to avoid matching “ask about teachers”.
+_ADMIN_RELAY_EN = [
+    r"(?:please|kindly|could you|can you|would you|help(?: me)?(?: to)?)\s+(?:pass|forward|relay|send|share)\b.*\b(?:teacher|teachers|staff|instructor|coach)\b",
+    r"(?:please|kindly|could you|can you|would you|help(?: me)?(?: to)?)\s+(?:tell|inform|notify)\b.*\b(?:teacher|teachers|staff|instructor|coach)\b",
+    r"(?:please|kindly|could you|can you|would you|help(?: me)?(?: to)?)\s+ask\b.*\b(?:teacher|teachers|staff|instructor|coach)\b.*\bto\b",
+    r"\bpass (?:the )?message\b.*\b(?:teacher|teachers|staff|instructor|coach)\b",
+    r"\bleave (?:a )?note\b.*\b(?:teacher|teachers)\b",
+]
+# Negative guard to avoid false positives like “Are your teachers native speakers?”
+_ADMIN_RELAY_EN_NEG = [
+    r"\bare\s+(?:your|the)\s+teachers?\b",
+    r"\bwhat\s+(?:are|is)\s+(?:your|the)\s+teachers?\b",
+    r"\bteacher(?:s)?\s+qualification|native\s+speaker",
+]
+
+# Cantonese / Traditional Chinese (zh-HK)
+_ADMIN_RELAY_ZH_HK = [
+    r"(請|麻煩|幫)(我|手)?(問|轉告|通知)(老師|導師)",
+    r"(同|跟)(老師|導師)講",
+    r"(幫|請)將(訊息|信息|留言|說話|話)轉達(比|畀)?(老師|導師)",
+    r"(請|幫|麻煩).*(轉達|代為轉告).*(老師|導師)",
+    r"(請|幫|麻煩).*問(老師|導師).*(去|做|安排|提醒)",
+]
+# Simplified Chinese (zh-CN)
+_ADMIN_RELAY_ZH_CN = [
+    r"(请|麻烦|帮)(我)?(问|转告|通知)(老师|教师)",
+    r"(跟|和)(老师|教师)说",
+    r"(帮|请)将(信息|留言|话)转达给(老师|教师)",
+    r"(请|帮|麻烦).*(转达|代为转告).*(老师|教师)",
+    r"(请|帮|麻烦).*问(老师|教师).*(去|做|安排|提醒)",
+]
+
+def _has_admin_action_request(message: str, lang: str) -> bool:
+    m = message or ""
+    L = (lang or "en").lower()
+    if L.startswith("zh-hk"):
+        return any(re.search(p, m) for p in _ADMIN_RELAY_ZH_HK)
+    if L.startswith("zh-cn") or L == "zh":
+        return any(re.search(p, m) for p in _ADMIN_RELAY_ZH_CN)
+    # English
+    if any(re.search(p, m, re.I) for p in _ADMIN_RELAY_EN_NEG):
+        return False
+    return any(re.search(p, m, re.I) for p in _ADMIN_RELAY_EN)
+
+def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
+    """
+    Soft classification: returns booleans used to steer prompt only.
+    - has_sched_verbs: mentions leave/reschedule/cancel OR availability request + (post-assessment OR student-ref)
+    - has_date_time: mentions specific date/weekday/time
+    - has_policy_intent: asks for policy/arrangements/rules around reschedule/leave
+    - availability_request: availability/timetable/slot/start-date/teacher availability
+    - post_assessment: mentions 'after/completed assessment'
+    - student_ref: refers to a specific child (name/pronoun/son/daughter)
+    - politeness_only: message is pure politeness (no other content)
+    - admin_action_request: user asks us to pass/relay/ask/tell a teacher/staff to do something
+    """
+    m = message or ""
+    L = (lang or "en").lower()
+    if L.startswith("zh-hk"):
+        base_sched = _score(m, _SCHED_ZH_HK) > 0
+        policy = _score(m, _POLICY_ZH_HK) > 0
+        avail = _score(m, _AVAIL_ZH_HK) > 0
+        post = _score(m, _POST_ASSESS_ZH_HK) > 0
+        student = _score(m, _STUDENT_REF_ZH_HK) > 0
+    elif L.startswith("zh-cn") or L == "zh":
+        base_sched = _score(m, _SCHED_ZH_CN) > 0
+        policy = _score(m, _POLICY_ZH_CN) > 0
+        avail = _score(m, _AVAIL_ZH_CN) > 0
+        post = _score(m, _POST_ASSESS_ZH_CN) > 0
+        student = _score(m, _STUDENT_REF_ZH_CN) > 0
+    else:
+        base_sched = _score(m, _SCHED_EN) > 0
+        policy = _score(m, _POLICY_EN) > 0
+        avail = _score(m, _AVAIL_EN) > 0
+        post = _score(m, _POST_ASSESS_EN) > 0
+        student = _score(m, _STUDENT_REF_EN) > 0
+
+    date_time = _score(m, _DATE_MARKERS) > 0
+    politeness = is_politeness_only(m, lang)
+
+    # Treat availability + (post-assessment OR student-ref) as an admin scheduling request
+    sched = base_sched or (avail and (post or student))
+
+    # NEW: pass-on/relay request
+    admin_action = _has_admin_action_request(m, L)
+
+    return {
+        "has_sched_verbs": sched,
+        "has_date_time": date_time,
+        "has_policy_intent": policy,
+        "availability_request": avail,
+        "post_assessment": post,
+        "student_ref": student,
+        "politeness_only": politeness,
+        "admin_action_request": admin_action,
+    }
+
 def detect_opening_hours_intent(message: str, lang: str) -> Tuple[bool, Dict[str, Any]]:
     """
     --- REVISED LOGIC ---
