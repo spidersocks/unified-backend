@@ -249,6 +249,11 @@ def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, contex
         final_instructions.append("User asks to pass/relay a message to teacher/staff. Provide only [NO_ANSWER]. Do NOT relay messages.")
     if cls.get("individual_homework_request"):
         final_instructions.append(HOMEWORK_INDIVIDUAL_GUARDRAIL.get(lang, HOMEWORK_INDIVIDUAL_GUARDRAIL["en"]))
+        # Extra emphasis to ignore homework docs even if retrieved by RAG
+        final_instructions.append(
+            "Even if the context includes general homework documents (e.g., HomeworkPolicy, ReadingAssignmentsPurpose, PhonicsLevelOutcomes), "
+            "you MUST still reply only with [NO_ANSWER]. Do not provide guidance for a specific child."
+        )
     if cls.get("has_policy_intent"):
         final_instructions.append("User is asking about policy. Answer from context. Do NOT make or confirm any arrangements.")
     if not cls.get("politeness_only"):
