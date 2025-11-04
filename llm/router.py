@@ -288,7 +288,10 @@ NOINFO_PHRASES = [
     "not explicitly stated", "not specified", "not mentioned", "no information", "not provided", "no details",
     "not found", "refer to tuition listing",
     "up-to-date fees", "available time slots", "no answer available", "unable to find", "unable to provide",
-    "no details available", "please refer to", "no specific information", "the search results do not specify", "no start date mentioned"
+    "no details available", "please refer to", "no specific information", "the search results do not specify", "no start date mentioned",
+    "we don't have specific information", "we do not have specific information",
+    "we don't have details", "we do not have details", "no info on", "no details on",
+    "information not available", "details not available", "no availability information",
 ]
 
 def contains_apology_or_noinfo(answer: str) -> bool:

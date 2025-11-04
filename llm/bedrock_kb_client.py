@@ -170,6 +170,23 @@ STAFF_CONTACT_GUARDRAIL = {
     ),
 }
 
+# NEW: Guardrail to treat seasonal/month-based availability as admin-handled
+SEASONAL_AVAILABILITY_GUARDRAIL = {
+    "en": (
+        "Seasonal or month-based availability (e.g., summer/July/August programs, camps, or classes) counts as an "
+        "availability/timetable request. You MUST reply only with [NO_ANSWER]. Do NOT speculate or say that information "
+        "is not available; simply respond with [NO_ANSWER]."
+    ),
+    "zh-HK": (
+        "季節性或按月份詢問（例如暑期／七月／八月課程、夏令營）屬於『時段／時間表』查詢，*必須*只回覆 [NO_ANSWER]。"
+        "不要臆測或說『沒有具體資料』，不要提供任何安排或建議。"
+    ),
+    "zh-CN": (
+        "季节性或按月份询问（例如暑期／七月／八月课程、夏令营）属于“时段／时间表”查询，*必须*仅回复 [NO_ANSWER]。"
+        "不要臆测或说“没有具体信息”，不要提供任何安排或建议。"
+    ),
+}
+
 _CACHE: Dict[Tuple[str, str, str, str], Tuple[float, str, List[Dict], Dict[str, Any]]] = {}
 _CACHE_TTL_SECS = int(os.environ.get("KB_RESPONSE_CACHE_TTL_SECS", "120"))
 
@@ -264,8 +281,13 @@ def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, contex
             "staff_contact_request": False
         }
 
+    # Availability/time-slot or scheduling
     if cls.get("has_sched_verbs") and (cls.get("has_date_time") or cls.get("availability_request")) and not cls.get("has_policy_intent"):
         final_instructions.append("This looks like a scheduling action or availability/time-slot request. Provide only [NO_ANSWER]. Do not describe policy or processes.")
+    # NEW: Availability request alone (including seasonal/month-based) must be silenced
+    if cls.get("availability_request") and not cls.get("has_policy_intent"):
+        final_instructions.append("Availability/timetable/teacher-availability/start-date queries are admin-handled. Provide only [NO_ANSWER].")
+        final_instructions.append(SEASONAL_AVAILABILITY_GUARDRAIL.get(lang, SEASONAL_AVAILABILITY_GUARDRAIL["en"]))
     if cls.get("admin_action_request") and not cls.get("has_policy_intent"):
         final_instructions.append("User asks to pass/relay a message to teacher/staff. Provide only [NO_ANSWER]. Do NOT relay messages.")
     if cls.get("staff_contact_request") and not cls.get("has_policy_intent"):

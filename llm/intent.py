@@ -176,19 +176,26 @@ def mentions_attendance(message: str, lang: str) -> bool:
 # Soft classifiers for scheduling/leave/availability/homework/staff-contact
 # ============================================================
 
-# Availability / timetable / start-date
+# Availability / timetable / start-date (expanded to include seasonal/month-based asks)
 _AVAIL_EN = [
     r"\bavailable\b", r"\bavailability\b", r"\bany (class|slot|time ?slot|timeslot)\b",
     r"\btimetable\b", r"\bschedule\b", r"\bwhat times\b", r"\bstart date\b",
     r"\bwhich time\b", r"\btime works\b", r"\bteacher availability\b",
+    # Seasonal / month-based availability
+    r"\bsummer\b", r"\bsummer (program|class|course|camp)s?\b", r"\bholiday\s*camp\b",
+    r"\b(july|august)\b", r"\bterm\b", r"\bsemester\b", r"\bsummer schedule\b",
 ]
 _AVAIL_ZH_HK = [
     r"有冇(堂|時段|時間|位)", r"時間表", r"時間安排", r"檔期", r"可唔可以.*時間", r"幾時開始(上|開)課",
     r"老師(幾時|時間)有空|導師(幾時|時間)得閒|老師檔期|導師檔期",
+    # Seasonal / month-based availability
+    r"暑期|暑假|夏令(營|营)|暑期班|夏季班|七月|八月|夏天|暑假課|暑期課",
 ]
 _AVAIL_ZH_CN = [
     r"(有|有没有)(课|课程|时段|时间|名额)", r"时间表", r"课程安排", r"档期", r"可以.*时间", r"什么时候开始(上|开)课",
     r"(老师|教师)(什么时候|什么时间)有空|老师档期|教师档期",
+    # Seasonal / month-based availability
+    r"暑期|暑假|夏令营|暑期班|夏季班|七月|八月|夏天|暑假课|暑期课",
 ]
 
 # Post-assessment markers
@@ -229,12 +236,14 @@ _SCHED_ZH_HK = [r"請假", r"改期", r"改時間", r"改堂", r"取消", r"缺�
 _SCHED_ZH_CN = [r"请假", r"改期", r"改时间", r"改堂", r"取消", r"缺席", r"退课"]
 _SCHED_EN = [r"\breschedul(?:e|ing)\b", r"\bcancel(?:ling|ation)?\b", r"\btake\s+leave\b", r"\brequest\s+leave\b", r"\b(absent|absence)\b"]
 
-# Date/time markers (for has_date_time)
+# Date/time markers (for has_date_time) — expanded to include month names
 _DATE_MARKERS = [
     r"\b\d{1,2}/\d{1,2}\b", r"\d{1,2}\s*(月|日|号|號)", r"(星期|周|週)[一二三四五六日天]",
     r"\b(mon|tue|wed|thu|fri|sat|sun)\b", r"\b(today|tomorrow)\b",
     r"\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(am|pm)\b",
     r"今天|今日|明天|後日|后天|聽日|下(周|星期|週)",
+    r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b",
+    r"\b(january|february|march|april|may|june|july|august|september|october|november|december)\b",
 ]
 
 # Policy markers
@@ -338,9 +347,9 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
     """
     Soft classification: returns booleans used to steer prompting only.
     - has_sched_verbs: leave/reschedule/cancel OR availability + (post-assessment OR student-ref), with change-day boosters
-    - has_date_time: mentions specific date/weekday/time
+    - has_date_time: mentions specific date/weekday/time (now also month names)
     - has_policy_intent: asks about policy/rules around reschedule/leave
-    - availability_request: availability/timetable/time-slots/teacher availability/start date
+    - availability_request: availability/timetable/time-slots/teacher availability/start date (includes seasonal/month-based asks)
     - post_assessment: mentions 'after/completed assessment'
     - student_ref: refers to a specific child (name/pronoun/son/daughter)
     - politeness_only: message is pure thanks/politeness
