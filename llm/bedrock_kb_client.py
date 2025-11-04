@@ -153,6 +153,23 @@ HOMEWORK_INDIVIDUAL_GUARDRAIL = {
     ),
 }
 
+# NEW: Guardrail for requests to speak with specific staff (director/teacher/consultant)
+STAFF_CONTACT_GUARDRAIL = {
+    "en": (
+        "Requests to speak with or arrange a call/meeting with a specific staff member (e.g., director, teacher, consultant): "
+        "You MUST reply only with [NO_ANSWER]. Do NOT provide policy summaries, marketing info, or propose arrangements. "
+        "Staff will follow up directly."
+    ),
+    "zh-HK": (
+        "要求同特定職員（如主任、老師、顧問）傾電話／安排會面：*必須*只回覆 [NO_ANSWER]。"
+        "不要提供任何政策摘要、推廣資訊，亦不要提出任何安排。稍後由職員再直接跟進。"
+    ),
+    "zh-CN": (
+        "要求与特定工作人员（如主任、老师、顾问）通话／安排会面：*必须*仅回复 [NO_ANSWER]。"
+        "不要提供任何政策摘要、宣传信息，也不要提出任何安排。稍后由工作人员直接跟进。"
+    ),
+}
+
 _CACHE: Dict[Tuple[str, str, str, str], Tuple[float, str, List[Dict], Dict[str, Any]]] = {}
 _CACHE_TTL_SECS = int(os.environ.get("KB_RESPONSE_CACHE_TTL_SECS", "120"))
 
@@ -241,12 +258,19 @@ def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, contex
     try:
         cls = classify_scheduling_context(query or "", lang)
     except Exception:
-        cls = {"has_sched_verbs": False, "has_date_time": False, "has_policy_intent": False, "politeness_only": False, "availability_request": False, "admin_action_request": False, "individual_homework_request": False}
+        cls = {
+            "has_sched_verbs": False, "has_date_time": False, "has_policy_intent": False, "politeness_only": False,
+            "availability_request": False, "admin_action_request": False, "individual_homework_request": False,
+            "staff_contact_request": False
+        }
 
     if cls.get("has_sched_verbs") and (cls.get("has_date_time") or cls.get("availability_request")) and not cls.get("has_policy_intent"):
         final_instructions.append("This looks like a scheduling action or availability/time-slot request. Provide only [NO_ANSWER]. Do not describe policy or processes.")
     if cls.get("admin_action_request") and not cls.get("has_policy_intent"):
         final_instructions.append("User asks to pass/relay a message to teacher/staff. Provide only [NO_ANSWER]. Do NOT relay messages.")
+    if cls.get("staff_contact_request") and not cls.get("has_policy_intent"):
+        final_instructions.append(STAFF_CONTACT_GUARDRAIL.get(lang, STAFF_CONTACT_GUARDRAIL["en"]))
+        final_instructions.append("Even if the context contains general policy or Q&A pages, you MUST still reply only with [NO_ANSWER].")
     if cls.get("individual_homework_request"):
         final_instructions.append(HOMEWORK_INDIVIDUAL_GUARDRAIL.get(lang, HOMEWORK_INDIVIDUAL_GUARDRAIL["en"]))
         # Extra emphasis to ignore homework docs even if retrieved by RAG

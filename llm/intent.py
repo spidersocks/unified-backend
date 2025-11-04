@@ -173,7 +173,7 @@ def mentions_attendance(message: str, lang: str) -> bool:
     return bool(re.search(r"\battend(?:ing)?\s+(?:class|lesson)\b", m, flags=re.IGNORECASE))
 
 # ============================================================
-# Soft classifiers for scheduling/leave/availability/homework
+# Soft classifiers for scheduling/leave/availability/homework/staff-contact
 # ============================================================
 
 # Availability / timetable / start-date
@@ -317,6 +317,23 @@ _INDIV_ADVICE_ZH_CN = [
     r"(不会读|不会发音|读不了|读不出|发音有问题)", r"(指导|带着|带领)(他|她|孩子|小朋友)",
 ]
 
+# NEW: Staff role mentions and contact verbs (staff-contact requests)
+_STAFF_ROLES_EN = [
+    r"\b(course\s+)?director\b", r"\bprincipal\b", r"\bhead\s+(?:teacher|of[^\w]*\w+)\b",
+    r"\bteacher\b", r"\binstructor\b", r"\btutor\b", r"\bstaff\b", r"\bconsultant\b", r"\badmin(?:istrator)?\b",
+    r"\bms\.?\s+[A-Z][a-z]+\b", r"\bmr\.?\s+[A-Z][a-z]+\b", r"\bmrs\.?\s+[A-Z][a-z]+\b", r"\bmiss\s+[A-Z][a-z]+\b",
+]
+_STAFF_ROLES_ZH_HK = [r"主任|校長|老師|導師|顧問|職員|負責人|課程主任|教學主任|導師|老師"]
+_STAFF_ROLES_ZH_CN = [r"主任|校长|老师|教师|顾问|职员|负责人|课程主任|教学主任|导师|老师"]
+
+_CONTACT_VERBS_EN = [
+    r"\barrang(e|ing|ement)\b", r"\bschedul(e|ing|e a)\b", r"\bset\s*up\b", r"\bbook\b", r"\borganis?e\b",
+    r"\b(call|phone\s*call|video\s*call|zoom|teams|meeting|meet|chat)\b",
+    r"\bspeak\s+(?:with|to)\b", r"\btalk\s+(?:with|to)\b",
+]
+_CONTACT_VERBS_ZH_HK = [r"安排|預約|約|約見|約電話|打電話|致電|通話|講電話|聯絡|見面|會面|約見面|約通話"]
+_CONTACT_VERBS_ZH_CN = [r"安排|预约|约|约见|约电话|打电话|致电|通话|讲电话|联系|见面|会面|约见面|约通话"]
+
 def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
     """
     Soft classification: returns booleans used to steer prompting only.
@@ -329,6 +346,7 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
     - politeness_only: message is pure thanks/politeness
     - admin_action_request: pass/relay/ask/notify a teacher/staff
     - individual_homework_request: student-specific homework/teaching guidance (requires teacher/admin) -> should be silenced
+    - staff_contact_request: request to speak with/arrange a call/meeting with a specific staff role or named teacher/director -> should be silenced
     """
     m = message or ""
     L = (lang or "en").lower()
@@ -342,6 +360,8 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         hw = _score(m, _HOMEWORK_ZH_HK) > 0
         adv = _score(m, _INDIV_ADVICE_ZH_HK) > 0
         pron = bool(re.search(r"(佢|小朋友|學生)", m))
+        staff_role = _score(m, _STAFF_ROLES_ZH_HK) > 0 or _score(m, _STAFF_ROLES_EN) > 0
+        contact_verb = _score(m, _CONTACT_VERBS_ZH_HK) > 0
     elif L.startswith("zh-cn") or L == "zh":
         base_sched = (_score(m, _SCHED_ZH_CN) > 0) or (_score(m, _RESCHED_EXTRA_ZH_CN) > 0)
         policy = _score(m, _POLICY_ZH_CN) > 0
@@ -351,6 +371,8 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         hw = _score(m, _HOMEWORK_ZH_CN) > 0
         adv = _score(m, _INDIV_ADVICE_ZH_CN) > 0
         pron = bool(re.search(r"(他|她|孩子|小朋友|学生)", m))
+        staff_role = _score(m, _STAFF_ROLES_ZH_CN) > 0 or _score(m, _STAFF_ROLES_EN) > 0
+        contact_verb = _score(m, _CONTACT_VERBS_ZH_CN) > 0
     else:
         base_sched = (_score(m, _SCHED_EN) > 0) or (_score(m, _RESCHED_EXTRA_EN) > 0)
         policy = _score(m, _POLICY_EN) > 0
@@ -360,6 +382,8 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         hw = _score(m, _HOMEWORK_EN) > 0
         adv = _score(m, _INDIV_ADVICE_EN) > 0
         pron = bool(re.search(r"\b(he|him|his|she|her|hers|my (son|daughter|kid|child))\b", m, re.I))
+        staff_role = _score(m, _STAFF_ROLES_EN) > 0
+        contact_verb = _score(m, _CONTACT_VERBS_EN) > 0
 
     date_time = _score(m, _DATE_MARKERS) > 0
     politeness = is_politeness_only(m, lang)
@@ -369,6 +393,7 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
 
     admin_action = _has_admin_action_request(m, L)
     individual_hw = bool(hw and (adv or student or pron))
+    staff_contact = bool(staff_role and contact_verb)
 
     return {
         "has_sched_verbs": sched,
@@ -380,4 +405,5 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         "politeness_only": politeness,
         "admin_action_request": admin_action,
         "individual_homework_request": individual_hw,
+        "staff_contact_request": staff_contact,
     }
