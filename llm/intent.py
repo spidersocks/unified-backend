@@ -55,9 +55,24 @@ _WEATHER_MARKERS = [
 ]
 
 # Negative markers to avoid misclassifying non-hours topics as hours
-_NEG_EN = [r"\b(tuition|fee|fees|price|cost)\b", r"\bclass\s*size\b", r"\bhomework\b", r"\bassignment\b"]
-_NEG_ZH_HK = [r"學費|收費|費用|價錢|價格|班級人數|人數", r"功課|家課|作業"]
-_NEG_ZH_CN = [r"学费|收费|费用|价钱|价格|班级人数|人数", r"功课|作业"]
+# Expanded with availability/scheduling phrasing to reduce false positives
+_NEG_EN = [
+    r"\b(tuition|fee|fees|price|cost)\b", r"\bclass\s*size\b", r"\bhomework\b", r"\bassignment\b",
+    r"\b(time\s*slot|timeslot|slot)s?\b", r"\bavailability\b", r"\bavailable\b",
+    r"\btimetable\b", r"\bschedule\b",
+    r"\bstart(?:s)?\s+at\b", r"\bfit[s]?\b", r"\bsuit[s]?\b",
+    r"\bfor\s+(?:my\s+(?:son|daughter|kid|child)|[A-Z][a-z]+)\b",
+]
+_NEG_ZH_HK = [
+    r"學費|收費|費用|價錢|價格|班級人數|人數", r"功課|家課|作業",
+    r"(時段|檔期|時間表|時間安排)", r"(有冇|可唔可以).*(時段|時間)",
+    r"(幾點|幾時)\s*開始", r"(適合|合適).*(仔|女|小朋友|學生|[A-Z][a-z]+)",
+]
+_NEG_ZH_CN = [
+    r"学费|收费|费用|价钱|价格|班级人数|人数", r"功课|作业",
+    r"(时段|档期|时间表|课程安排)", r"(有|有没有).*(时段|时间|名额)",
+    r"(几点|什么时候)\s*开始", r"(适合).*(儿子|女儿|孩子|学生|[A-Z][a-z]+)",
+]
 
 # Flattened holiday keywords for regex fallback
 _ALL_HOLIDAY_KEYWORDS: List[str] = [kw for group in _HOLIDAY_KEYWORDS.values() for kw in group]
@@ -79,6 +94,7 @@ def detect_opening_hours_intent(message: str, lang: str) -> Tuple[bool, Dict[str
     - time hints
     - holiday keyword awareness
     - negative markers to exclude unrelated topics
+    - HARD GUARD: If the message looks like availability/scheduling, force NOT opening-hours.
     """
     m = message or ""
     L = (lang or "en").lower()
@@ -120,7 +136,18 @@ def detect_opening_hours_intent(message: str, lang: str) -> Tuple[bool, Dict[str
         "neg_hits": neg_hits,
         "used_llm": False,
         "llm_confidence": None,
+        "overridden_by_sched": False,
     }
+
+    # HARD GUARD: If this looks like availability/scheduling, force NOT opening-hours
+    try:
+        cls = classify_scheduling_context(message or "", lang or "en")
+        if cls.get("availability_request") or cls.get("has_sched_verbs") or cls.get("admin_action_request") or cls.get("staff_contact_request") or cls.get("individual_homework_request"):
+            is_intent = False
+            debug["is_intent"] = False
+            debug["overridden_by_sched"] = True
+    except Exception:
+        pass
 
     if SETTINGS.opening_hours_use_llm_intent and not is_intent:
         # Reserved for optional future LLM-assisted intent confirmation
@@ -176,26 +203,33 @@ def mentions_attendance(message: str, lang: str) -> bool:
 # Soft classifiers for scheduling/leave/availability/homework/staff-contact
 # ============================================================
 
-# Availability / timetable / start-date (expanded to include seasonal/month-based asks)
+# Availability / timetable / start-date (expanded to include seasonal/month-based asks and "slot" wording)
 _AVAIL_EN = [
-    r"\bavailable\b", r"\bavailability\b", r"\bany (class|slot|time ?slot|timeslot)\b",
+    r"\bavailable\b", r"\bavailability\b",
+    r"\b(any|another)\s+(class|slot|time ?slot|timeslot)\b",  # keep "any/another" path
+    r"\btime\s*slot(s)?\b", r"\bslot(s)?\b",
     r"\btimetable\b", r"\bschedule\b", r"\bwhat times\b", r"\bstart date\b",
     r"\bwhich time\b", r"\btime works\b", r"\bteacher availability\b",
     # Seasonal / month-based availability
     r"\bsummer\b", r"\bsummer (program|class|course|camp)s?\b", r"\bholiday\s*camp\b",
-    r"\b(july|august)\b", r"\bterm\b", r"\bsemester\b", r"\bsummer schedule\b",
+    r"\b(july|august)\b", r"\bterm\b", r"\bnext\s+term\b", r"\bsemester\b", r"\bsummer schedule\b",
+    r"\b(after|post)\s+(cny|chinese new year|lunar new year)\b",
 ]
 _AVAIL_ZH_HK = [
     r"有冇(堂|時段|時間|位)", r"時間表", r"時間安排", r"檔期", r"可唔可以.*時間", r"幾時開始(上|開)課",
     r"老師(幾時|時間)有空|導師(幾時|時間)得閒|老師檔期|導師檔期",
+    r"(時段|時間檔|時間位)",
     # Seasonal / month-based availability
     r"暑期|暑假|夏令(營|营)|暑期班|夏季班|七月|八月|夏天|暑假課|暑期課",
+    r"(下學期|過年之後|新年之後|農曆新年之後)",
 ]
 _AVAIL_ZH_CN = [
     r"(有|有没有)(课|课程|时段|时间|名额)", r"时间表", r"课程安排", r"档期", r"可以.*时间", r"什么时候开始(上|开)课",
     r"(老师|教师)(什么时候|什么时间)有空|老师档期|教师档期",
+    r"(时段|时间档|时间位)",
     # Seasonal / month-based availability
     r"暑期|暑假|夏令营|暑期班|夏季班|七月|八月|夏天|暑假课|暑期课",
+    r"(下学期|过年之后|春节之后|农历新年之后)",
 ]
 
 # Post-assessment markers
@@ -207,6 +241,7 @@ _POST_ASSESS_ZH_CN = [r"评估(之后|后)", r"完成(了)?评估", r"做完评�
 _STUDENT_REF_EN = [
     r"\bfor\s+[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b",
     r"\bmy (son|daughter|kid|child)\b", r"\bstudent\b", r"\bfor him\b", r"\bfor her\b",
+    r"\b(?:fit|fits|suit|suits|work[s]?(?:\s*for)?)\s+[A-Z][a-z]+\b",
 ]
 _STUDENT_REF_ZH_HK = [r"為?(\S+)?(小朋友|小童|小孩|仔|女|學生)", r"我(個|的)?(仔|女|小朋友)", r"替.*(仔|女)"]
 _STUDENT_REF_ZH_CN = [r"为?(\S+)?(小朋友|孩子|小孩|学生)", r"我(家)?(儿子|女儿|孩子)", r"替.*(儿子|女儿)"]
@@ -346,7 +381,7 @@ _CONTACT_VERBS_ZH_CN = [r"安排|预约|约|约见|约电话|打电话|致电|�
 def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
     """
     Soft classification: returns booleans used to steer prompting only.
-    - has_sched_verbs: leave/reschedule/cancel OR availability + (post-assessment OR student-ref), with change-day boosters
+    - has_sched_verbs: leave/reschedule/cancel OR ANY availability inquiry (now includes generic "slot"/seasonal) OR availability + (post-assessment OR student-ref)
     - has_date_time: mentions specific date/weekday/time (now also month names)
     - has_policy_intent: asks about policy/rules around reschedule/leave
     - availability_request: availability/timetable/time-slots/teacher availability/start date (includes seasonal/month-based asks)
@@ -397,8 +432,8 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
     date_time = _score(m, _DATE_MARKERS) > 0
     politeness = is_politeness_only(m, lang)
 
-    # Availability + (post-assessment OR student-ref) is effectively an admin-handled scheduling request
-    sched = base_sched or (avail and (post or student))
+    # Availability alone is admin-handled scheduling too (stronger rule)
+    sched = base_sched or avail or (avail and (post or student))
 
     admin_action = _has_admin_action_request(m, L)
     individual_hw = bool(hw and (adv or student or pron))

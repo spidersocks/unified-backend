@@ -351,10 +351,12 @@ def chat(req: ChatRequest, request: Request):
     lang = req.language or get_language_code(req.message, accept_language_header=request.headers.get("accept-language"))
     _log(f"Detected language: {lang!r}")
 
-    # NEW: Scheduling precedence — detect scheduling/action first
+    # NEW: Scheduling precedence — detect scheduling/action first (treat ANY availability/pass-on as admin-handled)
     sched_cls = classify_scheduling_context(req.message, lang)
     is_scheduling_action = bool(
-        sched_cls.get("has_sched_verbs") and not sched_cls.get("has_policy_intent")
+        (sched_cls.get("has_sched_verbs") or sched_cls.get("availability_request") or sched_cls.get("admin_action_request")
+         or sched_cls.get("staff_contact_request") or sched_cls.get("individual_homework_request"))
+        and not sched_cls.get("has_policy_intent")
     )
 
     # Opening-hours routing with precedence
@@ -431,9 +433,13 @@ def chat(req: ChatRequest, request: Request):
     if debug_info:
         _log(f"LLM debug_info: {json.dumps(debug_info, ensure_ascii=False, indent=2)}")
 
+    # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
     if not citations or contains_apology_or_noinfo(answer):
         _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
-        if is_hours_intent:
+        if is_hours_intent and not (
+            sched_cls.get("has_sched_verbs") or sched_cls.get("availability_request") or sched_cls.get("admin_action_request")
+            or sched_cls.get("staff_contact_request") or sched_cls.get("individual_homework_request")
+        ):
             answer = compute_opening_answer(req.message, lang)
             citations = []
             debug_info = {"source": "deterministic_opening_hours_fallback"}
@@ -577,10 +583,12 @@ async def whatsapp_webhook_handler(request: Request):
                                 lang = get_language_code(message_body)
                                 _log(f"Detected language: {lang}")
 
-                                # NEW: Scheduling precedence for WhatsApp
+                                # NEW: Scheduling precedence for WhatsApp (treat ANY availability/pass-on as admin-handled)
                                 sched_cls = classify_scheduling_context(message_body, lang)
                                 is_scheduling_action = bool(
-                                    sched_cls.get("has_sched_verbs") and not sched_cls.get("has_policy_intent")
+                                    (sched_cls.get("has_sched_verbs") or sched_cls.get("availability_request") or sched_cls.get("admin_action_request")
+                                     or sched_cls.get("staff_contact_request") or sched_cls.get("individual_homework_request"))
+                                    and not sched_cls.get("has_policy_intent")
                                 )
 
                                 opening_context = None
@@ -643,9 +651,13 @@ async def whatsapp_webhook_handler(request: Request):
                                         return {"status": "ok", "message": "Sent deterministic opening hours answer"}
                                     raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
 
+                                # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
                                 if not citations or contains_apology_or_noinfo(answer):
                                     _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
-                                    if is_hours_intent:
+                                    if is_hours_intent and not (
+                                        sched_cls.get("has_sched_verbs") or sched_cls.get("availability_request") or sched_cls.get("admin_action_request")
+                                        or sched_cls.get("staff_contact_request") or sched_cls.get("individual_homework_request")
+                                    ):
                                         answer = compute_opening_answer(message_body, lang)
                                         citations = []
                                         debug_info = {"source": "deterministic_opening_hours_fallback"}
