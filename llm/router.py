@@ -7,8 +7,10 @@ from llm.lang import get_language_code  # CHANGED: Was 'detect_language'
 from llm import tags_index
 from llm.chat_history import save_message, get_recent_history, prune_history, build_context_string
 
-from llm.intent import detect_opening_hours_intent, is_general_hours_query
-from llm.opening_hours import compute_opening_answer, extract_opening_context, center_is_open_now
+# CHANGED: import scheduling classifier
+from llm.intent import detect_opening_hours_intent, is_general_hours_query, classify_scheduling_context
+# CHANGED: import summarize_user_date_intent
+from llm.opening_hours import compute_opening_answer, extract_opening_context, center_is_open_now, summarize_user_date_intent
 
 import httpx
 import json
@@ -234,13 +236,8 @@ def _maybe_schedule_auto_ack_whatsapp(session_id: str, lang: str, base_ts: float
 
 # --- Answer marker and guardrail helpers (should be moved to llm/answer_utils.py) ---
 def extract_and_strip_marker(answer: str, marker: str) -> (str, bool):
-    # --- FIX ---
-    # The '$' anchor at the end of the regex was removed.
-    # This ensures the marker is found and stripped even if it's not at the very end of the string.
     pattern = re.compile(rf"\s*{re.escape(marker)}\s*", re.IGNORECASE)
     if answer and pattern.search(answer):
-        # Use pattern.sub to replace the found marker with an empty string
-        # and then strip any potential leading/trailing whitespace from the whole answer.
         cleaned_answer = pattern.sub("", answer).strip()
         return cleaned_answer, True
     return answer, False
@@ -268,25 +265,21 @@ def is_followup_message(msg: str) -> bool:
     if not msg:
         return False
     msg_lc = msg.strip().lower()
-    # 1. Classic follow-up/elliptical patterns (start of string)
     FOLLOWUP_PATTERNS = [
         r"^\s*(what about|how about|and|which ones|tell me more|like what|go on|what else|for example|can you elaborate|can you explain|例如|舉個例|可以再說說|举个例|还有呢|继续|再多一些|再讲讲|再說說)\b",
-        r"^[\s\?]*$",  # just "?" or empty
+        r"^[\s\?]*$",
     ]
     if len(msg_lc.split()) <= 7:
         for pat in FOLLOWUP_PATTERNS:
             if re.match(pat, msg_lc):
                 return True
-    # 2. Short, vague, ends with question mark and not explicit
     if len(msg_lc.split()) <= 3 and msg_lc.endswith("?"):
         if not re.match(r"^\s*(what|how|when|where|who|which|why)\b", msg_lc):
             return True
-    # 3. Referential pronouns + query word
     PRONOUNS = r"\b(that|it|this|those|these)\b"
     QUERY_KEYWORDS = r"\b(tuition|fee|cost|price|schedule|age|time|when|how much|class|course|program|subject|writing|math|english|chinese|mandarin|lesson|session)\b"
     if re.search(PRONOUNS, msg_lc) and re.search(QUERY_KEYWORDS, msg_lc):
         return True
-    # 4. Very short, referential commands
     if msg_lc in {"that", "this", "it", "those", "these"}:
         return True
     return False
@@ -320,19 +313,6 @@ BLOOKET_DOCS = [
     "/zh-HK/policies/blooket_instructions.md",
     "/zh-CN/policies/blooket_instructions.md",
 ]
-ENROLLMENT_STRONG_PHRASES = {
-    "en": ["enrollment form", "registration form", "application form", "please fill out our enrollment form", "download the form", "attached form", "fill in the form", "submit the enrollment form", "send me the form"],
-    "zh-HK": ["入學表格", "報名表格", "申請表", "下載表格", "填好表格", "發送表格", "填寫入學表格"],
-    "zh-CN": ["入学表格", "报名表格", "申请表", "下载表格", "填好表格", "发送表格", "填写入学表格"]
-}
-BLOOKET_STRONG_PHRASES = {
-    "en": ["blooket", "blooket instructions", "online game", "how to play blooket", "the blooket pdf", "blooket guide"],
-    "zh-HK": ["blooket", "網上遊戲", "布魯克特", "blooket 指引", "blooket 教學", "blooket pdf"],
-    "zh-CN": ["blooket", "在线游戏", "布鲁克特", "blooket 指南", "blooket 教程", "blooket pdf"]
-}
-
-# --- REMOVED: The entire 'PATCH' block that redefined extract_opening_context was here.
-# It is no longer needed because the correct function is imported from llm.opening_hours.py.
 
 # --- FastAPI schemas ---
 class ChatRequest(BaseModel):
@@ -353,29 +333,39 @@ def chat(req: ChatRequest, request: Request):
     _log(f"/chat called: message={req.message!r}, language={req.language!r}, session_id={req.session_id!r}, debug={req.debug!r}")
     _log(f"Headers: {dict(request.headers)}")
     session_id = req.session_id or ("web:" + str(hash(request.client.host)))
-    # CHANGED: Using get_language_code instead of detect_language
     lang = req.language or get_language_code(req.message, accept_language_header=request.headers.get("accept-language"))
     _log(f"Detected language: {lang!r}")
 
-    # --- PATCH: Opening hours intent routing with general/specific distinction ---
-    is_hours_intent, debug_intent = detect_opening_hours_intent(req.message, lang)
+    # NEW: Scheduling precedence — detect scheduling/action first
+    sched_cls = classify_scheduling_context(req.message, lang)
+    is_scheduling_action = bool(
+        sched_cls.get("has_sched_verbs") and not sched_cls.get("has_policy_intent")
+    )
+
+    # Opening-hours routing with precedence
+    is_hours_intent = False
     opening_context = None
     hint_canonical = None
-    
-    if is_hours_intent:
-        # Check if this is a holiday-specific query that needs date parsing
-        intent_debug_local = debug_intent or {}
-        has_holiday_marker = bool(intent_debug_local.get("holiday_hits"))
-        
-        # For holiday queries or specific date queries, always extract context
-        if has_holiday_marker or not is_general_hours_query(req.message, lang):
-            opening_context = extract_opening_context(req.message, lang)
-            hint_canonical = "opening_hours"
-            _log(f"Opening hours intent detected as SPECIFIC. Structured context for LLM:\n{opening_context}")
-        else:
-            opening_context = None
-            hint_canonical = "opening_hours"
-            _log("Opening hours intent detected as GENERAL. No system context injected; LLM will answer from policy docs.")
+
+    if is_scheduling_action:
+        # Do NOT inject opening-hours context. Provide neutral date hints only.
+        opening_context = summarize_user_date_intent(req.message, lang)
+        hint_canonical = None
+        _log(f"Scheduling/action detected. Providing date hints only:\n{opening_context}")
+    else:
+        # Original opening-hours flow
+        is_hours_intent, debug_intent = detect_opening_hours_intent(req.message, lang)
+        if is_hours_intent:
+            intent_debug_local = debug_intent or {}
+            has_holiday_marker = bool(intent_debug_local.get("holiday_hits"))
+            if has_holiday_marker or not is_general_hours_query(req.message, lang):
+                opening_context = extract_opening_context(req.message, lang)
+                hint_canonical = "opening_hours"
+                _log(f"Opening hours intent detected as SPECIFIC. Structured context for LLM:\n{opening_context}")
+            else:
+                opening_context = None
+                hint_canonical = "opening_hours"
+                _log("Opening hours intent detected as GENERAL. No system context injected; LLM will answer from policy docs.")
 
     use_history = (req.session_id is not None and not req.session_id.startswith("web:"))
     if use_history:
@@ -402,7 +392,6 @@ def chat(req: ChatRequest, request: Request):
 
     _log(f"Calling chat_with_kb with rag_query length={len(rag_query)}")
     try:
-        # Assuming from_number should be session_id for web chat too
         from_number = session_id
         answer, citations, debug_info = chat_with_kb(
             rag_query,
@@ -414,11 +403,11 @@ def chat(req: ChatRequest, request: Request):
         )
     except Exception as e:
         _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
-        # Only fallback to deterministic for opening-hours if LLM/RAG fails:
+        # Only deterministic fallback for genuine opening-hours
         if is_hours_intent:
             answer = compute_opening_answer(req.message, lang)
             citations = []
-            debug_info = {"source": "deterministic_opening_hours_fallback", "intent_debug": debug_intent}
+            debug_info = {"source": "deterministic_opening_hours_fallback"}
             return ChatResponse(answer=answer, citations=citations, debug=debug_info)
         raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
 
@@ -429,13 +418,13 @@ def chat(req: ChatRequest, request: Request):
 
     if not citations or contains_apology_or_noinfo(answer):
         _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
-        # Fallback to deterministic answer for opening-hours queries ONLY:
         if is_hours_intent:
             answer = compute_opening_answer(req.message, lang)
             citations = []
-            debug_info = {"source": "deterministic_opening_hours_fallback", "intent_debug": debug_intent}
+            debug_info = {"source": "deterministic_opening_hours_fallback"}
         else:
             answer = ""
+
     fee_words = ["tuition", "fee", "price", "cost"]
     payment_words = ["how to pay", "payment", "pay", "bank transfer", "fps", "account", "method"]
     if (
@@ -455,6 +444,30 @@ def chat(req: ChatRequest, request: Request):
             _log(f"Saved and pruned DynamoDB history for session_id={session_id}")
         except Exception as e:
             _log(f"ERROR saving/pruning DynamoDB history: {e}\n{traceback.format_exc()}")
+
+    # Enrollment/Blooket markers
+    ENROLLMENT_FORM_MARKER = "[SEND_ENROLLMENT_FORM]"
+    BLOOKET_MARKER = "[SEND_BLOOKET_PDF]"
+    ENROLLMENT_FORM_DOCS = [
+        "/en/policies/enrollment_form.md",
+        "/zh-HK/policies/enrollment_form.md",
+        "/zh-CN/policies/enrollment_form.md",
+    ]
+    BLOOKET_DOCS = [
+        "/en/policies/blooket_instructions.md",
+        "/zh-HK/policies/blooket_instructions.md",
+        "/zh-CN/policies/blooket_instructions.md",
+    ]
+    ENROLLMENT_STRONG_PHRASES = {
+        "en": ["enrollment form", "registration form", "application form", "please fill out our enrollment form", "download the form", "attached form", "fill in the form", "submit the enrollment form", "send me the form"],
+        "zh-HK": ["入學表格", "報名表格", "申請表", "下載表格", "填好表格", "發送表格", "填寫入學表格"],
+        "zh-CN": ["入学表格", "报名表格", "申请表", "下载表格", "填好表格", "发送表格", "填写入学表格"]
+    }
+    BLOOKET_STRONG_PHRASES = {
+        "en": ["blooket", "blooket instructions", "online game", "how to play blooket", "the blooket pdf", "blooket guide"],
+        "zh-HK": ["blooket", "網上遊戲", "布魯克特", "blooket 指引", "blooket 教學", "blooket pdf"],
+        "zh-CN": ["blooket", "在线游戏", "布鲁克特", "blooket 指南", "blooket 教程", "blooket pdf"]
+    }
 
     answer, marker = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
     send_form = marker or (
@@ -507,8 +520,6 @@ async def whatsapp_webhook_handler(request: Request):
                             try:
                                 msg_id = st.get("id") or st.get("message_id")
                                 recipient_id = st.get("recipient_id")
-                                # If this status refers to a message ID we didn't send via this backend,
-                                # assume it's an admin/human outbound message -> start cooldown.
                                 if msg_id and msg_id not in _BOT_MSG_IDS:
                                     _mark_admin_activity(recipient_id)
                                 else:
@@ -526,14 +537,11 @@ async def whatsapp_webhook_handler(request: Request):
                             message_type = message.get("type")
                             _log(f"Message details: from={from_number}, type={message_type}, contact={contact}")
 
-                            # Cancel any pending ack as soon as a new inbound message arrives
                             if from_number:
                                 _cancel_pending_ack(from_number)
 
-                            # If admin cooldown is active for this chat, stay silent (do not LLM, do not ack)
                             if from_number and _in_admin_cooldown(from_number):
                                 _log(f"[COOL] Admin cooldown active for {from_number}. Bot remains silent.")
-                                # Optionally save the inbound message to history for context
                                 try:
                                     now_ts = time.time()
                                     body_preview = message.get("text", {}).get("body") if message_type == "text" else f"<{message_type}>"
@@ -554,23 +562,35 @@ async def whatsapp_webhook_handler(request: Request):
                                 lang = get_language_code(message_body)
                                 _log(f"Detected language: {lang}")
 
-                                # Opening-hours routing (unchanged)
-                                is_hours_intent, debug_intent = detect_opening_hours_intent(message_body, lang)
+                                # NEW: Scheduling precedence for WhatsApp
+                                sched_cls = classify_scheduling_context(message_body, lang)
+                                is_scheduling_action = bool(
+                                    sched_cls.get("has_sched_verbs") and not sched_cls.get("has_policy_intent")
+                                )
+
                                 opening_context = None
                                 hint_canonical = None
-                                if is_hours_intent:
-                                    intent_debug_local = debug_intent or {}
-                                    has_holiday_marker = bool(intent_debug_local.get("holiday_hits"))
-                                    if is_general_hours_query(message_body, lang):
-                                        opening_context = None
-                                        hint_canonical = "opening_hours"
-                                        _log("Opening hours intent detected as GENERAL. No system context injected; LLM will answer from policy docs.")
-                                    else:
-                                        opening_context = extract_opening_context(message_body, lang)
-                                        hint_canonical = "opening_hours"
-                                        _log(f"Opening hours intent detected as SPECIFIC. Structured context for LLM:\n{opening_context}")
+                                is_hours_intent = False
 
-                                # Build history and reformulation (unchanged)
+                                if is_scheduling_action:
+                                    opening_context = summarize_user_date_intent(message_body, lang)
+                                    hint_canonical = None
+                                    _log(f"Scheduling/action detected (WhatsApp). Providing date hints only:\n{opening_context}")
+                                else:
+                                    is_hours_intent, debug_intent = detect_opening_hours_intent(message_body, lang)
+                                    if is_hours_intent:
+                                        intent_debug_local = debug_intent or {}
+                                        has_holiday_marker = bool(intent_debug_local.get("holiday_hits"))
+                                        if is_general_hours_query(message_body, lang):
+                                            opening_context = None
+                                            hint_canonical = "opening_hours"
+                                            _log("Opening hours intent detected as GENERAL. No system context injected; LLM will answer from policy docs.")
+                                        else:
+                                            opening_context = extract_opening_context(message_body, lang)
+                                            hint_canonical = "opening_hours"
+                                            _log(f"Opening hours intent detected as SPECIFIC. Structured context for LLM:\n{opening_context}")
+
+                                # Build history and reformulation
                                 try:
                                     history = get_recent_history(from_number, limit=6)
                                     _log(f"Fetched {len(history)} prior messages for session_id={from_number}")
@@ -603,7 +623,7 @@ async def whatsapp_webhook_handler(request: Request):
                                     if is_hours_intent:
                                         answer = compute_opening_answer(message_body, lang)
                                         citations = []
-                                        debug_info = {"source": "deterministic_opening_hours_fallback", "intent_debug": debug_intent}
+                                        debug_info = {"source": "deterministic_opening_hours_fallback"}
                                         await _send_whatsapp_message(from_number, answer)
                                         return {"status": "ok", "message": "Sent deterministic opening hours answer"}
                                     raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
@@ -613,7 +633,7 @@ async def whatsapp_webhook_handler(request: Request):
                                     if is_hours_intent:
                                         answer = compute_opening_answer(message_body, lang)
                                         citations = []
-                                        debug_info = {"source": "deterministic_opening_hours_fallback", "intent_debug": debug_intent}
+                                        debug_info = {"source": "deterministic_opening_hours_fallback"}
                                     else:
                                         answer = ""
 
@@ -651,19 +671,12 @@ async def whatsapp_webhook_handler(request: Request):
                                     _log(f"LLM silenced answer. Reason: {silent_reason}")
 
                                 # Handle markers (enrollment/blooket)
-                                answer, marker = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
-                                send_form = marker or (
-                                    _any_doc_cited(citations, ENROLLMENT_FORM_DOCS)
-                                    and _answer_has_strong_phrase(answer, lang, ENROLLMENT_STRONG_PHRASES)
-                                    and _answer_is_short(answer)
-                                )
-
-                                answer, marker_blooket = extract_and_strip_marker(answer, BLOOKET_MARKER)
-                                send_blooket = marker_blooket or (
-                                    _any_doc_cited(citations, BLOOKET_DOCS)
-                                    and _answer_has_strong_phrase(answer, lang, BLOOKET_STRONG_PHRASES)
-                                    and _answer_is_short(answer)
-                                )
+                                answer, marker = extract_and_strip_marker(answer, "[SEND_ENROLLMENT_FORM]")
+                                ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"
+                                send_form = marker
+                                answer, marker_blooket = extract_and_strip_marker(answer, "[SEND_BLOOKET_PDF]")
+                                BLOOKET_PDF_URL = "https://drive.google.com/uc?export=download&id=18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M"
+                                send_blooket = marker_blooket
 
                                 sent = False
                                 if send_form:
@@ -683,7 +696,6 @@ async def whatsapp_webhook_handler(request: Request):
                                     await _send_whatsapp_message(from_number, answer)
                                 else:
                                     _log("LLM provided no answer. No WhatsApp reply sent.")
-                                    # Do not schedule ack if in cooldown
                                     _maybe_schedule_auto_ack_whatsapp(from_number, lang, base_ts=now_ts)
 
                                 return {"status": "ok", "message": "Message processed"}
