@@ -67,17 +67,20 @@ _NEG_EN = [
     r"\bhow\s+much\b",
     r"\bper\s+(?:hour|hr|minute|min)s?\b",
     r"\b\d+\s*(?:hour|hours|hr|hrs|minute|minutes|min|mins)\b",
+    r"\b(make-?ups?|makeups?)\b", r"\babsence\b", r"\bpolicy\b", r"\bquota\b",
 ]
 
 _NEG_ZH_HK = [
     r"學費|收費|費用|價錢|價格|班級人數|人數", r"功課|家課|作業",
     r"(時段|檔期|時間表|時間安排)", r"(有冇|可唔可以).*(時段|時間)",
     r"(幾點|幾時)\s*開始", r"(適合|合適).*(仔|女|小朋友|學生|[A-Z][a-z]+)",
+    r"補課|請假|政策|配額|額度",
 ]
 _NEG_ZH_CN = [
     r"学费|收费|费用|价钱|价格|班级人数|人数", r"功课|作业",
     r"(时段|档期|时间表|课程安排)", r"(有|有没有).*(时段|时间|名额)",
     r"(几点|什么时候)\s*开始", r"(适合).*(儿子|女儿|孩子|学生|[A-Z][a-z]+)",
+    r"补课|请假|政策|配额|额度",
 ]
 
 # Flattened holiday keywords for regex fallback
@@ -146,12 +149,19 @@ def detect_opening_hours_intent(message: str, lang: str) -> Tuple[bool, Dict[str
     }
 
     # HARD GUARD: If this looks like availability/scheduling, force NOT opening-hours
-    try:
+     try:
         cls = classify_scheduling_context(message or "", lang or "en")
-        if cls.get("availability_request") or cls.get("has_sched_verbs") or cls.get("admin_action_request") or cls.get("staff_contact_request") or cls.get("individual_homework_request"):
+        if (cls.get("availability_request") or cls.get("has_sched_verbs")
+            or cls.get("admin_action_request") or cls.get("staff_contact_request")
+            or cls.get("individual_homework_request")):
             is_intent = False
             debug["is_intent"] = False
             debug["overridden_by_sched"] = True
+        # NEW: If this is clearly a policy question, do NOT treat it as opening-hours
+        if cls.get("has_policy_intent"):
+            is_intent = False
+            debug["is_intent"] = False
+            debug["overridden_by_policy"] = True
     except Exception:
         pass
 

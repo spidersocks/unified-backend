@@ -399,6 +399,9 @@ def chat(req: ChatRequest, request: Request):
     history_context = build_context_string(history, new_message=req.message, user_role="user", bot_role="bot", include_new=True)
 
     rag_query = req.message
+    extra_keywords = None
+    if sched_cls.get("has_policy_intent"):
+        extra_keywords = ["policy", "absence", "make-up", "makeup", "quota", "notice", "doctor’s certificate"]
     if is_followup_message(req.message):
         try:
             rag_query = call_llm_rephrase(history_context, lang)

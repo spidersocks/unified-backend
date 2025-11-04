@@ -227,7 +227,7 @@ def _is_contact_query(message: str, lang: Optional[str]) -> bool:
     if lang and (str(lang).lower().startswith("zh-cn") or str(lang).lower() == "zh"):
         return bool(re.search(r"联系|联系方式|电话|致电|电邮|邮箱|whatsapp", m, flags=re.IGNORECASE))
     return bool(re.search(r"\b(contact|phone|call|email|e-?mail|whatsapp)\b", m, flags=re.IGNORECASE))
-    
+
 def _norm_uri(loc: Dict) -> Optional[str]:
     s3 = loc.get("s3Location") or {}
     if s3.get("uri"):
@@ -320,7 +320,12 @@ def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, contex
             "you MUST still reply only with [NO_ANSWER]. Do not provide guidance for a specific child."
         )
     if cls.get("has_policy_intent"):
-        final_instructions.append("User is asking about policy. Answer from context. Do NOT make or confirm any arrangements.")
+        final_instructions.append(
+            "For policy answers, reply in 1–3 short bullets (max ~35 words total). "
+            "Start with Yes/No if applicable. Include exact numbers if present "
+            "(e.g., “8 sessions → 2 free make‑ups; 10 sessions → 3”). "
+            "Do NOT write ‘we don’t have information’; if unspecified, reply only with [NO_ANSWER]."
+        )
     if not cls.get("politeness_only"):
         final_instructions.append("Do NOT use a politeness-only reply.")
 
