@@ -132,6 +132,35 @@ def _dow_window(dow: int) -> Tuple[Optional[time], Optional[time]]:
         return SAT_OPEN, SAT_CLOSE
     return None, None  # Sunday closed
 
+# ========== NEW: “Open now” helper ==========
+
+def center_is_open_now(lang: Optional[str] = None) -> bool:
+    """
+    Returns True if RIGHT NOW is within operating hours and not a public holiday/Sunday
+    and there is no severe weather closure (Black Rain or Typhoon Signal No. 8+ or Pre-8).
+    """
+    now = datetime.now(HK_TZ)
+    open_t, close_t = _dow_window(now.weekday())
+    if open_t is None or close_t is None:
+        # Sunday
+        return False
+
+    # Public holiday check
+    is_hol, _ = _is_public_holiday(now)
+    if is_hol:
+        return False
+
+    # Severe weather closure (reuse HKO hint already used for opening answers)
+    if SETTINGS.opening_hours_weather_enabled:
+        severe = get_weather_hint_for_opening(_normalize_lang(lang))
+        if severe:
+            # We consider severe conditions a closure
+            return False
+
+    # Within hours?
+    cur_t = now.time()
+    return (open_t <= cur_t < close_t)
+
 @lru_cache(maxsize=8)
 def _hk_calendar(start_year: int, end_year: int):
     if not holidays:

@@ -8,7 +8,7 @@ from llm import tags_index
 from llm.chat_history import save_message, get_recent_history, prune_history, build_context_string
 
 from llm.intent import detect_opening_hours_intent, is_general_hours_query
-from llm.opening_hours import compute_opening_answer, extract_opening_context
+from llm.opening_hours import compute_opening_answer, extract_opening_context, center_is_open_now
 
 import httpx
 import json
@@ -16,6 +16,7 @@ import re
 import time
 import sys
 import traceback
+import asyncio  # NEW: for scheduling ack tasks
 
 # --- Llama client helper (should be moved to llm/llama_client.py) ---
 def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop: list = None) -> str:
@@ -123,6 +124,62 @@ async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "docume
             _log(f"[WA] SUCCESS: WhatsApp document sent to {to}. Response: {response.json()}")
         except Exception as e:
             _log(f"[WA] ERROR: Failed to send WhatsApp document: {e}")
+
+_ACK_TASKS: Dict[str, asyncio.Task] = {}  # session_id/phone -> task
+
+def _ack_text(lang: str, during_hours: bool) -> str:
+    L = (lang or "en").lower()
+    if L.startswith("zh-hk"):
+        return "多謝你的訊息。我哋嘅同事會盡快聯絡你。" if during_hours else "多謝你的訊息。我哋嘅同事會喺下一個辦公時間盡快聯絡你。"
+    if L.startswith("zh-cn") or L == "zh":
+        return "感谢您的留言。我们的同事会尽快联系您。" if during_hours else "感谢您的留言。我们的同事会在下一个办公时间尽快联系您。"
+    return "Thank you for your message. Our staff will contact you ASAP." if during_hours else "Thank you for your message. Our staff will contact you ASAP during next working hours."
+
+def _cancel_pending_ack(session_id: str):
+    task = _ACK_TASKS.pop(session_id, None)
+    if task and not task.done():
+        task.cancel()
+        _log(f"[ACK] Cancelled pending ack for session_id={session_id}")
+
+async def _ack_worker(session_id: str, lang: str, base_ts: float, delay_secs: int):
+    try:
+        if delay_secs > 0:
+            await asyncio.sleep(delay_secs)
+        # Before sending, ensure no newer user messages have arrived and the bot hasn't sent a non-empty reply
+        history = get_recent_history(session_id, limit=10, oldest_first=True)
+        newer_user = any(item["role"] == "user" and float(item["ts"]) > base_ts for item in history)
+        newer_bot_nonempty = any(item["role"] == "bot" and float(item["ts"]) > base_ts and (item.get("message") or "").strip() for item in history)
+        if newer_user or newer_bot_nonempty:
+            _log(f"[ACK] Skip ack (newer_user={newer_user}, newer_bot_nonempty={newer_bot_nonempty}) for {session_id}")
+            return
+        during_hours = center_is_open_now(lang)
+        msg = _ack_text(lang, during_hours=during_hours)
+        await _send_whatsapp_message(session_id, msg)
+        _log(f"[ACK] Sent auto-ack to {session_id}")
+    except asyncio.CancelledError:
+        _log(f"[ACK] Ack task cancelled for session_id={session_id}")
+    except Exception as e:
+        _log(f"[ACK] Error sending ack: {e}")
+    finally:
+        # Clean up task handle
+        if _ACK_TASKS.get(session_id):
+            _ACK_TASKS.pop(session_id, None)
+
+def _maybe_schedule_auto_ack_whatsapp(session_id: str, lang: str, base_ts: float):
+    """
+    Schedule a WhatsApp auto-ack if the bot did not answer (answer was silenced/empty).
+    - During working hours (open): wait 30 minutes (1800s).
+    - Outside working hours: send immediately (0 delay).
+    """
+    during_hours = center_is_open_now(lang)
+    delay_secs = 1800 if during_hours else 0
+
+    # Cancel any existing pending ack for this session and schedule anew
+    _cancel_pending_ack(session_id)
+    task = asyncio.create_task(_ack_worker(session_id, lang, base_ts, delay_secs))
+    _ACK_TASKS[session_id] = task
+    _log(f"[ACK] Scheduled auto-ack for {session_id} in {delay_secs}s (during_hours={during_hours})")
+
 
 # --- Answer marker and guardrail helpers (should be moved to llm/answer_utils.py) ---
 def extract_and_strip_marker(answer: str, marker: str) -> (str, bool):
@@ -382,7 +439,6 @@ def chat(req: ChatRequest, request: Request):
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
 
 # WhatsApp handler uses the same guardrails as above.
-@router.post("/whatsapp_webhook")
 async def whatsapp_webhook_handler(request: Request):
     try:
         payload = await request.json()
@@ -403,6 +459,10 @@ async def whatsapp_webhook_handler(request: Request):
                             message_type = message.get("type")
                             _log(f"Message details: from={from_number}, type={message_type}, contact={contact}")
 
+                            # NEW: Cancel any pending ack as soon as a new inbound message arrives
+                            if from_number:
+                                _cancel_pending_ack(from_number)
+
                             if message_type == "text":
                                 message_body = message["text"].get("body")
                                 _log(f"Text message from {from_number} (Name: {contact.get('profile',{}).get('name')}): '{message_body}'")
@@ -411,11 +471,10 @@ async def whatsapp_webhook_handler(request: Request):
                                     _log(f"WARNING: Message from non-whitelisted number {from_number} ignored during testing.")
                                     return {"status": "ignored", "reason": "not in test numbers"}
                                 
-                                # CHANGED: Using get_language_code instead of detect_language
                                 lang = get_language_code(message_body)
                                 _log(f"Detected language: {lang}")
 
-                                # --- PATCH: Opening hours intent routing with general/specific distinction ---
+                                # Opening-hours routing (unchanged)
                                 is_hours_intent, debug_intent = detect_opening_hours_intent(message_body, lang)
                                 opening_context = None
                                 hint_canonical = None
@@ -431,6 +490,7 @@ async def whatsapp_webhook_handler(request: Request):
                                         hint_canonical = "opening_hours"
                                         _log(f"Opening hours intent detected as SPECIFIC. Structured context for LLM:\n{opening_context}")
 
+                                # Build history and reformulation (unchanged)
                                 try:
                                     history = get_recent_history(from_number, limit=6)
                                     _log(f"Fetched {len(history)} prior messages for session_id={from_number}")
@@ -460,7 +520,6 @@ async def whatsapp_webhook_handler(request: Request):
                                     )
                                 except Exception as e:
                                     _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
-                                    # Fallback to deterministic answer for opening-hours only:
                                     if is_hours_intent:
                                         answer = compute_opening_answer(message_body, lang)
                                         citations = []
@@ -471,13 +530,13 @@ async def whatsapp_webhook_handler(request: Request):
 
                                 if not citations or contains_apology_or_noinfo(answer):
                                     _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
-                                    # Fallback to deterministic answer for opening-hours only:
                                     if is_hours_intent:
                                         answer = compute_opening_answer(message_body, lang)
                                         citations = []
                                         debug_info = {"source": "deterministic_opening_hours_fallback", "intent_debug": debug_intent}
                                     else:
                                         answer = ""
+
                                 fee_words = ["tuition", "fee", "price", "cost"]
                                 payment_words = ["how to pay", "payment", "pay", "bank transfer", "fps", "account", "method"]
                                 if (
@@ -488,6 +547,7 @@ async def whatsapp_webhook_handler(request: Request):
                                     _log("Answer does not contain a fee amount for a tuition/fee query, silencing.")
                                     answer = ""
 
+                                # Save history
                                 try:
                                     now = time.time()
                                     save_message(from_number, "user", message_body, lang, now)
@@ -505,10 +565,12 @@ async def whatsapp_webhook_handler(request: Request):
                                 is_followup = is_followup_message(message_body)
                                 if not answer and silent_reason == "no_citations" and is_followup and history:
                                     _log("Allowing context-only answer for followup message due to chat history, but LLM did not produce anything.")
-                                    answer = ""  # Do not send any placeholder/apology.
+                                    answer = ""  # Still silent
+
                                 if not answer and silent_reason:
                                     _log(f"LLM silenced answer. Reason: {silent_reason}")
 
+                                # Handle markers (enrollment/blooket)
                                 answer, marker = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
                                 send_form = marker or (
                                     _any_doc_cited(citations, ENROLLMENT_FORM_DOCS)
@@ -541,6 +603,10 @@ async def whatsapp_webhook_handler(request: Request):
                                     await _send_whatsapp_message(from_number, answer)
                                 else:
                                     _log("LLM provided no answer. No WhatsApp reply sent.")
+
+                                    # NEW: schedule (or immediate) auto-ack since we stayed silent
+                                    _maybe_schedule_auto_ack_whatsapp(from_number, lang, base_ts=now)
+
                                 return {"status": "ok", "message": "Message processed"}
                             else:
                                 _log(f"INFO: Received non-text message of type '{message_type}' from {from_number}. Ignoring.")
