@@ -200,15 +200,34 @@ def _prompt_prefix(lang: str) -> str:
     return INSTRUCTIONS.get(lang, INSTRUCTIONS["en"])
 
 def _is_contact_query(message: str, lang: Optional[str]) -> bool:
+    """
+    Detects explicit contact-info requests.
+    Guard: if the message is a scheduling/availability/admin-action/homework-individual/staff-contact request,
+    do NOT treat it as a contact query even if it mentions 'phone/電話'.
+    """
     m = (message or "").lower()
     if not m:
         return False
+    # Scheduling/availability/admin-action guard
+    try:
+        cls = classify_scheduling_context(message or "", lang or "en")
+        if (
+            cls.get("has_sched_verbs")
+            or cls.get("availability_request")
+            or cls.get("admin_action_request")
+            or cls.get("staff_contact_request")
+            or cls.get("individual_homework_request")
+        ):
+            return False
+    except Exception:
+        pass
+
     if lang and str(lang).lower().startswith("zh-hk"):
         return bool(re.search(r"聯絡|聯絡資料|電話|致電|電郵|whatsapp|联系|联系方式", m, flags=re.IGNORECASE))
     if lang and (str(lang).lower().startswith("zh-cn") or str(lang).lower() == "zh"):
         return bool(re.search(r"联系|联系方式|电话|致电|电邮|邮箱|whatsapp", m, flags=re.IGNORECASE))
     return bool(re.search(r"\b(contact|phone|call|email|e-?mail|whatsapp)\b", m, flags=re.IGNORECASE))
-
+    
 def _norm_uri(loc: Dict) -> Optional[str]:
     s3 = loc.get("s3Location") or {}
     if s3.get("uri"):

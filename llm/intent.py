@@ -25,7 +25,7 @@ _EN_WEAK_TERMS = [
 _ZH_HK_STRONG_TERMS = [
     r"營業|營運|開放|開門|收(工|舖|店)|幾點(開|收)",
     r"上課|上堂|返學|返課",
-    r"安排|改期",
+    # Removed: r"安排|改期" (this is scheduling, not opening-hours)
     r"公眾假期|假期",
 ]
 _ZH_HK_WEAK_TERMS = [
@@ -35,7 +35,7 @@ _ZH_HK_WEAK_TERMS = [
 _ZH_CN_STRONG_TERMS = [
     r"营业|开放|开门|关门|几点(开|关)",
     r"上课|上学|上(?:不)?上课",
-    r"安排|改期",
+    # Removed: r"安排|改期" (this is scheduling, not opening-hours)
     r"公众假期|公休日|假期",
 ]
 _ZH_CN_WEAK_TERMS = [
@@ -206,11 +206,10 @@ def mentions_attendance(message: str, lang: str) -> bool:
 # Availability / timetable / start-date (expanded to include seasonal/month-based asks and "slot" wording)
 _AVAIL_EN = [
     r"\bavailable\b", r"\bavailability\b",
-    r"\b(any|another)\s+(class|slot|time ?slot|timeslot)\b",  # keep "any/another" path
+    r"\b(any|another)\s+(class|slot|time ?slot|timeslot)\b",
     r"\btime\s*slot(s)?\b", r"\bslot(s)?\b",
     r"\btimetable\b", r"\bschedule\b", r"\bwhat times\b", r"\bstart date\b",
     r"\bwhich time\b", r"\btime works\b", r"\bteacher availability\b",
-    # Seasonal / month-based availability
     r"\bsummer\b", r"\bsummer (program|class|course|camp)s?\b", r"\bholiday\s*camp\b",
     r"\b(july|august)\b", r"\bterm\b", r"\bnext\s+term\b", r"\bsemester\b", r"\bsummer schedule\b",
     r"\b(after|post)\s+(cny|chinese new year|lunar new year)\b",
@@ -219,7 +218,6 @@ _AVAIL_ZH_HK = [
     r"有冇(堂|時段|時間|位)", r"時間表", r"時間安排", r"檔期", r"可唔可以.*時間", r"幾時開始(上|開)課",
     r"老師(幾時|時間)有空|導師(幾時|時間)得閒|老師檔期|導師檔期",
     r"(時段|時間檔|時間位)",
-    # Seasonal / month-based availability
     r"暑期|暑假|夏令(營|营)|暑期班|夏季班|七月|八月|夏天|暑假課|暑期課",
     r"(下學期|過年之後|新年之後|農曆新年之後)",
 ]
@@ -227,7 +225,6 @@ _AVAIL_ZH_CN = [
     r"(有|有没有)(课|课程|时段|时间|名额)", r"时间表", r"课程安排", r"档期", r"可以.*时间", r"什么时候开始(上|开)课",
     r"(老师|教师)(什么时候|什么时间)有空|老师档期|教师档期",
     r"(时段|时间档|时间位)",
-    # Seasonal / month-based availability
     r"暑期|暑假|夏令营|暑期班|夏季班|七月|八月|夏天|暑假课|暑期课",
     r"(下学期|过年之后|春节之后|农历新年之后)",
 ]
@@ -266,10 +263,19 @@ _RESCHED_EXTRA_ZH_CN = [
     r"(另|换|别|其他)一[天日]|别的日子|其他日子",
 ]
 
-# Scheduling/leave verbs
-_SCHED_ZH_HK = [r"請假", r"改期", r"改時間", r"改堂", r"取消", r"缺席", r"退堂"]
-_SCHED_ZH_CN = [r"请假", r"改期", r"改时间", r"改堂", r"取消", r"缺席", r"退课"]
-_SCHED_EN = [r"\breschedul(?:e|ing)\b", r"\bcancel(?:ling|ation)?\b", r"\btake\s+leave\b", r"\brequest\s+leave\b", r"\b(absent|absence)\b"]
+# Scheduling/leave verbs (expanded with 'suspend/stop' variants)
+_SCHED_ZH_HK = [
+    r"請假", r"改期", r"改時間", r"改堂", r"取消", r"缺席", r"退堂",
+    r"(暫\s*停|停止|停課|停堂|暫停安排|暫停上課)",
+]
+_SCHED_ZH_CN = [
+    r"请假", r"改期", r"改时间", r"改堂", r"取消", r"缺席", r"退课",
+    r"(暂\s*停|停止|停课|暂停安排|暂停上课)",
+]
+_SCHED_EN = [
+    r"\breschedul(?:e|ing)\b", r"\bcancel(?:ling|ation)?\b", r"\btake\s+leave\b",
+    r"\brequest\s+leave\b", r"\b(absent|absence)\b", r"\b(suspend|put on hold|pause)\b",
+]
 
 # Date/time markers (for has_date_time) — expanded to include month names
 _DATE_MARKERS = [
