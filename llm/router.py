@@ -192,7 +192,7 @@ _ACK_TASKS: Dict[str, asyncio.Task] = {}  # session_id/phone -> task
 def _ack_text(lang: str, during_hours: bool) -> str:
     L = (lang or "en").lower()
     if L.startswith("zh-hk"):
-        return "多謝你的訊息。我哋嘅同事會盡快聯絡你。" if during_hours else "多謝你的訊息。我哋嘅同事會喺下一個辦公時間盡快聯絡你。"
+        return "多謝你的訊息。我們的同事會盡快聯絡你。" if during_hours else "多謝你的訊息。我們的同事會喺下一個辦公時間盡快聯絡你。"
     if L.startswith("zh-cn") or L == "zh":
         return "感谢您的留言。我们的同事会尽快联系您。" if during_hours else "感谢您的留言。我们的同事会在下一个办公时间尽快联系您。"
     return "Thank you for your message. Our staff will contact you ASAP." if during_hours else "Thank you for your message. Our staff will contact you ASAP during next working hours."
