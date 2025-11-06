@@ -453,23 +453,27 @@ def chat(req: ChatRequest, request: Request):
         _log(f"LLM debug_info: {json.dumps(debug_info, ensure_ascii=False, indent=2)}")
 
     # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
-    if not citations or contains_apology_or_noinfo(answer):
-        _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
-        block_hours_fallback = (
-            sched_cls.get("has_sched_verbs")
-            or sched_cls.get("availability_request")
-            or sched_cls.get("admin_action_request")
-            or sched_cls.get("staff_contact_request")
-            or sched_cls.get("individual_homework_request")
-            or _cites_admin_routing(citations)
-            or _looks_like_leave_notification(rag_query)
-        )
-        if is_hours_intent and not block_hours_fallback:
-            answer = compute_opening_answer(req.message, lang)
-            citations = []
-            debug_info = {"source": "deterministic_opening_hours_fallback"}
-        else:
-            answer = ""
+    # ... inside chat(), after getting `answer, citations, debug_info` ...
+
+# Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
+if not citations or contains_apology_or_noinfo(answer):
+    _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
+    block_hours_fallback = (
+        sched_cls.get("has_sched_verbs")
+        or sched_cls.get("availability_request")
+        or sched_cls.get("admin_action_request")
+        or sched_cls.get("staff_contact_request")
+        or sched_cls.get("individual_homework_request")
+        or sched_cls.get("placement_question")  # NEW: placement/judgement should not fall back to hours
+        or _cites_admin_routing(citations)
+        or _looks_like_leave_notification(rag_query)
+    )
+    if is_hours_intent and not block_hours_fallback:
+        answer = compute_opening_answer(req.message, lang)
+        citations = []
+        debug_info = {"source": "deterministic_opening_hours_fallback"}
+    else:
+        answer = ""
 
     fee_words = ["tuition", "fee", "price", "cost"]
     payment_words = ["how to pay", "payment", "pay", "bank transfer", "fps", "account", "method"]
@@ -676,6 +680,7 @@ async def whatsapp_webhook_handler(request: Request):
                                         return {"status": "ok", "message": "Sent deterministic opening hours answer"}
                                     raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
 
+                                # ... inside chat(), after getting `answer, citations, debug_info` ...
                                 # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
                                 if not citations or contains_apology_or_noinfo(answer):
                                     _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
@@ -685,11 +690,12 @@ async def whatsapp_webhook_handler(request: Request):
                                         or sched_cls.get("admin_action_request")
                                         or sched_cls.get("staff_contact_request")
                                         or sched_cls.get("individual_homework_request")
+                                        or sched_cls.get("placement_question")  # NEW: placement/judgement should not fall back to hours
                                         or _cites_admin_routing(citations)
                                         or _looks_like_leave_notification(rag_query)
                                     )
                                     if is_hours_intent and not block_hours_fallback:
-                                        answer = compute_opening_answer(message_body, lang)
+                                        answer = compute_opening_answer(req.message, lang)
                                         citations = []
                                         debug_info = {"source": "deterministic_opening_hours_fallback"}
                                     else:
