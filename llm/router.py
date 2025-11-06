@@ -242,7 +242,7 @@ def _maybe_schedule_auto_ack_whatsapp(session_id: str, lang: str, base_ts: float
         return
 
     during_hours = center_is_open_now(lang)
-    delay_secs = 1800 if during_hours else 0
+    delay_secs = SETTINGS.whatsapp_ack_delay_secs if during_hours else 0
 
     _cancel_pending_ack(session_id)
     task = asyncio.create_task(_ack_worker(session_id, lang, base_ts, delay_secs))

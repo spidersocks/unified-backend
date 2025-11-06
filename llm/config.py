@@ -75,5 +75,7 @@ class Settings:
     # Seconds to keep the bot silent after detecting an admin/human message
     admin_cooldown_secs: int = int(os.environ.get("ADMIN_COOLDOWN_SECS", "900"))  # default 15 minutes
 
+    # Whatsapp auto delay
+    whatsapp_ack_delay_secs : int = int(os.environ.get("WHATSAPP_ACK_DELAY_SECS", "1800"))
 
 SETTINGS = Settings()
