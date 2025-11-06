@@ -530,7 +530,7 @@ def chat(req: ChatRequest, request: Request):
     # --- Final response ---
     answer = answer or ""
     _log(f"Returning ChatResponse (len={len(answer)}).")
-    return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None)))
+    return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
 
 # WhatsApp handler uses the same guardrails as above.
 @router.post("/whatsapp_webhook")

@@ -5,6 +5,7 @@ Refactored for:
 - Clear separation of concerns (retrieve vs. prompt-build vs. generate vs. enforce guardrails)
 - Strong prompt-time guardrails (incl. student placement/level judgement with policy exception)
 - Post-generation enforcement to prevent leakage from irrelevant docs
+- Concise style and length control (especially for policy answers)
 - Consistent, structured debug info across initial/retry attempts
 """
 import os
@@ -72,6 +73,47 @@ PROMPT_SCAFFOLD = {
 }
 
 # =========================
+# Style guardrails (global + policy-specific)
+# =========================
+
+STYLE_CONCISE_GLOBAL = {
+    "en": (
+        "STYLE: Default to ≤3 short bullets and ≤60 words total. Avoid long lists, disclaimers, and repeating content. "
+        "If the user needs more detail, they will ask."
+    ),
+    "zh-HK": "風格：預設以3點以內的短要點回覆，總字數≤60字。避免長列表、重複或贅辭。如需詳情，等家長再追問。",
+    "zh-CN": "风格：默认用不超过3条短要点，总字数≤60字。避免长列表、重复或冗词。若需详情，等待家长再追问。",
+}
+
+STYLE_POLICY_STRICT = {
+    "en": (
+        "STRICT POLICY SUMMARY FORMAT:\n"
+        "- Bullet 1: Free make-up quota and notice window (include exact numbers).\n"
+        "- Bullet 2: Public holiday/severe weather doesn’t consume quota; no classes.\n"
+        "- Bullet 3: Validity window and admin fee if exceeding quota.\n"
+        "Hard limit: EXACTLY 2–3 bullets, ≤45 words total. Do NOT copy the full policy."
+    ),
+    "zh-HK": (
+        "嚴格政策摘要格式：\n"
+        "- 第1點：免費補課配額＋通知時限（列明數字）。\n"
+        "- 第2點：公眾假期／惡劣天氣不扣配額；停課。\n"
+        "- 第3點：有效期與超額行政費。\n"
+        "硬性限制：只用2–3點，總字數≤45字。不要抄整份政策。"
+    ),
+    "zh-CN": (
+        "严格政策摘要格式：\n"
+        "- 第1条：免费补课配额＋通知时限（写明数字）。\n"
+        "- 第2条：公众假期／恶劣天气不扣配额；停课。\n"
+        "- 第3条：有效期与超额行政费。\n"
+        "硬性限制：仅用2–3条，总字数≤45字。不要照抄整份政策。"
+    ),
+}
+
+# Max token clamp for policy answers (can override via env)
+_POLICY_MAX_GEN_LEN = int(os.environ.get("KB_POLICY_MAX_TOKENS", "140"))
+_GLOBAL_MAX_GEN_LEN = int(os.environ.get("KB_GLOBAL_MAX_TOKENS", str(SETTINGS.gen_max_tokens)))
+
+# =========================
 # Guardrails & Copy
 # =========================
 
@@ -86,7 +128,8 @@ CRITICAL_SCHEDULING_GUARDRAIL = {
         "6) If the user asks you to pass/forward/relay/notify/tell/ask/remind a teacher or staff (e.g., 'please tell the teacher…', 'help ask teachers to…'), provide only [NO_ANSWER]. Do NOT relay messages.\n"
         "7) Student-specific placement/level/suitability or class-composition judgements:\n"
         "   - If there is NO explicit policy question → reply ONLY with [NO_ANSWER].\n"
-        "   - If there IS a policy question → answer general placement/assessment policy ONLY; do NOT comment on the specific child/class or propose arrangements."
+        "   - If there IS a policy question → answer general placement/assessment policy ONLY; do NOT comment on the specific child/class or propose arrangements.\n"
+        "8) Keep answers concise by default (≤3 bullets, ≤60 words). For policy, strictly follow the POLICY SUMMARY FORMAT if applicable."
     ),
     "zh-HK": (
         "絕對規則（行程安排與禮貌）：\n"
@@ -98,7 +141,8 @@ CRITICAL_SCHEDULING_GUARDRAIL = {
         "6）如家長要求『轉告／通知／幫手問／同老師講／提醒』老師或職員，*只*回覆 [NO_ANSWER]。\n"
         "7）針對個別學生的分班／水平／適合性或混齡班判斷：\n"
         "   - 沒有明確問政策 → 一律只回覆 [NO_ANSWER]。\n"
-        "   - 明確問政策 → 只回答一般分班／評估政策；不要評論個案或班內情況、亦不要提出安排。"
+        "   - 明確問政策 → 只回答一般分班／評估政策；不要評論個案或班內情況、亦不要提出安排。\n"
+        "8）預設簡潔回覆（≤3點、≤60字）。若屬政策問題，請嚴格按『政策摘要格式』回答。"
     ),
     "zh-CN": (
         "绝对规则（行程与礼貌）：\n"
@@ -110,7 +154,8 @@ CRITICAL_SCHEDULING_GUARDRAIL = {
         "6）如家长要求『转告／通知／帮我问／跟老师说／提醒』老师或工作人员，*仅*回复 [NO_ANSWER]。\n"
         "7）涉及个别学生的分班／水平／适配性或混龄班组合判断：\n"
         "   - 未明确询问政策 → 仅回复 [NO_ANSWER]。\n"
-        "   - 明确询问政策 → 只回答一般分班／评估政策；不要评论个案或班内组合，不要提出安排。"
+        "   - 明确询问政策 → 只回答一般分班／评估政策；不要评论个案或班内组合，不要提出安排。\n"
+        "8）默认简洁作答（≤3条、≤60字）。若为政策问题，严格按『政策摘要格式』回答。"
     ),
 }
 
@@ -293,15 +338,82 @@ def _silence_reason(answer: str, citation_count: int) -> Optional[str]:
     return None
 
 # =========================
+# Style and length enforcement (post-generation)
+# =========================
+
+_BULLET_PREFIXES = tuple(["- ", "• ", "* ", "— "])
+
+def _trim_to_n_bullets(answer: str, max_bullets: int = 3) -> str:
+    lines = [ln.strip() for ln in (answer or "").splitlines() if ln.strip()]
+    bullets: List[str] = []
+    others: List[str] = []
+    for ln in lines:
+        if ln.startswith(_BULLET_PREFIXES):
+            bullets.append(ln)
+        else:
+            others.append(ln)
+    # Prefer bullets if any exist; otherwise keep first sentence as a single bullet
+    if bullets:
+        bullets = bullets[:max_bullets]
+        return "\n".join(bullets)
+    # Fallback: turn first one or two short lines into bullets
+    out = []
+    for ln in others[:max_bullets]:
+        out.append(f"- {ln}")
+    return "\n".join(out)
+
+def _hard_cap_words(text: str, max_words: int) -> str:
+    words = (text or "").split()
+    if len(words) <= max_words:
+        return text
+    return " ".join(words[:max_words]).rstrip(",.;:") + "…"
+
+def _post_generation_override(answer: str, message: str, lang: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Returns (override_answer, reason) when we must override the model's output.
+    None means no override.
+    """
+    try:
+        cls = classify_scheduling_context(message or "", lang)
+    except Exception:
+        cls = {"has_policy_intent": False, "placement_question": False}
+
+    # Placement judgement (specific child) without explicit policy → hard [NO_ANSWER]
+    if cls.get("placement_question") and not cls.get("has_policy_intent"):
+        return "[NO_ANSWER]", "placement_guardrail"
+
+    # If the user message itself is clearly politeness-only, allow model output to pass (no override)
+    if is_politeness_only(message or "", lang):
+        return None, None
+
+    # Policy: aggressive style enforcement after generation
+    if cls.get("has_policy_intent"):
+        concise = _trim_to_n_bullets(answer, max_bullets=3)
+        concise = _hard_cap_words(concise, max_words=60)  # safety cap for SMS/WA
+        return concise, "policy_concise_enforced"
+
+    # Global concise preference: if answer is very long, trim to 3 bullets (soft)
+    if len((answer or "")) > 800:  # rough guard for overlong content
+        concise = _trim_to_n_bullets(answer, max_bullets=3)
+        return concise, "global_concise_trim"
+
+    return None, None
+
+# =========================
 # Prompt builder
 # =========================
 
-def _build_instructions_for_message(lang: str, user_query: str, instruction_parts: List[str]) -> Tuple[str, Dict[str, Any]]:
+def _build_instructions_for_message(lang: str, user_query: str, instruction_parts: List[str]) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
     """
     Build the final instructions string, localized, with guardrails depending on intent.
-    Returns (instructions_string, cls_debug)
+    Returns (instructions_string, cls_debug, style_debug)
     """
-    final_instructions: List[str] = [CRITICAL_SCHEDULING_GUARDRAIL.get(lang, CRITICAL_SCHEDULING_GUARDRAIL["en"])]
+    final_instructions: List[str] = [
+        CRITICAL_SCHEDULING_GUARDRAIL.get(lang, CRITICAL_SCHEDULING_GUARDRAIL["en"]),
+        STYLE_CONCISE_GLOBAL.get(lang, STYLE_CONCISE_GLOBAL["en"]),
+    ]
+    style_debug: Dict[str, Any] = {"policy_style": False}
+
     try:
         cls = classify_scheduling_context(user_query or "", lang)
     except Exception:
@@ -339,11 +451,10 @@ def _build_instructions_for_message(lang: str, user_query: str, instruction_part
     if cls.get("placement_question") and cls.get("has_policy_intent"):
         final_instructions.append("Answer ONLY the general placement/assessment policy from context. Do NOT comment on the specific child/class composition. Do NOT suggest or confirm arrangements.")
 
-    # Policy answer constraints
+    # Policy answer constraints (strict style)
     if cls.get("has_policy_intent"):
-        final_instructions.append(
-            "For policy answers, reply in 1–3 short bullets (max ~35 words total). Include exact numbers if present. Do NOT make arrangements."
-        )
+        final_instructions.append(STYLE_POLICY_STRICT.get(lang, STYLE_POLICY_STRICT["en"]))
+        style_debug["policy_style"] = True
 
     # Block politeness-only unless truly thanks-only
     if not cls.get("politeness_only"):
@@ -352,17 +463,17 @@ def _build_instructions_for_message(lang: str, user_query: str, instruction_part
     # Append any extra system instruction parts (persona string, opening-hours guardrails, etc.)
     final_instructions.extend(instruction_parts)
 
-    return "\n\n".join(final_instructions), cls
+    return "\n\n".join(final_instructions), cls, style_debug
 
-def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, context_chunks: List[str]) -> str:
+def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, context_chunks: List[str]) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
     scaffold = PROMPT_SCAFFOLD.get(lang, PROMPT_SCAFFOLD["en"])
-    instructions, _ = _build_instructions_for_message(lang, query, instruction_parts)
+    instructions, cls, style_dbg = _build_instructions_for_message(lang, query, instruction_parts)
 
     formatted_context = ""
     for i, chunk in enumerate(context_chunks):
         formatted_context += f"<search_result index=\"{i+1}\">\n{chunk}\n</search_result>\n\n"
 
-    return (
+    prompt = (
         f"{scaffold['role']}\n\n"
         f"<instructions>\n{instructions}\n</instructions>\n\n"
         f"{scaffold['use_results']}\n"
@@ -371,30 +482,7 @@ def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, contex
         f"<question>\n{query}\n</question>\n\n"
         f"{scaffold['answer_label']}"
     )
-
-# =========================
-# Post-generation enforcement
-# =========================
-
-def _post_generation_override(answer: str, message: str, lang: str) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Returns (override_answer, reason) when we must override the model's output.
-    None means no override.
-    """
-    try:
-        cls = classify_scheduling_context(message or "", lang)
-    except Exception:
-        cls = {"has_policy_intent": False, "placement_question": False}
-
-    # Placement judgement (specific child) without explicit policy → hard [NO_ANSWER]
-    if cls.get("placement_question") and not cls.get("has_policy_intent"):
-        return "[NO_ANSWER]", "placement_guardrail"
-
-    # If the user message itself is clearly politeness-only, allow model output to pass (no override)
-    if is_politeness_only(message or "", lang):
-        return None, None
-
-    return None, None
+    return prompt, cls, style_dbg
 
 # =========================
 # Public API: chat_with_kb
@@ -499,12 +587,19 @@ def chat_with_kb(
         flow_debug["parsed_citations"] = parsed_citations
 
         # Step 2 — Generate
-        llm_prompt = build_llm_prompt(L, instruction_parts, message, retrieved_chunks_text)
+        llm_prompt, cls_dbg, style_dbg = build_llm_prompt(L, instruction_parts, message, retrieved_chunks_text)
         flow_debug["llm_prompt"] = llm_prompt
+        flow_debug["cls"] = cls_dbg
+        flow_debug["style"] = style_dbg
+
+        # Clamp max tokens for policy (prevents run-on lists)
+        max_len = _GLOBAL_MAX_GEN_LEN
+        if cls_dbg.get("has_policy_intent"):
+            max_len = min(_POLICY_MAX_GEN_LEN, SETTINGS.gen_max_tokens)
 
         body = json.dumps({
             "prompt": llm_prompt,
-            "max_gen_len": SETTINGS.gen_max_tokens,
+            "max_gen_len": max_len,
             "temperature": SETTINGS.gen_temperature,
             "top_p": SETTINGS.gen_top_p,
         })
@@ -528,13 +623,13 @@ def chat_with_kb(
         reason = _silence_reason(answer, len(citations))
         debug_info["silence_reason"] = reason
 
-        # Post-generation override (e.g., placement-specific judgement without policy)
+        # Post-generation override (e.g., placement-specific judgement without policy; or style compress)
         override, override_reason = _post_generation_override(answer, message, L)
         if override is not None:
-            debug_info["silenced"] = True
+            debug_info["silenced"] = (override == "[NO_ANSWER]")
             debug_info["silence_reason"] = override_reason
-            _cache_set(L, message or "", extra_context, hint_canonical, override, [], debug_info)
-            return override, [], (debug_info if debug else {})
+            _cache_set(L, message or "", extra_context, hint_canonical, override, ([] if override == "[NO_ANSWER]" else citations), debug_info)
+            return override, ([] if override == "[NO_ANSWER]" else citations), (debug_info if debug else {})
 
         need_retry_for_zero_citations = (len(citations) == 0)
         if (reason or need_retry_for_zero_citations) and SETTINGS.kb_retry_nofilter:
@@ -550,6 +645,14 @@ def chat_with_kb(
                 debug_info["retry_succeeded"] = True
                 debug_info["raw_answer"] = answer
                 debug_info["silence_reason"] = reason
+
+            # Run style override again after retry
+            override, override_reason = _post_generation_override(answer, message, L)
+            if override is not None:
+                debug_info["silenced"] = (override == "[NO_ANSWER]")
+                debug_info["silence_reason"] = override_reason
+                _cache_set(L, message or "", extra_context, hint_canonical, override, ([] if override == "[NO_ANSWER]" else citations), debug_info)
+                return override, ([] if override == "[NO_ANSWER]" else citations), (debug_info if debug else {})
 
         # Final silencing
         final_reason = _silence_reason(answer, len(citations))
