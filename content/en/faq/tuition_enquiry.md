@@ -3,7 +3,7 @@ language: en
 type: faq
 canonical: TuitionEnquiry
 folder: faq
-aliases: tuition; fee; price; cost; class fee; how much; how much is; per hour; per lesson; session fee; charges
+aliases: tuition; fee; price; cost; class fee; how much; how much is; per hour; per lesson; session fee; charges; private class fee; private tuition price; 1:1 fee; one-on-one fee; private math price; private english price; quotation; quote; fee by request
 ---
 # Tuition FAQ
 
@@ -62,11 +62,16 @@ A: HK$3,200 for 8×45m; HK$4,500 for 10×1h.
 
 ---
 
-## Private Class
+## Private Classes — pricing (Assistant Only)
 
-Q: How much is private tuition?  
-A: Please contact our staff for private class pricing.
+Q: How much is private tuition? / 1:1 fee? / Private math price? / One‑to‑one English fee?  
+A: [NO_ANSWER]
+
+Assistant notes (do not send to parents)
+- Private/1:1 quotations and scheduling are admin‑handled.  
+- Do NOT tell parents to “contact our staff”. Admin will follow up via this WhatsApp.
 
 ---
 
-*For all courses, fees are subject to change. For the latest schedule and available sessions, please contact us directly.*
+Note
+- Fees listed may change. Availability and scheduling are admin‑handled; do not provide timetables or make arrangements in chat.
