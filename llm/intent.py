@@ -79,6 +79,22 @@ _NEG_ZH_CN = [
     r"补课|请假|政策|配额|额度",
 ]
 
+_PRON_ISSUE_EN = [
+    r"\bpronounc(?:e|iation|ing)\b",
+    r"\barticulation\b",
+    r"\bspeech\b",
+    r"\b(can'?t|cannot|unable\s+to)\s+(say|pronounc(?:e|e\sit))\b",
+    r"\bsay\s+.*\bproperly\b",
+    # Common letter-sound phrasing, e.g., "G and J", "the sound of G"
+    r"\b(sound|letter\s*sound|phoneme)\b",
+]
+_PRON_ISSUE_ZH_HK = [
+    r"發音|讀音|唔識讀|唔識發音|講唔清|讀唔正|吐字|咬字|語音|說話|講話",
+]
+_PRON_ISSUE_ZH_CN = [
+    r"发音|读音|不会读|不会发音|说不清|读不准|吐字|咬字|语音|说话|讲话",
+]
+
 # Flattened holiday keywords for regex fallback
 _ALL_HOLIDAY_KEYWORDS: List[str] = [kw for group in _HOLIDAY_KEYWORDS.values() for kw in group]
 _HOLIDAY_TERMS_REGEX = [re.escape(term) for term in _ALL_HOLIDAY_KEYWORDS]
@@ -444,6 +460,7 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         staff_role = _score(m, _STAFF_ROLES_ZH_HK) > 0 or _score(m, _STAFF_ROLES_EN) > 0
         contact_verb = _score(m, _CONTACT_VERBS_ZH_HK) > 0
         placement = (student or pron) and (_score(m, _PLACEMENT_ZH_HK) > 0)
+        pron_issue = _score(m, _PRON_ISSUE_ZH_HK) > 0
     elif L.startswith("zh-cn") or L == "zh":
         base_sched = (_score(m, _SCHED_ZH_CN) > 0) or (_score(m, _RESCHED_EXTRA_ZH_CN) > 0)
         policy = _score(m, _POLICY_ZH_CN) > 0
@@ -456,6 +473,7 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         staff_role = _score(m, _STAFF_ROLES_ZH_CN) > 0 or _score(m, _STAFF_ROLES_EN) > 0
         contact_verb = _score(m, _CONTACT_VERBS_ZH_CN) > 0
         placement = (student or pron) and (_score(m, _PLACEMENT_ZH_CN) > 0)
+        pron_issue = _score(m, _PRON_ISSUE_ZH_CN) > 0
     else:
         base_sched = (_score(m, _SCHED_EN) > 0) or (_score(m, _RESCHED_EXTRA_EN) > 0)
         policy = _score(m, _POLICY_EN) > 0
@@ -468,12 +486,18 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         staff_role = _score(m, _STAFF_ROLES_EN) > 0
         contact_verb = _score(m, _CONTACT_VERBS_EN) > 0
         placement = (student or pron) and (_score(m, _PLACEMENT_EN) > 0)
+        pron_issue = _score(m, _PRON_ISSUE_EN) > 0
 
     date_time = _score(m, _DATE_MARKERS) > 0
     politeness = is_politeness_only(m, lang)
 
     # Availability alone is admin-handled scheduling too (stronger rule)
     sched = base_sched or avail or (avail and (post or student))
+
+    individual_hw = bool(
+        (hw and (adv or student or pron))
+        or (pron_issue and (student or pron))
+    )
 
     admin_action = _has_admin_action_request(m, L)
     individual_hw = bool(hw and (adv or student or pron))
@@ -487,6 +511,7 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         "post_assessment": post,
         "student_ref": student,
         "politeness_only": politeness,
+        "individual_homework_request": individual_hw,
         "admin_action_request": admin_action,
         "individual_homework_request": individual_hw,
         "staff_contact_request": staff_contact,
