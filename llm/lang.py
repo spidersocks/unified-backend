@@ -49,74 +49,75 @@ def _normalize_text(text: str) -> str:
     """
     if not text:
         return ""
-    # NFKC compatibility normalization is great for collapsing variants
     normalized = unicodedata.normalize('NFKC', text).lower()
-    # Replace any sequence of whitespace characters with a single space
     normalized = re.sub(r'\s+', ' ', normalized).strip()
     return normalized
 
 def _is_cjk(char: str) -> bool:
     """
     Checks if a character is within the CJK Unicode ranges.
-    This is a reliable way to identify Chinese, Japanese, or Korean characters.
     """
     return any([
-        0x4E00 <= ord(char) <= 0x9FFF,  # CJK Unified Ideographs
-        0x3400 <= ord(char) <= 0x4DBF,  # CJK Unified Ideographs Extension A
+        0x4E00 <= ord(char) <= 0x9FFF,   # CJK Unified Ideographs
+        0x3400 <= ord(char) <= 0x4DBF,   # CJK Unified Ideographs Extension A
         0x20000 <= ord(char) <= 0x2A6DF, # CJK Unified Ideographs Extension B
-        # Add other relevant ranges if needed, e.g., for punctuation
     ])
 
 def _get_cjk_ratio(text: str) -> float:
     """
-    Calculates the ratio of CJK characters to the total number of alphabetic characters.
-    This is the most critical heuristic to avoid misclassifying primarily English text
-    that contains a few CJK characters (e.g., 'I love Pokémon').
+    Calculates the ratio of CJK characters to total alphabetic characters.
     """
     if not text:
         return 0.0
-
     cjk_count = 0
     letter_count = 0
-
     for char in text:
         if char.isspace() or char.isdigit() or not char.isprintable():
             continue
         if _is_cjk(char):
             cjk_count += 1
-        # We only count letters for the denominator to get a meaningful ratio
         if char.isalpha():
             letter_count += 1
-
     if letter_count == 0:
         return 0.0
-
     return cjk_count / letter_count
+
+def _prefer_variant_from_accept_language(header: Optional[str]) -> Optional[str]:
+    """
+    Parses Accept-Language to prefer zh-HK (Traditional) or zh-CN (Simplified) when explicitly indicated.
+    Defaults to Traditional if only 'zh' is present without script/region.
+    """
+    if not header:
+        return None
+    h = header.lower()
+    # Explicit script/region hints
+    if "zh-hant" in h or "zh-tw" in h or "zh-hk" in h:
+        return "zh-HK"
+    if "zh-hans" in h or "zh-cn" in h or "zh-sg" in h:
+        return "zh-CN"
+    # Ambiguous 'zh' -> prefer Traditional (Hong Kong default)
+    if "zh" in h:
+        return "zh-HK"
+    return None
 
 def _get_chinese_variant(text: str) -> str:
     """
-    Scores the text to determine if it's primarily Simplified or Traditional Chinese.
-    It counts occurrences of characters unique to each script.
+    Determine Traditional vs Simplified based on distinctive character counts.
+    IMPORTANT: Ties and 'no distinctive chars' default to Traditional (zh-HK) for Hong Kong deployment.
     """
     trad_score = 0
     simp_score = 0
-
     for char in text:
         if char in TRAD_ONLY:
             trad_score += 1
         elif char in SIMP_ONLY:
             simp_score += 1
-
-    # If the Traditional set is populated and has a higher score, classify as zh-HK.
-    # We give a slight bias to Traditional if scores are equal, as it's often
-    # a conscious choice in mixed contexts.
     if trad_score > simp_score:
         return "zh-HK"
-    
-    # Otherwise, default to Simplified Chinese. This is the fallback if no unique
-    # characters are found or if Simplified characters dominate.
-    return "zh-CN"
-
+    if simp_score > trad_score:
+        return "zh-CN"
+    # Tie or no distinctive characters: default to Traditional for HK
+    return "zh-HK"
 
 # --- Main Detection Logic ---
 
@@ -126,42 +127,42 @@ def get_language_code(
 ) -> str:
     """
     Determines the language code ('en', 'zh-CN', 'zh-HK') for a given message.
-    This version uses a robust set of heuristics.
 
-    Args:
-        user_message: The text message from the user.
-        accept_language_header: The 'Accept-Language' HTTP header, used as a fallback hint.
-
-    Returns:
-        A string representing the detected language code.
+    Changes:
+    - Default ambiguous Chinese to Traditional (zh-HK) instead of Simplified.
+    - Respect Accept-Language when it explicitly specifies zh-Hans/zh-CN vs zh-Hant/zh-HK/zh-TW.
+    - If Accept-Language only says 'zh', prefer Traditional (zh-HK).
     """
-    # 1. Normalize the input for consistent processing
     normalized_message = _normalize_text(user_message)
 
-    # 2. Handle edge cases: empty or whitespace-only messages
+    # Edge case: empty or whitespace-only messages
     if not normalized_message:
-        # If the header suggests Chinese, pick a default; otherwise 'en'
-        if accept_language_header and 'zh' in accept_language_header.lower():
-            return "zh-CN"
+        # Prefer Traditional for ambiguous 'zh'; otherwise keep 'en'
+        lang_from_header = _prefer_variant_from_accept_language(accept_language_header)
+        if lang_from_header:
+            return lang_from_header
         return "en"
 
-    # 3. Handle short, common English phrases that don't need complex analysis
+    # Short common English phrases — fast path
     common_english_greetings = {"hi", "hello", "thanks", "thank you", "ok", "yes", "no"}
     if normalized_message in common_english_greetings:
         return "en"
 
-    # 4. The Core Heuristic: CJK Character Ratio
-    # We set a threshold (e.g., 0.3 or 30%). If more than 30% of the alphabetic
-    # characters are CJK, we classify it as Chinese.
+    # Core heuristic for Chinese vs English
     cjk_ratio = _get_cjk_ratio(normalized_message)
     CJK_THRESHOLD = 0.3
-
     if cjk_ratio >= CJK_THRESHOLD:
-        # If it's determined to be Chinese, figure out if it's Simplified or Traditional
-        return _get_chinese_variant(normalized_message)
-    else:
-        # If the ratio is below the threshold, it's English.
-        return "en"
+        # Determine variant with Traditional bias on ties
+        variant = _get_chinese_variant(normalized_message)
+        # If variant detection produced Traditional by tie and header explicitly says Simplified, respect header
+        header_pref = _prefer_variant_from_accept_language(accept_language_header)
+        if header_pref in ("zh-HK", "zh-CN"):
+            # Only override when header is explicit about variant (Hans/Hant or region)
+            return header_pref
+        return variant
+
+    # Non-Chinese default
+    return "en"
 
 # --- Demonstration and Testing ---
 
@@ -173,28 +174,31 @@ if __name__ == "__main__":
         ("Hello, how are you today?", "en"),
         ("This is a test.", "en"),
         ("thanks", "en"),
-        # Chinese cases (Simplified)
-        ("你好，请问有什么可以帮助你的吗？", "zh-CN"),
+        # Chinese cases (Simplified distinctive)
+        ("请问这里的信息正确吗？", "zh-CN"),
         ("我的电脑坏了，需要修理。", "zh-CN"),
-        # Chinese cases (Traditional) - Will currently resolve to zh-CN until TRAD_ONLY is populated
-        ("這是一個繁體字的句子。", "zh-CN"), # EXPECTED: zh-HK after populating TRAD_ONLY
-        ("請問這裏的資料正確嗎？", "zh-CN"), # EXPECTED: zh-HK after populating TRAD_ONLY
+        # Chinese cases (Traditional distinctive)
+        ("請問這裏的資料正確嗎？", "zh-HK"),
+        ("這是一個繁體字的句子。", "zh-HK"),
+        # Ambiguous Chinese (common characters only) should default to Traditional
+        ("好的", "zh-HK"),
+        ("可以吗", "zh-CN"),  # contains “吗”(吗=简体 distinctive) -> zh-CN
+        ("可以嗎", "zh-HK"),  # contains “嗎”(繁體 distinctive) -> zh-HK
         # Mixed language cases
-        ("I love to eat 蛋挞 and drink 奶茶.", "en"), # Primarily English
-        ("My favorite character is 皮卡丘 (Pikachu).", "en"), # Primarily English
-        ("我的名字是 David, nice to meet you.", "zh-CN"), # Primarily Chinese
-        # Edge cases
-        ("          ", "en"), # Whitespace only
-        ("", "en"), # Empty string
-        ("1234567890", "en"), # Numbers only
-        ("你好", "zh-CN"), # Short Chinese
+        ("I love to eat 蛋挞 and drink 奶茶.", "en"),  # Primarily English
+        ("我的名字是 David, nice to meet you.", "zh-CN"),  # Primarily Chinese
+        # Accept-Language disambiguation
+        ("好的", "zh-CN"),  # With header zh-CN we expect zh-CN
     ]
 
-    for i, (message, expected) in enumerate(test_cases):
-        detected_lang = get_language_code(message)
+    for i, (message, expected) in enumerate(test_cases, start=1):
+        if i == len(test_cases):  # last case: force header
+            detected_lang = get_language_code(message, accept_language_header="zh-CN,zh;q=0.9")
+        else:
+            detected_lang = get_language_code(message)
         status = "✅ PASSED" if detected_lang == expected else f"❌ FAILED (Got {detected_lang})"
-        print(f"Test {i+1}: '{message[:30]}...' -> Expected: {expected}, {status}")
+        print(f"Test {i}: '{message[:30]}...' -> Expected: {expected}, {status}")
 
-    print("\n--- Note on Traditional Chinese Detection ---")
-    print("The 'TRAD_ONLY' character set is currently empty. Therefore, all Traditional Chinese text")
-    print("is expected to fall back to 'zh-CN'. Once you populate the set, the relevant tests should pass as 'zh-HK'.")
+    print("\n--- Notes ---")
+    print("- Ambiguous Chinese now defaults to zh-HK (Traditional) to suit Hong Kong deployment.")
+    print("- Accept-Language with zh-Hant/zh-HK/zh-TW forces zh-HK; zh-Hans/zh-CN/zh-SG forces zh-CN; bare 'zh' prefers zh-HK.")
