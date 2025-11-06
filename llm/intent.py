@@ -402,6 +402,19 @@ _CONTACT_VERBS_EN = [
 _CONTACT_VERBS_ZH_HK = [r"安排|預約|約|約見|約電話|打電話|致電|通話|講電話|聯絡|見面|會面|約見面|約通話"]
 _CONTACT_VERBS_ZH_CN = [r"安排|预约|约|约见|约电话|打电话|致电|通话|讲电话|联系|见面|会面|约见面|约通话"]
 
+_PLACEMENT_EN = [
+    r"\b(level|same level|not (?:in )?the same level|placement|placed|suitable|appropriate|fit[s]?|too (?:small|young|advanced)|mixed (?:age|levels?)|class(?:mate)?s?\s+age)\b",
+    r"\b(should|can)\s+(?:he|she|my (?:son|daughter|kid|child)|[A-Z][a-z]+)\s+(?:be|stay|move)\s+(?:in|to)\s+(?:this|that)\s+class\b",
+]
+_PLACEMENT_ZH_HK = [
+    r"(同一水平|唔同水平|同唔同級|分班|編班|班別|適合|合唔合適|啱唔啱|太(細|大)|太(年輕|細個)|太(高|深)|混齡|混班|同班.*年齡|同學.*幾多歲)",
+    r"(應該|可唔可以).*(佢|我(個)?仔|我(個)?女|小朋友).*(留|轉|去|上).*(呢|嗰)班",
+]
+_PLACEMENT_ZH_CN = [
+    r"(同一水平|不同水平|同不同行|分班|编班|班别|适合|合适|合不合适|是否合适|太小|太大|太年轻|太高|太深|混龄|混班|同班.*年龄|同学.*几岁)",
+    r"(应该|可不可以|能不能).*(他|她|我(家)?(儿子|女儿|孩子)|小朋友).*(留|转|去|上).*(这|那)个?班",
+]
+
 def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
     """
     Soft classification: returns booleans used to steer prompting only.
@@ -430,6 +443,7 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         pron = bool(re.search(r"(佢|小朋友|學生)", m))
         staff_role = _score(m, _STAFF_ROLES_ZH_HK) > 0 or _score(m, _STAFF_ROLES_EN) > 0
         contact_verb = _score(m, _CONTACT_VERBS_ZH_HK) > 0
+        placement = (student or pron) and (_score(m, _PLACEMENT_ZH_HK) > 0)
     elif L.startswith("zh-cn") or L == "zh":
         base_sched = (_score(m, _SCHED_ZH_CN) > 0) or (_score(m, _RESCHED_EXTRA_ZH_CN) > 0)
         policy = _score(m, _POLICY_ZH_CN) > 0
@@ -441,6 +455,7 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         pron = bool(re.search(r"(他|她|孩子|小朋友|学生)", m))
         staff_role = _score(m, _STAFF_ROLES_ZH_CN) > 0 or _score(m, _STAFF_ROLES_EN) > 0
         contact_verb = _score(m, _CONTACT_VERBS_ZH_CN) > 0
+        placement = (student or pron) and (_score(m, _PLACEMENT_ZH_CN) > 0)
     else:
         base_sched = (_score(m, _SCHED_EN) > 0) or (_score(m, _RESCHED_EXTRA_EN) > 0)
         policy = _score(m, _POLICY_EN) > 0
@@ -452,6 +467,7 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         pron = bool(re.search(r"\b(he|him|his|she|her|hers|my (son|daughter|kid|child))\b", m, re.I))
         staff_role = _score(m, _STAFF_ROLES_EN) > 0
         contact_verb = _score(m, _CONTACT_VERBS_EN) > 0
+        placement = (student or pron) and (_score(m, _PLACEMENT_EN) > 0)
 
     date_time = _score(m, _DATE_MARKERS) > 0
     politeness = is_politeness_only(m, lang)
@@ -474,4 +490,5 @@ def classify_scheduling_context(message: str, lang: str) -> Dict[str, Any]:
         "admin_action_request": admin_action,
         "individual_homework_request": individual_hw,
         "staff_contact_request": staff_contact,
+        "placement_question": placement,
     }
