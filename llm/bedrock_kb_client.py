@@ -86,7 +86,8 @@ CRITICAL_SCHEDULING_GUARDRAIL = {
         "6) If the user asks you to pass/forward/relay/notify/tell/ask/remind a teacher or staff (e.g., 'please tell the teacher…', 'help ask teachers to…'), provide only [NO_ANSWER]. Do NOT relay messages.\n"
         "7) Student-specific placement/level/suitability or class-composition judgements:\n"
         "   - If there is NO explicit policy question → reply ONLY with [NO_ANSWER].\n"
-        "   - If there IS a policy question → answer general placement/assessment policy ONLY; do NOT comment on the specific child/class or propose arrangements."
+        "   - If there IS a policy question → answer general placement/assessment policy ONLY; do NOT comment on the specific child/class or propose arrangements.\n"
+        "8) FORMAT: If any rule above requires [NO_ANSWER], output EXACTLY the single token [NO_ANSWER] on its own line, with no explanation."
     ),
     "zh-HK": (
         "絕對規則（行程安排與禮貌）：\n"
@@ -98,7 +99,8 @@ CRITICAL_SCHEDULING_GUARDRAIL = {
         "6）如家長要求『轉告／通知／幫手問／同老師講／提醒』老師或職員，*只*回覆 [NO_ANSWER]。\n"
         "7）針對個別學生的分班／水平／適合性或混齡班判斷：\n"
         "   - 沒有明確問政策 → 一律只回覆 [NO_ANSWER]。\n"
-        "   - 明確問政策 → 只回答一般分班／評估政策；不要評論個案或班內情況、亦不要提出安排。"
+        "   - 明確問政策 → 只回答一般分班／評估政策；不要評論個案或班內情況、亦不要提出安排。\n"
+        "8）格式：如符合以上任何情況需回覆 [NO_ANSWER]，請*只*輸出一行 [NO_ANSWER]，唔好加其他說明。"
     ),
     "zh-CN": (
         "绝对规则（行程与礼貌）：\n"
@@ -110,7 +112,8 @@ CRITICAL_SCHEDULING_GUARDRAIL = {
         "6）如家长要求『转告／通知／帮我问／跟老师说／提醒』老师或工作人员，*仅*回复 [NO_ANSWER]。\n"
         "7）涉及个别学生的分班／水平／适配性或混龄班组合判断：\n"
         "   - 未明确询问政策 → 仅回复 [NO_ANSWER]。\n"
-        "   - 明确询问政策 → 只回答一般分班／评估政策；不要评论个案或班内组合，不要提出安排。"
+        "   - 明确询问政策 → 只回答一般分班／评估政策；不要评论个案或班内组合，不要提出安排。\n"
+        "8）格式：如符合以上任一规则需回复 [NO_ANSWER] 时，请*只*输出一行 [NO_ANSWER]，不要添加任何解释说明。"
     ),
 }
 

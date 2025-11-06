@@ -18,6 +18,7 @@ import traceback
 import asyncio
 from collections import deque
 
+
 def _cites_admin_routing(citations: List[Dict[str, Any]]) -> bool:
     if not citations:
         return False
@@ -27,6 +28,7 @@ def _cites_admin_routing(citations: List[Dict[str, Any]]) -> bool:
             return True
     return False
 
+
 _LEAVE_EN = re.compile(
     r"\b(can'?t|cannot|won'?t)\s+(attend|come|make\s+(?:it|the\s+class|the\s+lesson))\b"
     r"|won'?t\s+be\s+able\s+to\s+attend\b"
@@ -34,8 +36,10 @@ _LEAVE_EN = re.compile(
     re.IGNORECASE
 )
 
+
 def _looks_like_leave_notification(text: str) -> bool:
     return bool(_LEAVE_EN.search(text or ""))
+
 
 # --- Llama client helper (should be moved to llm/llama_client.py) ---
 def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop: list = None) -> str:
@@ -63,6 +67,7 @@ def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop
         return out.get("generation", "").strip() or out.get("output", "").strip() or out.get("text", "").strip()
     except Exception:
         return result.strip()
+
 
 def call_llm_rephrase(history_context: str, lang: str) -> str:
     prompts = {
@@ -92,33 +97,34 @@ def call_llm_rephrase(history_context: str, lang: str) -> str:
     prompt = prompts.get(lang, prompts["en"])
     return call_llama(prompt, max_tokens=60, temperature=0.0).strip()
 
+
 def _log(msg):
     print(f"[LLM ROUTER] {msg}", file=sys.stderr, flush=True)
 
-# --- WhatsApp helpers (should be moved to llm/whatsapp_utils.py) ---
-# Track message IDs our bot sent via Cloud API to distinguish from admin-sent
-_BOT_MSG_IDS: Dict[str, float] = {}  # msg_id -> ts
-# Track last detected admin activity per recipient (phone/session)
-_LAST_ADMIN_ACTIVITY: Dict[str, float] = {}  # recipient_id -> ts
-# Keep structure small by pruning old bot IDs
+
+# --- WhatsApp helpers ---
+_BOT_MSG_IDS: Dict[str, float] = {}
+_LAST_ADMIN_ACTIVITY: Dict[str, float] = {}
+
+
 def _record_bot_msg_id(msg_id: Optional[str]):
     if not msg_id:
         return
     _BOT_MSG_IDS[msg_id] = time.time()
-    # Simple prune: drop entries older than 24h or if over 500 entries
     if len(_BOT_MSG_IDS) > 500:
         cutoff = time.time() - 24 * 3600
         to_del = [mid for mid, ts in _BOT_MSG_IDS.items() if ts < cutoff]
         for mid in to_del:
             _BOT_MSG_IDS.pop(mid, None)
 
+
 def _mark_admin_activity(recipient_id: Optional[str]):
     if not recipient_id:
         return
     _LAST_ADMIN_ACTIVITY[recipient_id] = time.time()
-    # Cancel any pending ack for this chat
     _cancel_pending_ack(recipient_id)
     _log(f"[COOL] Marked admin activity for {recipient_id}. Cooling for {SETTINGS.admin_cooldown_secs}s")
+
 
 def _in_admin_cooldown(session_id: str) -> bool:
     ts = _LAST_ADMIN_ACTIVITY.get(session_id)
@@ -126,9 +132,10 @@ def _in_admin_cooldown(session_id: str) -> bool:
         return False
     return (time.time() - ts) < SETTINGS.admin_cooldown_secs
 
+
 async def _send_whatsapp_message(to: str, message_body: str):
     if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
-        _log("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send message.")
+        _log("ERROR: WhatsApp API credentials not configured.")
         return
     url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
     headers = {
@@ -144,18 +151,13 @@ async def _send_whatsapp_message(to: str, message_body: str):
     _log(f"[WA] Sending WhatsApp message to: {to} | Body: {message_body}")
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(url, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            _log(f"[WA] SUCCESS: WhatsApp message sent to {to}. Response: {data}")
-            try:
-                # Record bot message id so status webhooks for this id are recognized as bot
-                msg_id = (data.get("messages") or [{}])[0].get("id")
-                _record_bot_msg_id(msg_id)
-            except Exception:
-                pass
+            resp = await client.post(url, headers=headers, json=payload, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            msg_id = (data.get("messages") or [{}])[0].get("id")
+            _record_bot_msg_id(msg_id)
         except Exception as e:
-            _log(f"[WA] ERROR: Failed to send WhatsApp message: {e}")
+            _log(f"[WA] ERROR sending message: {e}")
 
 async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "document.pdf"):
     if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
@@ -385,6 +387,33 @@ def chat(req: ChatRequest, request: Request):
     opening_context = None
     hint_canonical = None
 
+    # --- extra_keywords logic for routing/no-answer docs ---
+    extra_keywords: Optional[List[str]] = None
+    if sched_cls.get("has_policy_intent"):
+        extra_keywords = ["policy", "absence", "make-up", "makeup", "quota", "notice", "doctor’s certificate"]
+    else:
+        # Bias retrieval towards routing/no-answer docs for admin-handled categories
+        no_answer_intents = any([
+            sched_cls.get("availability_request"),
+            sched_cls.get("has_sched_verbs"),
+            sched_cls.get("admin_action_request"),
+            sched_cls.get("staff_contact_request"),
+            sched_cls.get("individual_homework_request"),
+            (sched_cls.get("placement_question") and not sched_cls.get("has_policy_intent")),
+        ])
+        if no_answer_intents:
+            extra_keywords = [
+                "AdminSchedulingRouting",
+                "NoAnswerMatrix",
+                "[NO_ANSWER]",
+                "routing rules",
+                "admin handled",
+                "homework feedback",
+                "pass to teacher",
+                "availability timetable",
+                "placement suitability",
+            ]
+
     if is_scheduling_action:
         opening_context = summarize_user_date_intent(req.message, lang)
         _log(f"Scheduling/action detected. Providing date hints only:\n{opening_context}")
@@ -417,11 +446,6 @@ def chat(req: ChatRequest, request: Request):
 
     # --- Reformulate query if needed ---
     rag_query = req.message
-    if sched_cls.get("has_policy_intent"):
-        extra_keywords = ["policy", "absence", "make-up", "makeup", "quota", "notice", "doctor’s certificate"]
-    else:
-        extra_keywords = None
-
     if is_followup_message(req.message):
         try:
             new_query = call_llm_rephrase(history_context, lang)
@@ -438,6 +462,7 @@ def chat(req: ChatRequest, request: Request):
             session_id=session_id,
             debug=SETTINGS.debug_kb,
             extra_context=opening_context,
+            extra_keywords=extra_keywords,
             hint_canonical=hint_canonical,
         )
     except Exception as e:
@@ -604,6 +629,36 @@ async def whatsapp_webhook_handler(request: Request):
                                 hint_canonical = None
                                 is_hours_intent = False
 
+                                # --- extra_keywords logic for WhatsApp webhook ---
+                                extra_keywords: Optional[List[str]] = None
+                                if is_scheduling_action:
+                                    # Still allow retrieval hints for routing docs to encourage [NO_ANSWER]
+                                    extra_keywords = [
+                                        "AdminSchedulingRouting",
+                                        "NoAnswerMatrix",
+                                        "[NO_ANSWER]",
+                                        "routing rules",
+                                        "admin handled",
+                                    ]
+                                elif sched_cls.get("has_policy_intent"):
+                                    extra_keywords = ["policy", "absence", "make-up", "makeup", "quota", "notice", "doctor’s certificate"]
+                                else:
+                                    no_answer_intents = any([
+                                        sched_cls.get("availability_request"),
+                                        sched_cls.get("admin_action_request"),
+                                        sched_cls.get("staff_contact_request"),
+                                        sched_cls.get("individual_homework_request"),
+                                        (sched_cls.get("placement_question") and not sched_cls.get("has_policy_intent")),
+                                    ])
+                                    if no_answer_intents:
+                                        extra_keywords = [
+                                            "AdminSchedulingRouting",
+                                            "NoAnswerMatrix",
+                                            "[NO_ANSWER]",
+                                            "routing rules",
+                                            "admin handled",
+                                        ]
+
                                 if is_scheduling_action:
                                     opening_context = summarize_user_date_intent(message_body, lang)
                                     hint_canonical = None
@@ -648,6 +703,7 @@ async def whatsapp_webhook_handler(request: Request):
                                         lang,
                                         debug=SETTINGS.debug_kb,
                                         extra_context=opening_context,
+                                        extra_keywords=extra_keywords,
                                         hint_canonical=hint_canonical,
                                     )
                                 except Exception as e:
