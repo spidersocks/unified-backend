@@ -361,90 +361,93 @@ router = APIRouter(tags=["LLM Chat (Bedrock KB)"])
 
 @router.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest, request: Request):
+    """Unified chat endpoint for both web and WhatsApp routing (RAG + rules)."""
     _log(f"/chat called: message={req.message!r}, language={req.language!r}, session_id={req.session_id!r}, debug={req.debug!r}")
     _log(f"Headers: {dict(request.headers)}")
+
+    # --- Session and language setup ---
     session_id = req.session_id or ("web:" + str(hash(request.client.host)))
     lang = req.language or get_language_code(req.message, accept_language_header=request.headers.get("accept-language"))
     _log(f"Detected language: {lang!r}")
 
-    # NEW: Scheduling precedence — detect scheduling/action first (treat ANY availability/pass-on as admin-handled)
+    # --- Scheduling / Opening-hours detection ---
     sched_cls = classify_scheduling_context(req.message, lang)
     is_scheduling_action = bool(
-        (sched_cls.get("has_sched_verbs") or sched_cls.get("availability_request") or sched_cls.get("admin_action_request")
-         or sched_cls.get("staff_contact_request") or sched_cls.get("individual_homework_request"))
+        (sched_cls.get("has_sched_verbs")
+         or sched_cls.get("availability_request")
+         or sched_cls.get("admin_action_request")
+         or sched_cls.get("staff_contact_request")
+         or sched_cls.get("individual_homework_request"))
         and not sched_cls.get("has_policy_intent")
     )
 
-    # Opening-hours routing with precedence
     is_hours_intent = False
     opening_context = None
     hint_canonical = None
 
     if is_scheduling_action:
-        # Do NOT inject opening-hours context. Provide neutral date hints only.
         opening_context = summarize_user_date_intent(req.message, lang)
-        hint_canonical = None
         _log(f"Scheduling/action detected. Providing date hints only:\n{opening_context}")
     else:
-        # Original opening-hours flow
         is_hours_intent, debug_intent = detect_opening_hours_intent(req.message, lang)
         if is_hours_intent:
-            intent_debug_local = debug_intent or {}
-            has_holiday_marker = bool(intent_debug_local.get("holiday_hits"))
+            has_holiday_marker = bool((debug_intent or {}).get("holiday_hits"))
             if has_holiday_marker or not is_general_hours_query(req.message, lang):
                 opening_context = extract_opening_context(req.message, lang)
-                hint_canonical = "opening_hours"
-                _log(f"Opening hours intent detected as SPECIFIC. Structured context for LLM:\n{opening_context}")
-            else:
-                opening_context = None
-                hint_canonical = "opening_hours"
-                _log("Opening hours intent detected as GENERAL. No system context injected; LLM will answer from policy docs.")
+                _log(f"Opening hours intent detected as SPECIFIC. Context:\n{opening_context}")
+            hint_canonical = "opening_hours"
+        else:
+            _log("No specific opening hours intent detected.")
 
-    use_history = (req.session_id is not None and not req.session_id.startswith("web:"))
+    # --- Chat history handling ---
+    use_history = req.session_id is not None and not req.session_id.startswith("web:")
+    history = []
     if use_history:
         try:
             history = get_recent_history(session_id, limit=6)
             _log(f"Fetched {len(history)} prior messages for session_id={session_id}")
         except Exception as e:
-            _log(f"ERROR retrieving DynamoDB history: {e}\n{traceback.format_exc()}")
-            history = []
+            _log(f"ERROR retrieving chat history: {e}\n{traceback.format_exc()}")
     else:
-        history = []
-        _log("Skipping DynamoDB chat history for this session/request.")
+        _log("Skipping chat history for this request.")
 
-    history_context = build_context_string(history, new_message=req.message, user_role="user", bot_role="bot", include_new=True)
+    history_context = build_context_string(
+        history, new_message=req.message, user_role="user", bot_role="bot", include_new=True
+    )
 
+    # --- Reformulate query if needed ---
     rag_query = req.message
-    extra_keywords = None
     if sched_cls.get("has_policy_intent"):
         extra_keywords = ["policy", "absence", "make-up", "makeup", "quota", "notice", "doctor’s certificate"]
+    else:
+        extra_keywords = None
+
     if is_followup_message(req.message):
         try:
-            rag_query = call_llm_rephrase(history_context, lang)
+            new_query = call_llm_rephrase(history_context, lang)
+            rag_query = new_query if new_query != "[NO_CONTEXT]" else req.message
             _log(f"Reformulated query: {rag_query!r}")
         except Exception as e:
-            _log(f"Failed to reformulate query, falling back to user message. Error: {e}")
-            rag_query = req.message
+            _log(f"Reformulation failed: {e}")
 
-    _log(f"Calling chat_with_kb with rag_query length={len(rag_query)}")
+    # --- Call main LLM through Bedrock ---
     try:
-        from_number = session_id
         answer, citations, debug_info = chat_with_kb(
             rag_query,
             lang,
-            session_id=from_number,
+            session_id=session_id,
             debug=SETTINGS.debug_kb,
             extra_context=opening_context,
             hint_canonical=hint_canonical,
         )
     except Exception as e:
         _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
-        # Only deterministic fallback for genuine opening-hours
         if is_hours_intent:
-            answer = compute_opening_answer(req.message, lang)
-            citations = []
-            debug_info = {"source": "deterministic_opening_hours_fallback"}
-            return ChatResponse(answer=answer, citations=citations, debug=debug_info)
+            return ChatResponse(
+                answer=compute_opening_answer(req.message, lang),
+                citations=[],
+                debug={"source": "deterministic_opening_hours_fallback"},
+            )
         raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
 
     _log(f"LLM raw answer: {answer!r}")
@@ -452,105 +455,82 @@ def chat(req: ChatRequest, request: Request):
     if debug_info:
         _log(f"LLM debug_info: {json.dumps(debug_info, ensure_ascii=False, indent=2)}")
 
-    # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
-    # ... inside chat(), after getting `answer, citations, debug_info` ...
+    # --- Guardrails / Answer suppression ---
+    if not citations or contains_apology_or_noinfo(answer):
+        _log("No citations found or noinfo phrase. Silencing output.")
+        block_hours_fallback = any([
+            sched_cls.get("has_sched_verbs"),
+            sched_cls.get("availability_request"),
+            sched_cls.get("admin_action_request"),
+            sched_cls.get("staff_contact_request"),
+            sched_cls.get("individual_homework_request"),
+            sched_cls.get("placement_question"),
+            _cites_admin_routing(citations),
+            _looks_like_leave_notification(rag_query),
+        ])
 
-# Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
-if not citations or contains_apology_or_noinfo(answer):
-    _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
-    block_hours_fallback = (
-        sched_cls.get("has_sched_verbs")
-        or sched_cls.get("availability_request")
-        or sched_cls.get("admin_action_request")
-        or sched_cls.get("staff_contact_request")
-        or sched_cls.get("individual_homework_request")
-        or sched_cls.get("placement_question")  # NEW: placement/judgement should not fall back to hours
-        or _cites_admin_routing(citations)
-        or _looks_like_leave_notification(rag_query)
-    )
-    if is_hours_intent and not block_hours_fallback:
-        answer = compute_opening_answer(req.message, lang)
-        citations = []
-        debug_info = {"source": "deterministic_opening_hours_fallback"}
-    else:
-        answer = ""
+        if is_hours_intent and not block_hours_fallback:
+            answer = compute_opening_answer(req.message, lang)
+            citations = []
+            debug_info = {"source": "deterministic_opening_hours_fallback"}
+        else:
+            answer = ""
 
+    # Fee-related silence test
     fee_words = ["tuition", "fee", "price", "cost"]
     payment_words = ["how to pay", "payment", "pay", "bank transfer", "fps", "account", "method"]
     if (
-        any(word in rag_query.lower() for word in fee_words)
-        and not any(word in rag_query.lower() for word in payment_words)
+        any(w in rag_query.lower() for w in fee_words)
+        and not any(w in rag_query.lower() for w in payment_words)
         and not likely_contains_fee(answer)
     ):
-        _log("Answer does not contain a fee amount for a tuition/fee query, silencing.")
+        _log("Answer does not contain a fee amount for a tuition/fee query. Silencing.")
         answer = ""
 
+    # --- Save updated chat history ---
     if use_history:
         try:
             now = time.time()
             save_message(session_id, "user", req.message, lang, now)
             save_message(session_id, "bot", answer or "", lang, now + 0.01)
             prune_history(session_id, keep=6)
-            _log(f"Saved and pruned DynamoDB history for session_id={session_id}")
+            _log(f"Saved/pruned DynamoDB history for session_id={session_id}")
         except Exception as e:
-            _log(f"ERROR saving/pruning DynamoDB history: {e}\n{traceback.format_exc()}")
+            _log(f"ERROR saving chat history: {e}\n{traceback.format_exc()}")
 
-    # Enrollment/Blooket markers
-    ENROLLMENT_FORM_MARKER = "[SEND_ENROLLMENT_FORM]"
-    BLOOKET_MARKER = "[SEND_BLOOKET_PDF]"
-    ENROLLMENT_FORM_DOCS = [
-        "/en/policies/enrollment_form.md",
-        "/zh-HK/policies/enrollment_form.md",
-        "/zh-CN/policies/enrollment_form.md",
-    ]
-    BLOOKET_DOCS = [
-        "/en/policies/blooket_instructions.md",
-        "/zh-HK/policies/blooket_instructions.md",
-        "/zh-CN/policies/blooket_instructions.md",
-    ]
-    ENROLLMENT_STRONG_PHRASES = {
-        "en": ["enrollment form", "registration form", "application form", "please fill out our enrollment form", "download the form", "attached form", "fill in the form", "submit the enrollment form", "send me the form"],
-        "zh-HK": ["入學表格", "報名表格", "申請表", "下載表格", "填好表格", "發送表格", "填寫入學表格"],
-        "zh-CN": ["入学表格", "报名表格", "申请表", "下载表格", "填好表格", "发送表格", "填写入学表格"]
-    }
-    BLOOKET_STRONG_PHRASES = {
-        "en": ["blooket", "blooket instructions", "online game", "how to play blooket", "the blooket pdf", "blooket guide"],
-        "zh-HK": ["blooket", "網上遊戲", "布魯克特", "blooket 指引", "blooket 教學", "blooket pdf"],
-        "zh-CN": ["blooket", "在线游戏", "布鲁克特", "blooket 指南", "blooket 教程", "blooket pdf"]
-    }
-
-    answer, marker = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
-    send_form = marker or (
-        _any_doc_cited(citations, ENROLLMENT_FORM_DOCS) and
-        _answer_has_strong_phrase(answer, lang, ENROLLMENT_STRONG_PHRASES) and
-        _answer_is_short(answer)
-    )
+    # --- Enrollment / Blooket document detection ---
+    answer, marker_enroll = extract_and_strip_marker(answer, ENROLLMENT_FORM_MARKER)
     answer, marker_blooket = extract_and_strip_marker(answer, BLOOKET_MARKER)
+    send_enrollment = marker_enroll or (
+        _any_doc_cited(citations, ENROLLMENT_FORM_DOCS)
+        and _answer_has_strong_phrase(answer, lang, {
+            "en": ["enrollment form", "registration form", "application form"],
+            "zh-HK": ["入學表格", "報名表格"],
+            "zh-CN": ["入学表格", "报名表格"],
+        })
+        and _answer_is_short(answer)
+    )
     send_blooket = marker_blooket or (
-        _any_doc_cited(citations, BLOOKET_DOCS) and
-        _answer_has_strong_phrase(answer, lang, BLOOKET_STRONG_PHRASES) and
-        _answer_is_short(answer)
+        _any_doc_cited(citations, BLOOKET_DOCS)
+        and _answer_has_strong_phrase(answer, lang, {
+            "en": ["blooket", "blooket instructions"],
+            "zh-HK": ["blooket", "布魯克特"],
+            "zh-CN": ["blooket", "布鲁克特"],
+        })
+        and _answer_is_short(answer)
     )
 
-    silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
-    is_followup = is_followup_message(req.message)
-    if not answer and silent_reason == "no_citations" and is_followup and history:
-        _log("Allowing context-only answer for followup message due to chat history, but LLM did not produce anything.")
-        answer = ""  # Do not send any placeholder/apology.
-
-    if send_form:
-        answer = (answer or "") + f"\n\nYou can download our enrollment form [here]({ENROLLMENT_FORM_URL})."
-        _log("Enrollment form marker/trigger detected: added PDF link to response.")
+    if send_enrollment:
+        answer += f"\n\nYou can download our enrollment form [here]({ENROLLMENT_FORM_URL})."
+        _log("Enrollment form marker triggered.")
     if send_blooket:
-        answer = (answer or "") + f"\n\nYou can download the Blooket instructions [here]({BLOOKET_PDF_URL})."
-        _log("Blooket marker/trigger detected: added Blooket PDF link to response.")
+        answer += f"\n\nYou can download the Blooket instructions [here]({BLOOKET_PDF_URL})."
+        _log("Blooket marker triggered.")
 
-    if not answer and silent_reason:
-        _log(f"LLM silenced answer. Reason: {silent_reason}")
-
+    # --- Final response ---
     answer = answer or ""
-    _log(f"Final answer length={len(answer)}. Returning response.")
-    return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
+    _log(f"Returning ChatResponse (len={len(answer)}).")
+    return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None)))
 
 # WhatsApp handler uses the same guardrails as above.
 @router.post("/whatsapp_webhook")
