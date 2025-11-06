@@ -469,7 +469,7 @@ def chat(req: ChatRequest, request: Request):
         _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
         if is_hours_intent:
             return ChatResponse(
-                answer=compute_opening_answer(req.message, lang),
+                answer=compute_opening_answer(message_body, lang),
                 citations=[],
                 debug={"source": "deterministic_opening_hours_fallback"},
             )
@@ -731,7 +731,7 @@ async def whatsapp_webhook_handler(request: Request):
                                         or _looks_like_leave_notification(rag_query)
                                     )
                                     if is_hours_intent and not block_hours_fallback:
-                                        answer = compute_opening_answer(req.message, lang)
+                                        answer = compute_opening_answer(message_body, lang)
                                         citations = []
                                         debug_info = {"source": "deterministic_opening_hours_fallback"}
                                     else:
