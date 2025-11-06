@@ -495,7 +495,7 @@ def chat(req: ChatRequest, request: Request):
         ])
 
         if is_hours_intent and not block_hours_fallback:
-            answer = compute_opening_answer(req.message, lang)
+            answer = compute_opening_answer(message_body, lang)
             citations = []
             debug_info = {"source": "deterministic_opening_hours_fallback"}
         else:
