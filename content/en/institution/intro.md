@@ -3,16 +3,19 @@ language: en
 type: institution
 canonical: intro
 folder: institution
-aliases: about; about us; institution introduction; why choose us; why choose Little Scholars; Little Scholars intro; overview; contact; hours; courses; programs
+aliases: about; about us; institution introduction; why choose us; why choose Little Scholars; Little Scholars intro; overview; contact; hours; courses; programs; registration; registered school; under education ordinance; school registration; are you a registered school
 ---
 # Institution Introduction
 
 Institution: Little Scholars Education Centre
 
-Founding philosophy:
+**Registration & Licensing:**  
+Yes, we are a registered school under the Education Ordinance of Hong Kong.
+
+Founding philosophy:  
 Learn To Ignite the fun that you embrace in learning
 
-Educational philosophy:
+Educational philosophy:  
 In 1997, our two founders decided to put their experiences in tutoring children throughout their university years into something more profound. Looking at how some children struggle to revise for their spelling tests and completing their comprehension, they looked for ways to help their students learn in an efficient and pro-active manner. This is how Little Scholars Creative Workshop was founded. Throughout the years, they have strived to provide up-to-date and quality courses to help children learn. With FEAST in mind, they have developed different courses and ways of teaching to help feed hungry learners on their journey to endeavour knowledge.
 
 Practical summary (quick answers)

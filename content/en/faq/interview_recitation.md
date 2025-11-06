@@ -3,9 +3,7 @@ language: en
 type: faq
 canonical: InterviewRecitation
 folder: faq
-aliases: interview class; interview prep; school interview; P1 interview; recitation
-  class; speech festival; poem; verse; Cantonese recitation; Putonghua recitation;
-  speech training; public speaking
+aliases: interview class; interview prep; school interview; P1 interview; recitation class; speech festival; poem; verse; Cantonese recitation; Putonghua recitation; speech training; public speaking; entrance exam class; entrance special class; 入學試特別班
 ---
 # Interview & Recitation classes (FAQ)
 
@@ -21,3 +19,8 @@ aliases: interview class; interview prep; school interview; P1 interview; recita
 
 For details and scheduling, please contact our staff:  
 Phone +852 2537 9519; WhatsApp +852 5118 2819; Email info@decoders-ls.com
+
+---
+
+Q: Do you offer a special entrance exam class? (入學試特別班)  
+A: [NO_ANSWER]

@@ -62,6 +62,13 @@ A: HK$3,200 for 8×45m; HK$4,500 for 10×1h.
 
 ---
 
+## Brush Up Classes
+
+Q: When and how much are the brush up classes?  
+A: Brush up classes will be recommended by Directors as needed, and are billed at the regular course fee. Attendance at a brush up class is deducted from paid course credits.
+
+---
+
 ## Private Classes — pricing (Assistant Only)
 
 Q: How much is private tuition? / 1:1 fee? / Private math price? / One‑to‑one English fee?  
@@ -70,6 +77,16 @@ A: [NO_ANSWER]
 Assistant notes (do not send to parents)
 - Private/1:1 quotations and scheduling are admin‑handled.  
 - Do NOT tell parents to “contact our staff”. Admin will follow up via this WhatsApp.
+
+---
+
+## Payment
+
+Q: Shall I pay the fee first and send the form to you afterwards?  
+A: OK
+
+Q: Can I pay the fee in stages or make a partial payment?  
+A: Since our courses are designed as complete packages, we do not accept partial payment.
 
 ---
 
