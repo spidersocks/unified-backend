@@ -30,3 +30,6 @@ A: Use the standard enrolment flow: contact us → short diagnostic assessment �
 
 Q: Do you teach math in Chinese / English?  
 A: Yes. We run math classes in English, Cantonese or Putonghua (Mandarin) depending on teacher and group needs.
+
+Q: How much is Clevercal Math?
+A: HK$3,500–$4,500 for 10×45min; HK$4,500–$6,000 for 10×1hr, depending on level.

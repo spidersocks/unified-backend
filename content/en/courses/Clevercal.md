@@ -33,5 +33,8 @@ Our Clevercal program builds strong numerical foundations and problem‑solving 
 - Follow the standard enrolment process (short diagnostic assessment → placement → timetable & payment). See our enrollment policy for details.
 
 ### Fees & scheduling
-- Refer to tuition listing or contact us for up‑to‑date fees and available time slots.
 
+- Group lessons: HK$3,500–$4,500 for 10×45min; HK$4,500–$6,000 for 10×1hr, depending on level.
+- Private/1:1: [NO_ANSWER] (quoted by admin only).
+
+Refer to tuition listing or contact us for the latest fees and available time slots.
