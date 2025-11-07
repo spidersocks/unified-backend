@@ -38,3 +38,6 @@ htmlcov/
 # Database Files (if using SQLite locally)
 *.sqlite
 *.sqlite3
+
+# Metadata files
+content/**/*.metadata.json

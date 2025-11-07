@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """
-Debug helper for the 5pm daily admin digest (Option B schema: PK=date, SK=session_id#ts).
-
-Run from repo root with:
-  PYTHONPATH=. python scripts/debug_digest.py --help
+Debug helper for the 5pm daily admin digest. Lets you seed test data, preview, and (optionally) send digests.
+Extended for edge-case topic labeling tests.
 """
 import os
 import sys
@@ -17,6 +15,72 @@ import pytz
 def parse_bool(s: str) -> bool:
     return str(s).lower() in ("1", "true", "yes", "y", "on")
 
+def test_edge_labeling():
+    """
+    Tests the topic labeling logic of admin_digest._topic_from_flags on edge-case messages.
+    Prints a table of test input, flags, and the derived label.
+    """
+    print("\n[EDGE CASE LABELING TESTS]")
+    try:
+        from llm import intent
+        from llm import admin_digest
+    except Exception as e:
+        print(f"[ERR] Failed to import: {e}", file=sys.stderr); return
+
+    test_msgs = [
+        # English - availability
+        ("Is any class available after assessment for Owen?", "en"),
+        # English - leave/reschedule
+        ("Please cancel next Friday 3pm class.", "en"),
+        # English - staff contact
+        ("Can I schedule a call with the director?", "en"),
+        # English - placement/policy explicit
+        ("My son is in K1. Is this class too young for him? What is your placement policy?", "en"),
+        # EN - pass-on but no request
+        ("Please tell the teacher she is allergic to peanuts.", "en"),
+        # EN - individualized homework
+        ("He can't say G and J properly. How should I help?", "en"),
+        # EN - generic fee
+        ("How much does English class cost?", "en"),
+        # EN - policy (should say Policy question)
+        ("What is your make-up lesson policy?", "en"),
+        # EN - polite thanks only (should be None/ignored)
+        ("Thank you!", "en"),
+
+        # Chinese (zh-HK) - leave notification
+        ("星期三請假，唔好意思", "zh-HK"),
+        # Chinese (zh-HK) - admin pass-on
+        ("請幫我轉告老師：Oscar 今天咳嗽。", "zh-HK"),
+        # Chinese (zh-HK) - schedule inquiry
+        ("下星期有冇得補課？", "zh-HK"),
+        # Chinese (zh-HK) - homework
+        ("佢唔識讀 '狗' 同 '球'", "zh-HK"),
+        # Chinese (zh-CN) - placement
+        ("我家女儿是K3，这班是否太小？", "zh-CN"),
+        # Chinese (zh-CN) - policy
+        ("请问补课政策", "zh-CN"),
+    ]
+
+    results = []
+    for msg, lang in test_msgs:
+        try:
+            flags = intent.classify_scheduling_context(msg, lang)
+            label = admin_digest._topic_from_flags(flags)
+            # Keep table neat: show minimal JSON for flags
+            sig_flags = {k:v for k,v in flags.items() if v}
+            results.append((msg, lang, sig_flags, label or "—"))
+        except Exception as e:
+            results.append((msg, lang, "ERR", str(e)))
+
+    # Print a readable table
+    print("{:<38} | {:<6} | {:<45} | {:<25}".format("Input", "Lang", "Active Flags", "Topic Label"))
+    print("-"*120)
+    for msg, lang, flags, label in results:
+        print("{:<38} | {:<6} | {:<45} | {:<25}".format(
+            msg[:36] + ("…" if len(msg) > 36 else ""), lang, json.dumps(flags, ensure_ascii=False), label)
+        )
+    print("[Done edge-case topic labeling tests]\n")
+
 def main():
     # Load .env early so AWS_REGION and creds are available to boto3 when running standalone
     try:
@@ -27,11 +91,11 @@ def main():
 
     ap = argparse.ArgumentParser(description="Admin Digest (5pm roundup) debug tool")
     ap.add_argument("--use-ddb", default=os.environ.get("USE_ADMIN_DIGEST_DDB", "true"),
-                    help="Use DynamoDB (true/false). Default reads from USE_ADMIN_DIGEST_DDB env.")
+                    help="Use DynamoDB (true/false).")
     ap.add_argument("--table", default=os.environ.get("ADMIN_DIGEST_TABLE", "AdminDigestPending"),
                     help="DynamoDB table name (Option B schema).")
     ap.add_argument("--region", default=os.environ.get("AWS_REGION"),
-                    help="AWS region to use (sets AWS_REGION for this run).")
+                    help="AWS region to use.")
     ap.add_argument("--seed", action="store_true", help="Seed sample pending items for today.")
     ap.add_argument("--seed-count", type=int, default=2, help="How many sample items to seed (default 2).")
     ap.add_argument("--list", action="store_true", help="List unresolved items for today (dedup by session, latest only).")
@@ -43,16 +107,15 @@ def main():
     ap.add_argument("--resolve", default=None, help="Resolve all pending items for the given session_id (today).")
     ap.add_argument("--when", action="store_true", help="Print seconds until the next scheduled digest run.")
     ap.add_argument("--tz", default=os.environ.get("ADMIN_DIGEST_TZ", "Asia/Hong_Kong"), help="Timezone label (for --when).")
+    ap.add_argument("--edge-labels", action="store_true", help="Run edge-case topic labeling tests.")
     args = ap.parse_args()
 
-    # Configure environment BEFORE importing modules
     os.environ["USE_ADMIN_DIGEST_DDB"] = "true" if parse_bool(args.use_ddb) else "false"
     if args.table:
         os.environ["ADMIN_DIGEST_TABLE"] = args.table
     if args.region:
         os.environ["AWS_REGION"] = args.region
 
-    # Lazy import after env is set
     try:
         from llm import admin_digest
         from llm.config import SETTINGS
@@ -60,9 +123,11 @@ def main():
         print(f"[ERR] Failed to import admin_digest/SETTINGS: {type(e).__name__}: {e}", file=sys.stderr)
         sys.exit(2)
 
-    # Show effective region/table for sanity
     eff_region = os.environ.get("AWS_REGION") or SETTINGS.aws_region
     print(f"[INFO] Using table={os.environ.get('ADMIN_DIGEST_TABLE')} region={eff_region} use_ddb={parse_bool(args.use_ddb)}")
+
+    if args.edge_labels:
+        test_edge_labeling()
 
     if args.when:
         try:
@@ -74,7 +139,6 @@ def main():
         except Exception as e:
             print(f"[ERR] when: {e}", file=sys.stderr)
 
-    # Optionally seed sample items
     if args.seed:
         now = time.time()
         samples = [
@@ -92,7 +156,6 @@ def main():
             admin_digest.add_pending(session_id=sid, message=msg, lang=lang, flags=flags, ts=ts)
         print("[SEED] Done.")
 
-    # Resolve for a specific session if requested
     if args.resolve:
         try:
             admin_digest.resolve_session(args.resolve)
@@ -100,7 +163,6 @@ def main():
         except Exception as e:
             print(f"[ERR] resolve: {e}", file=sys.stderr)
 
-    # List unresolved (dedup by session, latest only)
     items = None
     if args.list or args.preview or args.send_now:
         try:
@@ -118,7 +180,6 @@ def main():
         except Exception as e:
             print(f"[ERR] list/preview: {e}", file=sys.stderr)
 
-    # Send now (WhatsApp)
     if args.send_now:
         try:
             if items is None:
