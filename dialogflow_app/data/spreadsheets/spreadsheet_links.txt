@@ -1,3 +1,0 @@
-COURSE_DATA_SHEET_URL=https://docs.google.com/spreadsheets/d/e/2PACX-1vQBTgqFJHXubrz7YhGlidiSAl4L709Gp1U-06rr4zenUfiWGjPaG9PHlem2H926_7OFvbNKkFbhTNHP/pub?gid=1846942423&single=true&output=csv
-
-INFO_SHEET_CATALOG_URL=https://docs.google.com/spreadsheets/d/e/2PACX-1vTtHUs7MF3zb0wWwKpCxjvYDJ1V7yVwzGN1Lk2w8Lp8UGHCxVtEZtTq0e4zpevEiBhrSbffPsBUIYBK/pub?output=csv
