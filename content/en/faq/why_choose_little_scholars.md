@@ -3,7 +3,7 @@ language: en
 type: faq
 canonical: WhyChooseLittleScholars
 folder: faq
-aliases: why choose us; why little scholars; strengths; teacher qualifications; learning approach; bilingual; play-based
+aliases: why choose us; why little scholars; strengths; teacher qualifications; learning approach; bilingual; play-based; value vs cheaper; cheaper competitor
 ---
 # Why choose Little Scholars Creative Workshop?
 
@@ -18,6 +18,12 @@ Q: What makes Little Scholars different?
 
 Q: Are your teachers qualified?  
 A: Yes. All teachers hold relevant degrees and are at least bilingual. We have native speakers in English, Cantonese and Putonghua (Mandarin). Teachers attend ongoing professional development.
+
+Q: Do your Mandarin teachers have standard pronunciation?  
+A: Yes. Putonghua teachers hold the PSC (Putonghua Proficiency Test) certificate and use clear, standard pronunciation.
+
+Q: How do you compare with cheaper centres?  
+A: We design lessons by individual level, keep classes small and interactive, and provide targeted feedback. While our fees may be higher, families choose us for the stronger, more visible learning progress.
 
 Q: How do you track student progress?  
 A: Teachers provide regular feedback and progress notes to parents. We use short assessments and classroom observations to adjust pacing, group placement, and individualized activities.

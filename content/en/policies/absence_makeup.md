@@ -3,7 +3,7 @@ language: en
 type: policy
 canonical: absence_makeup
 folder: policies
-aliases: absence; make-up; makeup; make up lesson; quota; admin fee; HK$100; notice; sick leave; holiday; personal holiday; travel; public holiday; centre closure; severe weather; typhoon; black rain; T8
+aliases: absence; make-up; makeup; make up lesson; quota; admin fee; HK$100; notice; sick leave; holiday; personal holiday; travel; public holiday; centre closure; severe weather; typhoon; black rain; T8; transfer class; move class; change class; reschedule; how to arrange makeup
 category: makeup
 ---
 # Absence & Make-up Policy
@@ -17,6 +17,11 @@ Assistant Notes (do not send to parents)
 - Public holidays/centre closures (HK public holidays; Black Rain; Typhoon No. 8+): classes are suspended/arranged by us and do NOT consume your make‑up quota.
 - Exceeding quota: HK$100 administrative fee per additional make‑up class.
 - Make‑ups must be taken within the course period; they cannot be carried over to the next term.
+
+## How to arrange a make‑up or class transfer (policy guidance)
+- Inform us in advance and in writing (WhatsApp/email).  
+- We will check schedules and arrange the nearest suitable option based on availability and level.  
+- Confirmations are handled by staff; please do not make or confirm bookings via chat.
 
 ## Absence and Make‑up policy
 - Notice: If your child cannot attend a lesson, please notify us at least four hours before the lesson. If we are not informed, the lesson will be charged.

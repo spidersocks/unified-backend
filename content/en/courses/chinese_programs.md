@@ -7,6 +7,9 @@ aliases: Chinese programs; Chinese course; regular Chinese class; regular Chines
 ---
 # Chinese Language Programs
 
+Age coverage  
+Typical range is approximately 2–12 years old (PN → P6). Placement ensures children study at the right level.
+
 ### Overview  
 A comprehensive curriculum for students aged 2-12, focusing on language comprehension, expression, reading development, and writing skills. Each course emphasizes progressive learning aligned with traditional values.
 

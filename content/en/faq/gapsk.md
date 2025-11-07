@@ -3,7 +3,7 @@ language: en
 type: faq
 canonical: GAPSK
 folder: faq
-aliases: GAPSK; Putonghua exam; Putonghua assessment; 普通话; 普通話; GAPSK levels; GAPSK beginner; GAPSK intermediate; GAPSK advanced; Mandarin assessment; kindergarten Mandarin; primary Mandarin; interview prep
+aliases: GAPSK; Putonghua exam; Putonghua assessment; 普通话; 普通話; GAPSK levels; GAPSK beginner; GAPSK intermediate; GAPSK advanced; Mandarin assessment; kindergarten Mandarin; primary Mandarin; interview prep; AP Chinese
 ---
 # GAPSK (Putonghua) — Overview & Course Guide
 
@@ -96,6 +96,10 @@ Q: What language do teachers use in class?
 A: Teachers conduct lessons in Mandarin throughout, providing explanations or brief clarifications in Cantonese or English only when necessary for learning support.
 
 ---
+
+# Related exam preparation
+
+- We also offer AP Chinese exam preparation (curriculum‑aligned reading/listening/speaking/writing and exam strategies).
 
 # GAPSK Exam Date & Arrangements
 

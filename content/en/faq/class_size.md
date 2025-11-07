@@ -19,4 +19,5 @@ A: Yes. We believe small groups provide more attention for each child and a bett
 Q: What's the maximum class size?  
 A: Group classes are normally capped at 4–6 students; some upper primary groups may have up to 8.
 
----
+Q: How long is a lesson and how often are classes?  
+A: Typical durations are 45 minutes (PN–K1) and 60 minutes (K2+). Most classes run once per week.

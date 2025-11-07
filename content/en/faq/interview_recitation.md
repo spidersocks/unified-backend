@@ -3,7 +3,7 @@ language: en
 type: faq
 canonical: InterviewRecitation
 folder: faq
-aliases: interview class; interview prep; school interview; P1 interview; recitation class; speech festival; poem; verse; Cantonese recitation; Putonghua recitation; speech training; public speaking; entrance exam class; entrance special class; 入學試特別班
+aliases: interview class; interview prep; school interview; P1 interview; recitation class; speech festival; poem; verse; Cantonese recitation; Putonghua recitation; speech training; public speaking; entrance exam class; entrance special class; 入學試特別班; 小一面試
 ---
 # Interview & Recitation classes (FAQ)
 
@@ -11,6 +11,9 @@ aliases: interview class; interview prep; school interview; P1 interview; recita
 - We offer tailored interview prep based on your child’s ability and the target school’s interview format/content.
 - Typical coverage: self-introduction, daily-life Q&A, picture description, etiquette, follow-up questions, on-the-spot responses and confidence.
 - Arrangements: a short diagnostic/tryout first, then we advise session count and timetable. Delivery in Putonghua or Cantonese.
+
+Q: Do you provide P1 interview preparation?  
+A: Yes. We run P1 interview prep tailored to target‑school formats. After a short assessment, we’ll recommend a plan.
 
 ### Recitation coaching
 - We offer dedicated recitation classes. Please share the competition/event name, your selected piece, and a short current video of your child’s recitation.

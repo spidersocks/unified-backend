@@ -3,7 +3,7 @@ language: en
 type: institution
 canonical: intro
 folder: institution
-aliases: about; about us; institution introduction; why choose us; why choose Little Scholars; Little Scholars intro; overview; contact; hours; courses; programs; registration; registered school; under education ordinance; school registration; are you a registered school
+aliases: about; about us; institution introduction; why choose us; why choose Little Scholars; Little Scholars intro; overview; contact; hours; courses; programs; registration; registered school; under education ordinance; school registration; are you a registered school; online class; Zoom class; where are you located
 ---
 # Institution Introduction
 
@@ -22,15 +22,16 @@ Practical summary (quick answers)
 - Age range: PN (pre‑nursery) through primary (P6).  
 - Languages: English, Cantonese, and Putonghua (Mandarin) supported; lessons are bilingual where helpful.  
 - Class size: Small groups (typically 4–6) to allow targeted, individualized teaching.  
-- Lesson lengths: PN–K1 ≈ 45 minutes; K2 and above ≈ 60 minutes.  
+- Lesson lengths: PN–K1 ≈ 45 minutes; K2 and above ≈ 60 minutes (weekly in most cases).  
+- Delivery: In‑person at our Hong Kong centre; Zoom lessons can be arranged when suitable.  
 - Progress tracking: Regular teacher feedback, short assessments, and placement adjustments when needed.
 
 What to bring
-- Socks (must be worn at all times), pencil case with 2 pencils and an eraser, packet of tissues, small bottle of hand sanitizer, water bottle, and 2 spare face masks.
+- Socks (must be worn at all times), pencil case with 2 pencils and an eraser, a small notebook, packet of tissues, small bottle of hand sanitizer, water bottle, and 2 spare face masks.
 
 Operation hours
 - Monday–Friday: 09:00–18:00  
 - Saturday: 09:00–16:00
 
-Parent waiting and contact
-- Parents/guardians may wait outside while classes run. For specific enquiries, please use the contact page.
+Parent attendance
+- Except for Playgroup, children attend class independently. Teachers provide regular feedback after lessons (see Parent/Class Attendance Policy).

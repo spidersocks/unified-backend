@@ -6,6 +6,11 @@ folder: courses
 ---
 # Course Catalog
 
+General format
+- Typical lesson length: 45 minutes (PN–K1); 60 minutes (K2+).  
+- Frequency: once per week is standard (unless a different plan is advised after assessment).  
+- Instruction language options vary by course (English, Cantonese, Putonghua).
+
 We currently offer programs in the following areas:
 
 - Playgroups (幼兒班)
