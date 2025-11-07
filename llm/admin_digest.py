@@ -16,8 +16,8 @@ from llm.opening_hours import is_hk_public_holiday
 
 _TZ = pytz.timezone(SETTINGS.admin_digest_tz)
 
-# DynamoDB setup (optional; will fallback to in-memory if not available)
-_USE_DDB = os.environ.get("USE_ADMIN_DIGEST_DDB", "true").lower() in ("1","true","yes")
+# DynamoDB setup (Option B schema: PK=date (S), SK=sk (S) where sk=f"{session_id}#{ts}")
+_USE_DDB = os.environ.get("USE_ADMIN_DIGEST_DDB", "true").lower() in ("1", "true", "yes")
 region = os.environ.get("AWS_REGION", SETTINGS.aws_region)
 _dynamodb = None
 _table = None
@@ -62,10 +62,18 @@ def _topic_from_flags(flags: Dict[str, Any]) -> Optional[str]:
 def add_pending(session_id: str, message: str, lang: str, flags: Dict[str, Any], ts: Optional[float] = None):
     """
     Record a pending unanswered parent message for daily digest.
+
+    Option B schema (DynamoDB):
+    - PK: date (S) -> 'YYYY-MM-DD' (HK time)
+    - SK: sk   (S) -> f"{session_id}#{ts_int}"
+    - Attributes: session_id, ts, message, lang, flags, resolved
     """
     ts_int = int(ts or time.time())
+    day = _today_str_hk()
+    sk = f"{session_id}#{ts_int}"
     item = {
-        "date": _today_str_hk(),
+        "date": day,
+        "sk": sk,
         "session_id": session_id,
         "ts": ts_int,
         "message": message or "",
@@ -86,6 +94,8 @@ def add_pending(session_id: str, message: str, lang: str, flags: Dict[str, Any],
 def resolve_session(session_id: str):
     """
     Mark all pending items for this session_id (for today) as resolved.
+
+    Efficient with Option B by querying date partition where SK begins_with f"{session_id}#".
     """
     today = _today_str_hk()
     tbl = _get_table()
@@ -95,17 +105,20 @@ def resolve_session(session_id: str):
             _MEM[k]["resolved"] = True
         return
     try:
-        # Scan just today's items for the session_id
-        resp = tbl.scan(
-            FilterExpression=Attr("date").eq(today) & Attr("session_id").eq(session_id) & Attr("resolved").eq(False)
+        # Query today's partition with a begins_with on SK (session prefix)
+        resp = tbl.query(
+            KeyConditionExpression=Key("date").eq(today) & Key("sk").begins_with(f"{session_id}#"),
+            FilterExpression=Attr("resolved").eq(False),
         )
         items = resp.get("Items", [])
+        if not items:
+            return
         with tbl.batch_writer() as batch:
             for it in items:
                 it["resolved"] = True
                 batch.put_item(Item=it)
     except Exception as e:
-        _log(f"DDB resolve_session scan failed: {type(e).__name__}: {e}")
+        _log(f"DDB resolve_session query failed: {type(e).__name__}: {e}")
         # Fallback: mark mem
         keys = [k for k in _MEM.keys() if k[0] == session_id]
         for k in keys:
@@ -114,6 +127,7 @@ def resolve_session(session_id: str):
 def list_unresolved_today(limit: int = 50) -> List[Dict[str, Any]]:
     """
     Return latest unresolved per session for today (deduplicated by session_id, keeping the latest ts).
+    Uses Option B partition key (date) for a Query, filtering on resolved=False.
     """
     today = _today_str_hk()
     tbl = _get_table()
@@ -122,12 +136,21 @@ def list_unresolved_today(limit: int = 50) -> List[Dict[str, Any]]:
         items = [v for v in _MEM.values() if v.get("date") == today and not v.get("resolved")]
     else:
         try:
-            resp = tbl.scan(
-                FilterExpression=Attr("date").eq(today) & Attr("resolved").eq(False)
-            )
-            items = resp.get("Items", [])
+            last_key = None
+            while True:
+                kwargs = {
+                    "KeyConditionExpression": Key("date").eq(today),
+                    "FilterExpression": Attr("resolved").eq(False),
+                }
+                if last_key:
+                    kwargs["ExclusiveStartKey"] = last_key
+                resp = tbl.query(**kwargs)
+                items.extend(resp.get("Items", []))
+                last_key = resp.get("LastEvaluatedKey")
+                if not last_key:
+                    break
         except Exception as e:
-            _log(f"DDB scan failed, fallback to memory: {e}")
+            _log(f"DDB query failed, fallback to memory: {e}")
             items = [v for v in _MEM.values() if v.get("date") == today and not v.get("resolved")]
 
     # Deduplicate by session_id -> pick latest ts
@@ -186,27 +209,27 @@ def _format_digest_body(items: List[Dict[str, Any]]) -> str:
 
 def _next_run_delay_seconds(now: datetime) -> float:
     """
-    Compute seconds until the next 17:00 local time on an eligible day (Mon–Sat, not HK public holiday).
+    Compute seconds until the next configured digest time on an eligible day (Mon–Sat, non–HK public holiday).
     """
-    # Start from 'now' in local tz
     cur = now.astimezone(_TZ)
-    for i in range(0, 8):  # search up to a week ahead
+    for i in range(0, 8):
         candidate = cur + timedelta(days=i)
         weekday = candidate.weekday()  # Mon=0 ... Sun=6
         is_eligible_day = weekday <= 5  # Mon-Sat
-        # Build 17:00 on that day
-        target = candidate.replace(hour=SETTINGS.admin_digest_hour_local, minute=SETTINGS.admin_digest_minute_local, second=0, microsecond=0)
+        target = candidate.replace(
+            hour=SETTINGS.admin_digest_hour_local,
+            minute=SETTINGS.admin_digest_minute_local,
+            second=0,
+            microsecond=0,
+        )
         if i == 0 and target <= cur:
-            # Today's 17:00 already passed, try next day
             continue
         if not is_eligible_day:
             continue
         if is_hk_public_holiday(target):
             continue
-        # Found next run time
         return (target - cur).total_seconds()
-    # Fallback: 24 hours
-    return 24 * 3600
+    return 24 * 3600  # fallback
 
 # Simple single-process sent-flag (resets daily)
 _SENT_FOR_DAY: Optional[str] = None
@@ -224,11 +247,9 @@ async def digest_scheduler_loop():
             _log(f"Next digest in {int(delay)}s")
             await asyncio.sleep(delay)
 
-            # Double-check day eligibility and prevent duplicates within the same process
             day_key = _today_str_hk()
             if _SENT_FOR_DAY == day_key:
                 _log("Digest already sent for today (process flag). Skipping.")
-                # Sleep a day minus a small offset
                 await asyncio.sleep(23 * 3600)
                 continue
 
@@ -245,15 +266,11 @@ async def digest_scheduler_loop():
                 _SENT_FOR_DAY = day_key
             else:
                 _log("Digest send failed; will retry at next cycle.")
-                # do not set _SENT_FOR_DAY so it can try next cycle/day
-
-            # After sending, we DO NOT auto-resolve items; admin will follow up.
         except asyncio.CancelledError:
             _log("Scheduler loop cancelled.")
             break
         except Exception as e:
             _log(f"Scheduler error: {e}")
-            # Backoff a bit then recompute next run
             await asyncio.sleep(60)
 
 def start_scheduler_background():
