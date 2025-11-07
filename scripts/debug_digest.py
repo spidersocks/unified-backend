@@ -4,26 +4,7 @@ Debug helper for the 5pm daily admin digest (Option B schema: PK=date, SK=sessio
 
 Run from repo root with:
   PYTHONPATH=. python scripts/debug_digest.py --help
-
-Common usages
-- Pure in-memory smoke test (no AWS/DynamoDB):
-    PYTHONPATH=. python scripts/debug_digest.py --use-ddb=false --seed --preview
-
-- Seed a couple of pending items into DynamoDB, then preview:
-    PYTHONPATH=. python scripts/debug_digest.py --use-ddb=true --table AdminDigestPending --seed --preview
-
-- Send a one-off WhatsApp digest now (requires WA Cloud API creds and recent 24h session or a template):
-    PYTHONPATH=. python scripts/debug_digest.py --send-now
-    # or override the director number for testing:
-    PYTHONPATH=. python scripts/debug_digest.py --send-now --director-number +85251180001
-
-- Resolve all pendings for a specific chat (today):
-    PYTHONPATH=. python scripts/debug_digest.py --resolve +85251180001 --list
-
-- Show seconds until the next scheduled digest (Mon–Sat @ configured time, excluding HK public holidays):
-    PYTHONPATH=. python scripts/debug_digest.py --when
 """
-
 import os
 import sys
 import json
@@ -37,11 +18,20 @@ def parse_bool(s: str) -> bool:
     return str(s).lower() in ("1", "true", "yes", "y", "on")
 
 def main():
+    # Load .env early so AWS_REGION and creds are available to boto3 when running standalone
+    try:
+        from dotenv import load_dotenv  # type: ignore
+        load_dotenv()
+    except Exception:
+        pass
+
     ap = argparse.ArgumentParser(description="Admin Digest (5pm roundup) debug tool")
     ap.add_argument("--use-ddb", default=os.environ.get("USE_ADMIN_DIGEST_DDB", "true"),
                     help="Use DynamoDB (true/false). Default reads from USE_ADMIN_DIGEST_DDB env.")
     ap.add_argument("--table", default=os.environ.get("ADMIN_DIGEST_TABLE", "AdminDigestPending"),
                     help="DynamoDB table name (Option B schema).")
+    ap.add_argument("--region", default=os.environ.get("AWS_REGION"),
+                    help="AWS region to use (sets AWS_REGION for this run).")
     ap.add_argument("--seed", action="store_true", help="Seed sample pending items for today.")
     ap.add_argument("--seed-count", type=int, default=2, help="How many sample items to seed (default 2).")
     ap.add_argument("--list", action="store_true", help="List unresolved items for today (dedup by session, latest only).")
@@ -59,6 +49,8 @@ def main():
     os.environ["USE_ADMIN_DIGEST_DDB"] = "true" if parse_bool(args.use_ddb) else "false"
     if args.table:
         os.environ["ADMIN_DIGEST_TABLE"] = args.table
+    if args.region:
+        os.environ["AWS_REGION"] = args.region
 
     # Lazy import after env is set
     try:
@@ -67,6 +59,10 @@ def main():
     except Exception as e:
         print(f"[ERR] Failed to import admin_digest/SETTINGS: {type(e).__name__}: {e}", file=sys.stderr)
         sys.exit(2)
+
+    # Show effective region/table for sanity
+    eff_region = os.environ.get("AWS_REGION") or SETTINGS.aws_region
+    print(f"[INFO] Using table={os.environ.get('ADMIN_DIGEST_TABLE')} region={eff_region} use_ddb={parse_bool(args.use_ddb)}")
 
     if args.when:
         try:
@@ -81,7 +77,6 @@ def main():
     # Optionally seed sample items
     if args.seed:
         now = time.time()
-        # Build a small pool of sample messages/topics
         samples = [
             ("+85251180001", "Hi, is there any class available Tue 4–5pm for K1?", "en", {"availability_request": True}),
             ("+85251180002", "請幫我轉告老師：Oscar 今天咳嗽。", "zh-HK", {"admin_action_request": True}),
@@ -90,7 +85,7 @@ def main():
             ("+85251180005", "We can’t attend on 11/5. Sorry!", "en", {"has_sched_verbs": True, "has_date_time": True}),
         ]
         count = max(1, min(args.seed_count, len(samples)))
-        print(f"[SEED] Adding {count} pending item(s) (use-ddb={parse_bool(args.use_ddb)}, table={args.table})")
+        print(f"[SEED] Adding {count} pending item(s)")
         for i in range(count):
             sid, msg, lang, flags = samples[i]
             ts = now - (120 * (count - i))
