@@ -20,5 +20,5 @@ folder: courses
 - English 英语课程: $5,200/ 8×45分；$7,500–$8,500/ 10×1小时
 - Clevercal (Math): $3,500–$4,500/ 10×45分；$4,500–$6,000/ 10×1小时
 - Chinese 中文课程: $3,200/ 8×45分；$4,500/ 10×1小时
-- Private class 私人课: 请与职员联络
+- Private class 私人课: [NO_ANSWER]
 

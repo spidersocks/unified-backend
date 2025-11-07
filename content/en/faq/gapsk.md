@@ -106,6 +106,3 @@ A: Thank you for your question! Our team will contact you soon to provide detail
 
 # Placement & Assessment
 We recommend a short diagnostic assessment to place your child at the appropriate level. Placement ensures lessons match the child's current ability and keeps learning efficient.
-
-If you’d like to schedule an assessment or learn which level suits your child, please contact us.
-- Phone +852 2537 9519; WhatsApp +852 5118 2819; Email info@decoders-ls.com

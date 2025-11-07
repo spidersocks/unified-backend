@@ -16,10 +16,6 @@ aliases: interview class; interview prep; school interview; P1 interview; recita
 - We offer dedicated recitation classes. Please share the competition/event name, your selected piece, and a short current video of your child’s recitation.
 - Focus areas: diction and articulation, pauses and rhythm, emotion, stage presence and eye contact, breath and projection.
 - Language: Putonghua or Cantonese. We can prepare for events such as the Hong Kong Schools Speech Festival.
-
-For details and scheduling, please contact our staff:  
-Phone +852 2537 9519; WhatsApp +852 5118 2819; Email info@decoders-ls.com
-
 ---
 
 Q: Do you offer a special entrance exam class? (入學試特別班)  

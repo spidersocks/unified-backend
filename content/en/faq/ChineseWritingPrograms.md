@@ -83,8 +83,5 @@ A: With systematic training, parents typically notice clearer sentence organisat
 # Enrolment & placement
 We recommend a short diagnostic to place your child at the appropriate Chinese writing level. For dedicated Chinese writing courses, we'll advise the suitable class and suggested lesson count after assessment.
 
-For assessments or course enquiries, please contact us:
-Phone +852 2537 9519; WhatsApp +852 5118 2819; Email info@decoders-ls.com
-
 Tagline
 Little Scholars Chinese Writing Pathway — From picture talk to structured essays: Language logic × Structural thinking × Creative expression.

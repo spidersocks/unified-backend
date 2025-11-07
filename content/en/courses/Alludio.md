@@ -23,5 +23,5 @@ A unique auditory learning system designed to enhance listening skills and vocab
 - English 英語課程: $5,200/ 8×45m; $7,500–$8,500/ 10×1h
 - Clevercal (Math): $3,500–$4,500/ 10×45m; $4,500–$6,000/ 10×1h,
 - Chinese 中文課程: $3,200/ 8×45m; $4,500/ 10×1h,
-- Private class: Please contact our staff
+- Private class: [NO_ANSWER]
 

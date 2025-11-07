@@ -17,8 +17,7 @@ aliases: homework; reading; writing; time needed; duration; K1; P1; 作业; 功�
 ### Why do we have reading assignments?
 Reading assignments help children practise pronunciation, pacing, and intonation. Teachers can provide feedback, which helps children learn more efficiently.
 
-If you need adjustments to homework volume or format, please contact our staff:  
-Phone +852 2537 9519; WhatsApp +852 5118 2819; Email info@decoders-ls.com
+If homework adjustments are needed, these will be arranged by our staff after discussion.
 
 ---
 

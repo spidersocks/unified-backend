@@ -24,6 +24,3 @@ aliases: Mandarin program; Chinese program; course content; feedback; homework; 
 - Simplified-character option: Available upon request and suitability.
 - Entry and placement: A short diagnostic assessment determines the best class/unit.
 - FAQs (K1/K2 “how many characters”): We don’t promise a fixed character-count; milestones depend on each child’s foundation and pace. Targets are set after assessment and adjusted as they progress.
-
-For class schedules and placement, please contact our staff:  
-Phone +852 2537 9519; WhatsApp +852 5118 2819; Email info@decoders-ls.com
