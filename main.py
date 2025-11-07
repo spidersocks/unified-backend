@@ -13,6 +13,10 @@ from llm.router import router as llm_router
 
 from pokemon_app.router import load_pokemon_assets
 
+# NEW: start the 5pm admin digest scheduler
+from llm.admin_digest import start_scheduler_background
+from llm.config import SETTINGS
+
 app = FastAPI(
     title="Unified Portfolio Backend",
     description="A single FastAPI service combining multiple portfolio projects.",
@@ -36,6 +40,14 @@ def startup_event():
     load_pokemon_assets()
     _STARTED = True
     print("[INFO] All assets loaded.", flush=True)
+
+    # Start the 5pm admin digest scheduler (Mon–Sat; skips HK public holidays)
+    if SETTINGS.admin_digest_enabled:
+        try:
+            start_scheduler_background()
+            print("[INFO] Admin digest scheduler started.", flush=True)
+        except Exception as e:
+            print(f"[WARN] Failed to start admin digest scheduler: {e}", flush=True)
 
 @app.get("/")
 def read_root():

@@ -240,6 +240,10 @@ def _is_public_holiday(d: datetime) -> Tuple[bool, Optional[str]]:
         return True, str(name)
     return False, None
 
+# --- NEW: export a simple checker for other modules ---
+def is_hk_public_holiday(dt: datetime) -> bool:
+    return _is_public_holiday(dt)[0]
+
 def _names_match(a: str, b: str) -> bool:
     a = (a or "").lower()
     b = (b or "").lower()

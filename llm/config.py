@@ -71,11 +71,20 @@ class Settings:
     # Use default_factory for mutable default (list)
     whatsapp_test_numbers: List[str] = field(default_factory=_get_whatsapp_test_numbers_from_env)
 
-    # --- NEW: Admin cooling configuration ---
+    # --- Admin cooling configuration ---
     # Seconds to keep the bot silent after detecting an admin/human message
     admin_cooldown_secs: int = int(os.environ.get("ADMIN_COOLDOWN_SECS", "900"))  # default 15 minutes
 
     # Whatsapp auto delay
     whatsapp_ack_delay_secs : int = int(os.environ.get("WHATSAPP_ACK_DELAY_SECS", "1800"))
+
+    # --- Daily Admin Digest (5pm roundup) ---
+    admin_digest_enabled: bool = os.environ.get("ADMIN_DIGEST_ENABLED", "true").lower() in ("1","true","yes")
+    admin_digest_director_number: str = os.environ.get("ADMIN_DIGEST_DIRECTOR_NUMBER", "+85295505456")
+    admin_digest_hour_local: int = int(os.environ.get("ADMIN_DIGEST_HOUR_LOCAL", "17"))
+    admin_digest_minute_local: int = int(os.environ.get("ADMIN_DIGEST_MINUTE_LOCAL", "0"))
+    admin_digest_tz: str = os.environ.get("ADMIN_DIGEST_TZ", "Asia/Hong_Kong")
+    admin_digest_table: str = os.environ.get("ADMIN_DIGEST_TABLE", "AdminDigestPending")
+    admin_digest_max_items: int = int(os.environ.get("ADMIN_DIGEST_MAX_ITEMS", "50"))
 
 SETTINGS = Settings()

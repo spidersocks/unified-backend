@@ -18,6 +18,7 @@ import traceback
 import asyncio
 from collections import deque
 
+from llm import admin_digest
 
 def _cites_admin_routing(citations: List[Dict[str, Any]]) -> bool:
     if not citations:
@@ -123,8 +124,12 @@ def _mark_admin_activity(recipient_id: Optional[str]):
         return
     _LAST_ADMIN_ACTIVITY[recipient_id] = time.time()
     _cancel_pending_ack(recipient_id)
+    # NEW: if admin interacted with this chat, clear digest pendings for today
+    try:
+        admin_digest.resolve_session(recipient_id)
+    except Exception as e:
+        _log(f"[DIGEST] resolve_session error: {e}")
     _log(f"[COOL] Marked admin activity for {recipient_id}. Cooling for {SETTINGS.admin_cooldown_secs}s")
-
 
 def _in_admin_cooldown(session_id: str) -> bool:
     ts = _LAST_ADMIN_ACTIVITY.get(session_id)
@@ -570,7 +575,7 @@ async def whatsapp_webhook_handler(request: Request):
                     if change.get("field") == "messages":
                         value = change.get("value", {})  # Cloud API bundles both messages and statuses here
 
-                        # --- NEW: Handle business message status updates (detect admin activity) ---
+                        # --- Handle business message status updates (detect admin activity) ---
                         for st in value.get("statuses", []) or []:
                             try:
                                 msg_id = st.get("id") or st.get("message_id")
@@ -617,7 +622,7 @@ async def whatsapp_webhook_handler(request: Request):
                                 lang = get_language_code(message_body)
                                 _log(f"Detected language: {lang}")
 
-                                # NEW: Scheduling precedence for WhatsApp (treat ANY availability/pass-on as admin-handled)
+                                # Scheduling precedence for WhatsApp (treat ANY availability/pass-on as admin-handled)
                                 sched_cls = classify_scheduling_context(message_body, lang)
                                 is_scheduling_action = bool(
                                     (sched_cls.get("has_sched_verbs") or sched_cls.get("availability_request") or sched_cls.get("admin_action_request")
@@ -632,7 +637,6 @@ async def whatsapp_webhook_handler(request: Request):
                                 # --- extra_keywords logic for WhatsApp webhook ---
                                 extra_keywords: Optional[List[str]] = None
                                 if is_scheduling_action:
-                                    # Still allow retrieval hints for routing docs to encourage [NO_ANSWER]
                                     extra_keywords = [
                                         "AdminSchedulingRouting",
                                         "NoAnswerMatrix",
@@ -716,7 +720,6 @@ async def whatsapp_webhook_handler(request: Request):
                                         return {"status": "ok", "message": "Sent deterministic opening hours answer"}
                                     raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
 
-                                # ... inside chat(), after getting `answer, citations, debug_info` ...
                                 # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
                                 if not citations or contains_apology_or_noinfo(answer):
                                     _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
@@ -726,7 +729,7 @@ async def whatsapp_webhook_handler(request: Request):
                                         or sched_cls.get("admin_action_request")
                                         or sched_cls.get("staff_contact_request")
                                         or sched_cls.get("individual_homework_request")
-                                        or sched_cls.get("placement_question")  # NEW: placement/judgement should not fall back to hours
+                                        or sched_cls.get("placement_question")
                                         or _cites_admin_routing(citations)
                                         or _looks_like_leave_notification(rag_query)
                                     )
@@ -753,9 +756,24 @@ async def whatsapp_webhook_handler(request: Request):
                                     save_message(from_number, "user", message_body, lang, now_ts)
                                     save_message(from_number, "bot", answer or "", lang, now_ts + 0.01)
                                     prune_history(from_number, keep=6)
-                                    _log(f"Saved and pruned DynamoDB history for session_id={from_number}")
                                 except Exception as e:
                                     _log(f"ERROR saving/pruning DynamoDB history: {e}\n{traceback.format_exc()}")
+
+                                # NEW: if we stayed silent, add to daily digest pendings
+                                try:
+                                    if not answer:
+                                        admin_digest.add_pending(
+                                            session_id=from_number,
+                                            message=message_body,
+                                            lang=lang,
+                                            flags=sched_cls,
+                                            ts=now_ts
+                                        )
+                                    else:
+                                        # If we replied non-empty, clear any pendings for this chat (today)
+                                        admin_digest.resolve_session(from_number)
+                                except Exception as e:
+                                    _log(f"[DIGEST] add/resolve error: {e}")
 
                                 _log(f"LLM raw answer: {answer!r}")
                                 _log(f"LLM citations: {json.dumps(citations, ensure_ascii=False, indent=2)}")
@@ -765,10 +783,7 @@ async def whatsapp_webhook_handler(request: Request):
                                 is_followup = is_followup_message(message_body)
                                 if not answer and silent_reason == "no_citations" and is_followup and history:
                                     _log("Allowing context-only answer for followup message due to chat history, but LLM did not produce anything.")
-                                    answer = ""  # Still silent
-
-                                if not answer and silent_reason:
-                                    _log(f"LLM silenced answer. Reason: {silent_reason}")
+                                    # still silent; already added to pendings above
 
                                 # Handle markers (enrollment/blooket)
                                 answer, marker = extract_and_strip_marker(answer, "[SEND_ENROLLMENT_FORM]")
@@ -780,22 +795,17 @@ async def whatsapp_webhook_handler(request: Request):
 
                                 sent = False
                                 if send_form:
-                                    _log("Enrollment form marker/trigger detected: sending PDF document.")
                                     await _send_whatsapp_document(from_number, ENROLLMENT_FORM_URL, "enrollment_form.pdf")
                                     sent = True
                                 if send_blooket:
-                                    _log("Blooket marker/trigger detected: sending Blooket instruction PDF.")
                                     await _send_whatsapp_document(from_number, BLOOKET_PDF_URL, "blooket_instructions.pdf")
                                     sent = True
 
                                 if sent and answer:
-                                    _log("Sending answer after document.")
                                     await _send_whatsapp_message(from_number, answer)
                                 elif answer:
-                                    _log(f"LLM Answer: '{answer}'")
                                     await _send_whatsapp_message(from_number, answer)
                                 else:
-                                    _log("LLM provided no answer. No WhatsApp reply sent.")
                                     _maybe_schedule_auto_ack_whatsapp(from_number, lang, base_ts=now_ts)
 
                                 return {"status": "ok", "message": "Message processed"}
