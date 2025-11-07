@@ -12,8 +12,6 @@ aliases: 聯絡; 聯絡方式; 電話; 電郵; whatsapp; 地址; 地點; 中心�
 電話: +852 2537 9519（致電）, +852 5118 2819（僅限 WhatsApp）  
 電郵: info@decoders-ls.com
 
-地址: 香港上環荷李活道233號荷李活中心一樓
-
 社交平台：
 - Facebook: Little Scholars Creative Workshop  
   https://www.facebook.com/profile.php?id=100083139431885#
@@ -24,5 +22,3 @@ aliases: 聯絡; 聯絡方式; 電話; 電郵; whatsapp; 地址; 地點; 中心�
 - WhatsApp: +852 5118 2819  
 - 官方網站: Little Scholars  
   https://www.decoders-ls.com/
-
-- 地圖: https://share.google/LSbst50FiX5qk5ceB
