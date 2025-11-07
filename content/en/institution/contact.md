@@ -3,6 +3,7 @@ language: en
 type: institution
 canonical: contact
 folder: institution
+aliases: contact; contact us; contacts; phone; phone number; call; WhatsApp; whatsapp number; whats app; whatsapp us; email; email address; contact details; how to contact; number; phone and email
 ---
 # Contact Information
 

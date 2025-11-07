@@ -3,6 +3,7 @@ language: zh-HK
 type: course
 canonical: chinese-programs
 folder: courses
+aliases: 中文課程; 中文恆常課; 中文恆常班; 常規中文課; 中文語文課; 普通話課程; 普通話班; 拼音; 漢語拼音; 中文恆常班拼音; 常規中文課拼音; 中文課會唔會學拼音; 中文恆常班有冇學拼音; K2 拼音; K3 拼音; 有冇拼音
 ---
 # 中文語文課程
 

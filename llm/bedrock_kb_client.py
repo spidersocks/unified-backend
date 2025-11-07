@@ -129,9 +129,24 @@ OPENING_HOURS_HOLIDAY_GUARDRAIL = {
 }
 
 CONTACT_MINIMAL_GUARDRAIL = {
-    "en": "If the user asks for contact details, reply with ONLY phone and email on separate lines. Do not include address/map/social unless explicitly requested.",
-    "zh-HK": "如用戶詢問聯絡方式，只回覆電話及電郵，各佔一行。除非用戶明確要求，請不要加入地址、地圖或社交連結。",
-    "zh-CN": "如用户询问联系方式，只回复电话和电邮，各占一行。除非用户明确要求，请不要加入地址、地图或社交链接。",
+    "en": (
+        "Contact info requests:\n"
+        "- If the user explicitly asks for address or a map, include the Address line (and Map link if available).\n"
+        "- For generic 'contact' requests, reply with ONLY phone and email on separate lines.\n"
+        "Do not include socials unless explicitly requested."
+    ),
+    "zh-HK": (
+        "聯絡資訊請求：\n"
+        "- 如用戶明確要求地址或地圖，請提供地址（如有可加地圖連結）。\n"
+        "- 如只是一般查詢聯絡方式，請只回覆電話及電郵，各佔一行。\n"
+        "除非用戶明確要求，請不要加入社交連結。"
+    ),
+    "zh-CN": (
+        "联系信息请求：\n"
+        "- 如用户明确询问地址或地图，请提供地址（如有可附地图链接）。\n"
+        "- 若只是通用“联系方式”请求，请仅回复电话和电邮，各占一行。\n"
+        "除非用户明确要求，请不要加入社交链接。"
+    ),
 }
 
 STAFF = {
@@ -230,11 +245,16 @@ def _is_contact_query(message: str, lang: Optional[str]) -> bool:
     except Exception:
         pass
 
+    # Expanded detection: include address/map/location
     if lang and str(lang).lower().startswith("zh-hk"):
-        return bool(re.search(r"聯絡|聯絡資料|電話|致電|電郵|whatsapp|联系|联系方式", m, flags=re.IGNORECASE))
+        return bool(re.search(r"(聯絡|聯絡資料|電話|致電|電郵|whatsapp|地址|位置|地圖)", m, flags=re.IGNORECASE))
     if lang and (str(lang).lower().startswith("zh-cn") or str(lang).lower() == "zh"):
-        return bool(re.search(r"联系|联系方式|电话|致电|电邮|邮箱|whatsapp", m, flags=re.IGNORECASE))
-    return bool(re.search(r"\b(contact|phone|call|email|e-?mail|whatsapp)\b", m, flags=re.IGNORECASE))
+        return bool(re.search(r"(联系|联系方式|电话|致电|电邮|邮箱|whatsapp|地址|位置|地图)", m, flags=re.IGNORECASE))
+    # English
+    return bool(
+        re.search(r"\b(contact|phone|call|email|e-?mail|whatsapp|address|map|location)\b", m, flags=re.IGNORECASE)
+        or re.search(r"\bwhere\s+are\s+you\b", m, flags=re.IGNORECASE)
+    )
 
 # =========================
 # Caching
@@ -455,6 +475,12 @@ def chat_with_kb(
     if _is_contact_query(message or "", L):
         instruction_parts.append(CONTACT_MINIMAL_GUARDRAIL.get(L, CONTACT_MINIMAL_GUARDRAIL['en']))
         if debug: debug_info["contact_guardrail"] = True
+        # Bias retrieval towards contact/address content
+        ek = list(extra_keywords) if extra_keywords else []
+        for k in ["contact", "address", "map", "location", "phone", "email", "地址", "地圖", "地图", "位置"]:
+            if k not in ek:
+                ek.append(k)
+        extra_keywords = ek  # push into retrieval_query below
 
     # Retrieval query (keep clean, allow optional keyword hints)
     retrieval_query = (message or "").strip()

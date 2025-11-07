@@ -3,6 +3,7 @@ language: en
 type: course
 canonical: chinese-programs
 folder: courses
+aliases: Chinese programs; Chinese course; regular Chinese class; regular Chinese classes; Chinese Language Arts; Mandarin program; Chinese curriculum; pinyin; Hanyu Pinyin; Mandarin pinyin; pinyin in Chinese class; Chinese class pinyin; regular Chinese class pinyin; do regular Chinese classes teach pinyin; K2 pinyin; K3 pinyin; 中文恆常班; 恆常中文課; 常規中文課; 拼音; 漢語拼音; 普通話拼音
 ---
 # Chinese Language Programs
 

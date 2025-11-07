@@ -3,6 +3,7 @@ language: zh-CN
 type: course
 canonical: chinese-programs
 folder: courses
+aliases: 中文课程; 中文恒常课; 中文恒常班; 常规中文课; 中文语言课; 普通话课程; 普通话班; 拼音; 汉语拼音; 中文恒常班拼音; 常规中文课拼音; 中文课会不会学拼音; 中文恒常班有没有学拼音; K2 拼音; K3 拼音; 有没有拼音
 ---
 # 中文语文学科课程
 

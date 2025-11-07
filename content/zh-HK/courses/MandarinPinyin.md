@@ -3,7 +3,7 @@ language: zh-HK
 type: course
 canonical: MandarinPinyin
 folder: courses
-aliases: 漢語拼音; 拼音; 普通話拼音
+aliases: 漢語拼音; 拼音; 普通話拼音; 中文恆常班拼音; 恆常中文班拼音; 中文恆常班有沒有學拼音; 中文恆常班會不會學拼音; 常規中文課拼音; 常規中文課有沒有拼音; 中文課拼音; 普通話拼音班; K2 拼音; K3 拼音
 ---
 # 魔法拼音班 (Mandarin Pinyin)
 
@@ -18,4 +18,3 @@ aliases: 漢語拼音; 拼音; 普通話拼音
 
 ### 收費
 $3,200/ 8×45分；$4,500/ 10×1小時
-
