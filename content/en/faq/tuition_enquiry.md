@@ -10,9 +10,14 @@ aliases: tuition; fee; price; cost; class fee; how much; how much is; per hour; 
 ## General
 
 Q: What is the tuition? / How much is the fee? / What are your class fees?  
-A: We offer different courses with different fee schedules. Could you tell us which course you would like to know the tuition for? (E.g., English, Chinese, Mandarin, Playgroup, Math, Phonics, etc.)
+A: We offer different courses with different fee schedules. Could you tell us which course you would like to know the tuition for? (E.g., English, Chinese, Mandarin, Playgroup, Math, Phonics, Alludio, etc.)
 
 ---
+
+## Alludio Games (Game-Based Learning)
+
+Q: How much is the Alludio class? / Alludio tuition?  
+A: Alludio group class: HK$3,200 for 8 sessions (50 minutes per session); class size 4–6; age 3–6.
 
 ## English Courses
 
