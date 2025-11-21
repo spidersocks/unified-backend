@@ -70,6 +70,7 @@ class Settings:
     # WHATSAPP_TEST_NUMBERS should be a comma-separated string, e.g., "+1234567890,+1122334455"
     # Use default_factory for mutable default (list)
     whatsapp_test_numbers: List[str] = field(default_factory=_get_whatsapp_test_numbers_from_env)
+    whatsapp_page_id: str = os.environ.get("WHATSAPP_PAGE_ID", "")
 
     # --- Admin cooling configuration ---
     # Seconds to keep the bot silent after detecting an admin/human message

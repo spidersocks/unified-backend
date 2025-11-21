@@ -204,17 +204,26 @@ async def _set_conversation_folder(thread_id: str, folder: str):
     if folder not in ['inbox', 'done']:
         _log(f"ERROR: Invalid folder '{folder}' specified for conversation management.")
         return
+    
+    async def _set_conversation_folder(thread_id: str, folder: str):
+        if folder not in ['inbox', 'done']:
+            _log(f"ERROR: Invalid folder '{folder}' specified for conversation management.")
+            return
 
-    if not all([SETTINGS.whatsapp_access_token, SETTINGS.whatsapp_page_id]):
-        _log("ERROR: Cannot manage conversation folder; Page ID or Access Token not configured.")
-        return
+        if not SETTINGS.whatsapp_page_id:
+            _log("[WORKFLOW] whatsapp_page_id not configured; skipping folder move.")
+            return
 
-    convo_url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_page_id}/conversations"
-    convo_params = {
-        "platform": "whatsapp",
-        "user_id": thread_id,
-        "access_token": SETTINGS.whatsapp_access_token
-    }
+        if not SETTINGS.whatsapp_access_token:
+            _log("[WORKFLOW] Access token missing; cannot move conversation folder.")
+            return
+
+        convo_url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_page_id}/conversations"
+        convo_params = {
+            "platform": "whatsapp",
+            "user_id": thread_id,
+            "access_token": SETTINGS.whatsapp_access_token
+        }
 
     async with httpx.AsyncClient() as client:
         try:
@@ -766,7 +775,7 @@ async def whatsapp_webhook_handler(request: Request):
                                         debug_info = {"source": "deterministic_opening_hours_fallback"}
                                         await _send_whatsapp_message(from_number, answer)
                                         return {"status": "ok", "message": "Sent deterministic opening hours answer"}
-                                    raise HTTPException(status_code=500, detail=f"LLM backend error: {e}"}
+                                    raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
 
                                 # --- Guardrails / Answer suppression ---
                                 if not citations or contains_apology_or_noinfo(answer):
