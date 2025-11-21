@@ -196,6 +196,54 @@ async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "docume
 
 _ACK_TASKS: Dict[str, asyncio.Task] = {}  # session_id/phone -> task
 
+async def _set_conversation_folder(thread_id: str, folder: str):
+    """
+    Moves a conversation to a specified folder ('inbox' or 'done') in the Meta Business Suite.
+    This is used to manage the human-admin workflow.
+    """
+    if folder not in ['inbox', 'done']:
+        _log(f"ERROR: Invalid folder '{folder}' specified for conversation management.")
+        return
+
+    if not all([SETTINGS.whatsapp_access_token, SETTINGS.whatsapp_page_id]):
+        _log("ERROR: Cannot manage conversation folder; Page ID or Access Token not configured.")
+        return
+
+    convo_url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_page_id}/conversations"
+    convo_params = {
+        "platform": "whatsapp",
+        "user_id": thread_id,
+        "access_token": SETTINGS.whatsapp_access_token
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            # First, get the internal conversation thread ID from the user's phone number (WAID)
+            get_resp = await client.get(convo_url, params=convo_params, timeout=10)
+            get_resp.raise_for_status()
+            data = get_resp.json()
+            if not data.get("data"):
+                _log(f"[WORKFLOW] No existing conversation thread found for {thread_id} to move.")
+                return
+
+            internal_thread_id = data["data"][0]["id"]
+            _log(f"[WORKFLOW] Found internal thread ID {internal_thread_id} for user {thread_id}.")
+
+            # Now, move that thread to the specified folder
+            move_url = f"https://graph.facebook.com/v18.0/{internal_thread_id}"
+            payload = {
+                "folder": folder,
+                "access_token": SETTINGS.whatsapp_access_token
+            }
+            move_resp = await client.post(move_url, json=payload, timeout=10)
+            move_resp.raise_for_status()
+            _log(f"[WORKFLOW] Successfully moved conversation for {thread_id} to the '{folder}' folder.")
+
+        except Exception as e:
+            _log(f"[WORKFLOW] ERROR: Failed to move conversation to '{folder}' for {thread_id}. Error: {e}")
+            if 'get_resp' in locals() and hasattr(get_resp, 'text'):
+                _log(f"[WORKFLOW] API Response text: {get_resp.text}")
+
 def _ack_text(lang: str, during_hours: bool) -> str:
     L = (lang or "en").lower()
     if L.startswith("zh-hk"):
@@ -718,9 +766,9 @@ async def whatsapp_webhook_handler(request: Request):
                                         debug_info = {"source": "deterministic_opening_hours_fallback"}
                                         await _send_whatsapp_message(from_number, answer)
                                         return {"status": "ok", "message": "Sent deterministic opening hours answer"}
-                                    raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
+                                    raise HTTPException(status_code=500, detail=f"LLM backend error: {e}"}
 
-                                # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
+                                # --- Guardrails / Answer suppression ---
                                 if not citations or contains_apology_or_noinfo(answer):
                                     _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
                                     block_hours_fallback = (
@@ -750,63 +798,71 @@ async def whatsapp_webhook_handler(request: Request):
                                     _log("Answer does not contain a fee amount for a tuition/fee query, silencing.")
                                     answer = ""
 
-                                # Save history
+                                # --- At this point we have the 'answer' from chat_with_kb and guardrails have been applied ---
+                                # Set final_answer baseline (may be silenced to empty)
+                                final_answer = answer
+
+                                # --- Save History & Manage Admin Workflow ---
                                 try:
                                     now_ts = time.time()
                                     save_message(from_number, "user", message_body, lang, now_ts)
-                                    save_message(from_number, "bot", answer or "", lang, now_ts + 0.01)
+                                    save_message(from_number, "bot", final_answer or "", lang, now_ts + 0.01)
                                     prune_history(from_number, keep=6)
                                 except Exception as e:
                                     _log(f"ERROR saving/pruning DynamoDB history: {e}\n{traceback.format_exc()}")
 
-                                # NEW: if we stayed silent, add to daily digest pendings
-                                try:
-                                    if not answer:
+                                if not final_answer:
+                                    # --- BOT IS SILENT: This is a priority case for a human admin ---
+                                    _log(f"[WORKFLOW] Bot is silent. Moving to INBOX for immediate admin attention.")
+
+                                    # 1. Add to the daily digest for summary reporting
+                                    try:
                                         admin_digest.add_pending(
-                                            session_id=from_number,
-                                            message=message_body,
-                                            lang=lang,
-                                            flags=sched_cls,
-                                            ts=now_ts
+                                            session_id=from_number, message=message_body, lang=lang, flags=sched_cls, ts=now_ts
                                         )
-                                    else:
-                                        # If we replied non-empty, clear any pendings for this chat (today)
-                                        admin_digest.resolve_session(from_number)
-                                except Exception as e:
-                                    _log(f"[DIGEST] add/resolve error: {e}")
+                                    except Exception as e:
+                                        _log(f"[DIGEST] add/resolve error: {e}")
 
-                                _log(f"LLM raw answer: {answer!r}")
-                                _log(f"LLM citations: {json.dumps(citations, ensure_ascii=False, indent=2)}")
-                                if debug_info:
-                                    _log(f"LLM debug_info: {json.dumps(debug_info, ensure_ascii=False, indent=2)}")
-                                silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
-                                is_followup = is_followup_message(message_body)
-                                if not answer and silent_reason == "no_citations" and is_followup and history:
-                                    _log("Allowing context-only answer for followup message due to chat history, but LLM did not produce anything.")
-                                    # still silent; already added to pendings above
+                                    # 2. Move the conversation to the main 'inbox' to appear as a to-do item
+                                    await _set_conversation_folder(from_number, 'inbox')
 
-                                # Handle markers (enrollment/blooket)
-                                answer, marker = extract_and_strip_marker(answer, "[SEND_ENROLLMENT_FORM]")
-                                ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"
-                                send_form = marker
-                                answer, marker_blooket = extract_and_strip_marker(answer, "[SEND_BLOOKET_PDF]")
-                                BLOOKET_PDF_URL = "https://drive.google.com/uc?export=download&id=18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M"
-                                send_blooket = marker_blooket
-
-                                sent = False
-                                if send_form:
-                                    await _send_whatsapp_document(from_number, ENROLLMENT_FORM_URL, "enrollment_form.pdf")
-                                    sent = True
-                                if send_blooket:
-                                    await _send_whatsapp_document(from_number, BLOOKET_PDF_URL, "blooket_instructions.pdf")
-                                    sent = True
-
-                                if sent and answer:
-                                    await _send_whatsapp_message(from_number, answer)
-                                elif answer:
-                                    await _send_whatsapp_message(from_number, answer)
-                                else:
+                                    # 3. Send an acknowledgement to the user that a human will reply
                                     _maybe_schedule_auto_ack_whatsapp(from_number, lang, base_ts=now_ts)
+
+                                else:
+                                    # --- BOT ANSWERED: This is a case for admin review ---
+                                    _log(f"[WORKFLOW] Bot answered. Sending reply and moving to DONE for admin review.")
+
+                                    # 1. If we replied, resolve any pending digest items for this user
+                                    try:
+                                        admin_digest.resolve_session(from_number)
+                                    except Exception as e:
+                                        _log(f"[DIGEST] resolve_session error: {e}")
+
+                                    # 2. Handle document sending (Blooket, Enrollment) and the text reply
+                                    final_answer, marker_enroll = extract_and_strip_marker(final_answer, ENROLLMENT_FORM_MARKER)
+                                    final_answer, marker_blooket = extract_and_strip_marker(final_answer, BLOOKET_MARKER)
+
+                                    # Your existing logic for deciding to send docs:
+                                    send_form = marker_enroll
+                                    send_blooket = marker_blooket
+
+                                    sent_doc = False
+                                    if send_form:  # Assuming send_form is your boolean flag
+                                        await _send_whatsapp_document(from_number, ENROLLMENT_FORM_URL, "enrollment_form.pdf")
+                                        sent_doc = True
+                                    if send_blooket:  # Assuming send_blooket is your boolean flag
+                                        await _send_whatsapp_document(from_number, BLOOKET_PDF_URL, "blooket_instructions.pdf")
+                                        sent_doc = True
+
+                                    if sent_doc and final_answer:
+                                        await _send_whatsapp_message(from_number, final_answer)
+                                    elif final_answer:
+                                        await _send_whatsapp_message(from_number, final_answer)
+
+                                    # 3. After successfully replying, move the conversation to the 'done' folder
+                                    # This archives it for review but keeps the main inbox clean.
+                                    await _set_conversation_folder(from_number, 'done')
 
                                 return {"status": "ok", "message": "Message processed"}
                             else:
