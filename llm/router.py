@@ -830,11 +830,20 @@ async def ycloud_webhook_handler(request: Request):
         payload = await request.json()
         _log(f"Received YCloud webhook payload:\n{json.dumps(payload, indent=2)}")
         
-        # TODO: Verify X-YCloud-Signature if needed
-        # signature = request.headers.get("X-YCloud-Signature")
-        # if signature:
-        #     # Implement signature verification logic here
-        #     pass
+        # TODO: Implement X-YCloud-Signature verification for production
+        # YCloud signs webhook payloads with HMAC-SHA256 using your API key as the secret
+        # To implement:
+        # 1. Get signature from header: signature = request.headers.get("X-YCloud-Signature")
+        # 2. Compute HMAC-SHA256 of request body using ycloud_api_key
+        # 3. Compare computed signature with provided signature
+        # 4. Reject request if signatures don't match
+        # Example:
+        # import hmac
+        # import hashlib
+        # body_bytes = await request.body()
+        # computed_sig = hmac.new(SETTINGS.ycloud_api_key.encode(), body_bytes, hashlib.sha256).hexdigest()
+        # if not hmac.compare_digest(signature or "", computed_sig):
+        #     raise HTTPException(status_code=401, detail="Invalid signature")
         
         # YCloud webhook structure: typically has 'type' and 'data' fields
         webhook_type = payload.get("type")
