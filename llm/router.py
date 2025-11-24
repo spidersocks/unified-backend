@@ -845,13 +845,21 @@ async def ycloud_webhook_handler(request: Request):
         # if not hmac.compare_digest(signature or "", computed_sig):
         #     raise HTTPException(status_code=401, detail="Invalid signature")
         
-        # YCloud webhook structure: typically has 'type' and 'data' fields
+        # YCloud webhook structure: typically has 'type' and 'data' or 'whatsappInboundMessage' fields
         webhook_type = payload.get("type")
-        data = payload.get("data", {})
         
-        if webhook_type == "whatsapp.message.received":
+        # Support both V2 API format (whatsapp.inbound_message.received with whatsappInboundMessage)
+        # and V1 format (whatsapp.message.received with data) for backward compatibility
+        if webhook_type in ("whatsapp.inbound_message.received", "whatsapp.message.received"):
             # Extract message details from YCloud format
-            message_data = data
+            # V2 API uses 'whatsappInboundMessage', V1 uses 'data'
+            message_data = payload.get("whatsappInboundMessage") or payload.get("data", {})
+            
+            # Ensure message_data is valid before accessing fields
+            if not message_data:
+                _log("WARNING: No message data found in YCloud webhook payload")
+                return {"status": "ignored", "reason": "no message data"}
+            
             from_number = message_data.get("from")
             message_type = message_data.get("type")
             
@@ -1074,7 +1082,8 @@ async def ycloud_webhook_handler(request: Request):
         
         elif webhook_type == "whatsapp.message.status":
             # Handle message status updates (detect admin activity)
-            status_data = data
+            # V2 API might use 'whatsappMessageStatus', V1 uses 'data'
+            status_data = payload.get("whatsappMessageStatus") or payload.get("data", {})
             msg_id = status_data.get("id") or status_data.get("messageId")
             recipient_id = status_data.get("to")
             status = status_data.get("status")
