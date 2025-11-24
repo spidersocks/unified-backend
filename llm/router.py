@@ -885,11 +885,6 @@ async def ycloud_webhook_handler(request: Request):
                 message_body = message_data.get("text", {}).get("body", "")
                 _log(f"Text message from {from_number}: '{message_body}'")
                 
-                # Check whitelist
-                if from_number not in SETTINGS.whatsapp_test_numbers:
-                    _log(f"WARNING: Message from non-whitelisted number {from_number} ignored during testing.")
-                    return {"status": "ignored", "reason": "not in test numbers"}
-                
                 lang = get_language_code(message_body)
                 _log(f"Detected language: {lang}")
                 
