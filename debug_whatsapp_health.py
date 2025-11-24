@@ -45,6 +45,11 @@ def check_whatsapp_health():
         print("Please set the WHATSAPP_ACCESS_TOKEN environment variable.", file=sys.stderr)
         sys.exit(1)
     
+    if not graph_version:
+        print("ERROR: WHATSAPP_GRAPH_VERSION is not configured.", file=sys.stderr)
+        print("Please set the WHATSAPP_GRAPH_VERSION environment variable or use the default value.", file=sys.stderr)
+        sys.exit(1)
+    
     # Construct the Meta Graph API endpoint
     url = f"https://graph.facebook.com/{graph_version}/{phone_number_id}"
     
@@ -114,14 +119,15 @@ def check_whatsapp_health():
         
     except requests.exceptions.HTTPError as e:
         print(f"\n❌ HTTP ERROR: {e}", file=sys.stderr)
-        print(f"Status Code: {response.status_code}", file=sys.stderr)
-        
-        try:
-            error_data = response.json()
-            print("\nError Response:", file=sys.stderr)
-            print(json.dumps(error_data, indent=2), file=sys.stderr)
-        except:
-            print(f"Response Text: {response.text}", file=sys.stderr)
+        if response is not None:
+            print(f"Status Code: {response.status_code}", file=sys.stderr)
+            
+            try:
+                error_data = response.json()
+                print("\nError Response:", file=sys.stderr)
+                print(json.dumps(error_data, indent=2), file=sys.stderr)
+            except (ValueError, json.JSONDecodeError):
+                print(f"Response Text: {response.text}", file=sys.stderr)
         
         sys.exit(1)
         
