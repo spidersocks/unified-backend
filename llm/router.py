@@ -319,7 +319,9 @@ async def _process_whatsapp_message_core(from_number: str, message_body: str, co
         contact_name: Optional contact name for logging
     
     Returns:
-        Dict with status and optional error details
+        Dict with status and optional error details. Examples:
+        - {"status": "ok", "message": "Message processed"}
+        - {"status": "ignored", "reason": "not in test numbers"}
     """
     _log(f"Text message from {from_number} (Name: {contact_name}): '{message_body}'")
 
@@ -898,6 +900,10 @@ async def ycloud_webhook_handler(request: Request):
     """
     YCloud webhook handler for incoming WhatsApp messages.
     Supports YCloud's webhook format (whatsapp.message.received events).
+    
+    Note: In production, implement webhook signature verification using YCloud's
+    webhook secret to validate incoming requests. This can be done by validating
+    the signature in the request headers against the webhook payload.
     """
     try:
         payload = await request.json()
