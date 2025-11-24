@@ -148,6 +148,7 @@ async def _send_whatsapp_message(to: str, message_body: str):
         "Content-Type": "application/json"
     }
     payload = {
+        "from": SETTINGS.ycloud_whatsapp_number,
         "to": to,
         "type": "text",
         "text": {"body": message_body}
@@ -173,6 +174,7 @@ async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "docume
         "Content-Type": "application/json"
     }
     payload = {
+        "from": SETTINGS.ycloud_whatsapp_number,
         "to": to,
         "type": "document",
         "document": {"link": doc_url, "filename": filename}
