@@ -142,12 +142,16 @@ async def _send_whatsapp_message(to: str, message_body: str):
     if not SETTINGS.ycloud_api_key:
         _log("ERROR: YCloud API key not configured.")
         return
+    if not SETTINGS.ycloud_whatsapp_number:
+        _log("ERROR: YCloud WhatsApp number not configured. Please set the YCLOUD_WHATSAPP_NUMBER environment variable.")
+        return
     url = "https://api.ycloud.com/v2/whatsapp/messages"
     headers = {
         "X-API-Key": SETTINGS.ycloud_api_key,
         "Content-Type": "application/json"
     }
     payload = {
+        "from": SETTINGS.ycloud_whatsapp_number,
         "to": to,
         "type": "text",
         "text": {"body": message_body}
@@ -167,12 +171,16 @@ async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "docume
     if not SETTINGS.ycloud_api_key:
         _log("ERROR: YCloud API key not configured. Cannot send document.")
         return
+    if not SETTINGS.ycloud_whatsapp_number:
+        _log("ERROR: YCloud WhatsApp number not configured. Please set the YCLOUD_WHATSAPP_NUMBER environment variable.")
+        return
     url = "https://api.ycloud.com/v2/whatsapp/messages"
     headers = {
         "X-API-Key": SETTINGS.ycloud_api_key,
         "Content-Type": "application/json"
     }
     payload = {
+        "from": SETTINGS.ycloud_whatsapp_number,
         "to": to,
         "type": "document",
         "document": {"link": doc_url, "filename": filename}

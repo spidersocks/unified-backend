@@ -75,6 +75,7 @@ class Settings:
     # --- YCloud Integration Settings ---
     ycloud_api_key: str = os.environ.get("YCLOUD_API_KEY", "")
     ycloud_webhook_url: str = os.environ.get("YCLOUD_WEBHOOK_URL", "")
+    ycloud_whatsapp_number: str = os.environ.get("YCLOUD_WHATSAPP_NUMBER", "")
 
     # --- Admin cooling configuration ---
     # Seconds to keep the bot silent after detecting an admin/human message
