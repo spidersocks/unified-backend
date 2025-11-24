@@ -850,7 +850,7 @@ async def ycloud_webhook_handler(request: Request):
         
         # Support both V2 API format (whatsapp.inbound_message.received with whatsappInboundMessage)
         # and V1 format (whatsapp.message.received with data) for backward compatibility
-        if webhook_type == "whatsapp.inbound_message.received" or webhook_type == "whatsapp.message.received":
+        if webhook_type in ("whatsapp.inbound_message.received", "whatsapp.message.received"):
             # Extract message details from YCloud format
             # V2 API uses 'whatsappInboundMessage', V1 uses 'data'
             message_data = payload.get("whatsappInboundMessage") or payload.get("data", {})
