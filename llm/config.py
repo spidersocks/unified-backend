@@ -71,6 +71,9 @@ class Settings:
     # Use default_factory for mutable default (list)
     whatsapp_test_numbers: List[str] = field(default_factory=_get_whatsapp_test_numbers_from_env)
     whatsapp_page_id: str = os.environ.get("WHATSAPP_PAGE_ID", "")
+    
+    # --- YCloud Integration Settings ---
+    ycloud_api_key: str = os.environ.get("YCLOUD_API_KEY", "")
 
     # --- Admin cooling configuration ---
     # Seconds to keep the bot silent after detecting an admin/human message

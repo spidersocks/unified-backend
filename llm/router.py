@@ -139,60 +139,112 @@ def _in_admin_cooldown(session_id: str) -> bool:
 
 
 async def _send_whatsapp_message(to: str, message_body: str):
-    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
-        _log("ERROR: WhatsApp API credentials not configured.")
-        return
-    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
-    headers = {
-        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": {"body": message_body}
-    }
-    _log(f"[WA] Sending WhatsApp message to: {to} | Body: {message_body}")
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(url, headers=headers, json=payload, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-            msg_id = (data.get("messages") or [{}])[0].get("id")
-            _record_bot_msg_id(msg_id)
-        except Exception as e:
-            _log(f"[WA] ERROR sending message: {e}")
-
-async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "document.pdf"):
-    if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
-        _log("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send document.")
-        return
-    url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
-    headers = {
-        "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "document",
-        "document": {"link": doc_url, "filename": filename}
-    }
-    _log(f"[WA] Sending WhatsApp document to: {to} | Document URL: {doc_url}")
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            _log(f"[WA] SUCCESS: WhatsApp document sent to {to}. Response: {data}")
+    # Route via YCloud if API key is configured
+    if SETTINGS.ycloud_api_key:
+        url = "https://api.ycloud.com/v2/whatsapp/messages"
+        headers = {
+            "X-API-KEY": SETTINGS.ycloud_api_key,
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "to": to,
+            "type": "text",
+            "text": {"body": message_body}
+        }
+        _log(f"[WA/YCloud] Sending WhatsApp message to: {to} | Body: {message_body}")
+        async with httpx.AsyncClient() as client:
             try:
+                resp = await client.post(url, headers=headers, json=payload, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
+                msg_id = data.get("id")
+                _record_bot_msg_id(msg_id)
+            except Exception as e:
+                _log(f"[WA/YCloud] ERROR sending message: {e}")
+    else:
+        # Fallback to Meta Cloud API
+        if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
+            _log("ERROR: WhatsApp API credentials not configured.")
+            return
+        url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
+        headers = {
+            "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "text",
+            "text": {"body": message_body}
+        }
+        _log(f"[WA] Sending WhatsApp message to: {to} | Body: {message_body}")
+        async with httpx.AsyncClient() as client:
+            try:
+                resp = await client.post(url, headers=headers, json=payload, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
                 msg_id = (data.get("messages") or [{}])[0].get("id")
                 _record_bot_msg_id(msg_id)
-            except Exception:
-                pass
-        except Exception as e:
-            _log(f"[WA] ERROR: Failed to send WhatsApp document: {e}")
+            except Exception as e:
+                _log(f"[WA] ERROR sending message: {e}")
+
+async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "document.pdf"):
+    # Route via YCloud if API key is configured
+    if SETTINGS.ycloud_api_key:
+        url = "https://api.ycloud.com/v2/whatsapp/messages"
+        headers = {
+            "X-API-KEY": SETTINGS.ycloud_api_key,
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "to": to,
+            "type": "document",
+            "document": {"link": doc_url, "filename": filename}
+        }
+        _log(f"[WA/YCloud] Sending WhatsApp document to: {to} | Document URL: {doc_url}")
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(url, headers=headers, json=payload, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                _log(f"[WA/YCloud] SUCCESS: WhatsApp document sent to {to}. Response: {data}")
+                try:
+                    msg_id = data.get("id")
+                    _record_bot_msg_id(msg_id)
+                except Exception:
+                    pass
+            except Exception as e:
+                _log(f"[WA/YCloud] ERROR: Failed to send WhatsApp document: {e}")
+    else:
+        # Fallback to Meta Cloud API
+        if not SETTINGS.whatsapp_access_token or not SETTINGS.whatsapp_phone_number_id:
+            _log("ERROR: WhatsApp API credentials (access token or phone number ID) not configured. Cannot send document.")
+            return
+        url = f"https://graph.facebook.com/v18.0/{SETTINGS.whatsapp_phone_number_id}/messages"
+        headers = {
+            "Authorization": f"Bearer {SETTINGS.whatsapp_access_token}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "document",
+            "document": {"link": doc_url, "filename": filename}
+        }
+        _log(f"[WA] Sending WhatsApp document to: {to} | Document URL: {doc_url}")
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(url, headers=headers, json=payload, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                _log(f"[WA] SUCCESS: WhatsApp document sent to {to}. Response: {data}")
+                try:
+                    msg_id = (data.get("messages") or [{}])[0].get("id")
+                    _record_bot_msg_id(msg_id)
+                except Exception:
+                    pass
+            except Exception as e:
+                _log(f"[WA] ERROR: Failed to send WhatsApp document: {e}")
 
 _ACK_TASKS: Dict[str, asyncio.Task] = {}  # session_id/phone -> task
 
@@ -255,6 +307,216 @@ def _maybe_schedule_auto_ack_whatsapp(session_id: str, lang: str, base_ts: float
     task = asyncio.create_task(_ack_worker(session_id, lang, base_ts, delay_secs))
     _ACK_TASKS[session_id] = task
     _log(f"[ACK] Scheduled auto-ack for {session_id} in {delay_secs}s (during_hours={during_hours})")
+
+
+async def _process_whatsapp_message_core(from_number: str, message_body: str, contact_name: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Core message processing logic for WhatsApp messages from any webhook source.
+    
+    Args:
+        from_number: The sender's phone number
+        message_body: The text message content
+        contact_name: Optional contact name for logging
+    
+    Returns:
+        Dict with status and optional error details
+    """
+    _log(f"Text message from {from_number} (Name: {contact_name}): '{message_body}'")
+
+    if from_number not in SETTINGS.whatsapp_test_numbers:
+        _log(f"WARNING: Message from non-whitelisted number {from_number} ignored during testing.")
+        return {"status": "ignored", "reason": "not in test numbers"}
+    
+    lang = get_language_code(message_body)
+    _log(f"Detected language: {lang}")
+
+    # Scheduling precedence for WhatsApp (treat ANY availability/pass-on as admin-handled)
+    sched_cls = classify_scheduling_context(message_body, lang)
+    is_scheduling_action = bool(
+        (sched_cls.get("has_sched_verbs") or sched_cls.get("availability_request") or sched_cls.get("admin_action_request")
+         or sched_cls.get("staff_contact_request") or sched_cls.get("individual_homework_request"))
+        and not sched_cls.get("has_policy_intent")
+    )
+
+    opening_context = None
+    hint_canonical = None
+    is_hours_intent = False
+
+    # --- extra_keywords logic for WhatsApp webhook ---
+    extra_keywords: Optional[List[str]] = None
+    if is_scheduling_action:
+        extra_keywords = [
+            "AdminSchedulingRouting",
+            "NoAnswerMatrix",
+            "[NO_ANSWER]",
+            "routing rules",
+            "admin handled",
+        ]
+    elif sched_cls.get("has_policy_intent"):
+        extra_keywords = ["policy", "absence", "make-up", "makeup", "quota", "notice", "doctor's certificate"]
+    else:
+        no_answer_intents = any([
+            sched_cls.get("availability_request"),
+            sched_cls.get("admin_action_request"),
+            sched_cls.get("staff_contact_request"),
+            sched_cls.get("individual_homework_request"),
+            (sched_cls.get("placement_question") and not sched_cls.get("has_policy_intent")),
+        ])
+        if no_answer_intents:
+            extra_keywords = [
+                "AdminSchedulingRouting",
+                "NoAnswerMatrix",
+                "[NO_ANSWER]",
+                "routing rules",
+                "admin handled",
+            ]
+
+    if is_scheduling_action:
+        opening_context = summarize_user_date_intent(message_body, lang)
+        hint_canonical = None
+        _log(f"Scheduling/action detected (WhatsApp). Providing date hints only:\n{opening_context}")
+    else:
+        is_hours_intent, debug_intent = detect_opening_hours_intent(message_body, lang)
+        if is_hours_intent:
+            intent_debug_local = debug_intent or {}
+            has_holiday_marker = bool(intent_debug_local.get("holiday_hits"))
+            if is_general_hours_query(message_body, lang):
+                opening_context = None
+                hint_canonical = "opening_hours"
+                _log("Opening hours intent detected as GENERAL. No system context injected; LLM will answer from policy docs.")
+            else:
+                opening_context = extract_opening_context(message_body, lang)
+                hint_canonical = "opening_hours"
+                _log(f"Opening hours intent detected as SPECIFIC. Structured context for LLM:\n{opening_context}")
+
+    # Build history and reformulation
+    try:
+        history = get_recent_history(from_number, limit=6)
+        _log(f"Fetched {len(history)} prior messages for session_id={from_number}")
+    except Exception as e:
+        _log(f"ERROR retrieving DynamoDB history: {e}\n{traceback.format_exc()}")
+        history = []
+
+    history_context = build_context_string(history, new_message=message_body, user_role="user", bot_role="bot", include_new=True)
+
+    rag_query = message_body
+    if is_followup_message(message_body):
+        try:
+            rag_query = call_llm_rephrase(history_context, lang)
+            _log(f"Reformulated query: {rag_query!r}")
+        except Exception as e:
+            _log(f"Failed to reformulate query, falling back to user message. Error: {e}")
+            rag_query = message_body
+
+    _log(f"Calling chat_with_kb with rag_query length={len(rag_query)}")
+    try:
+        answer, citations, debug_info = chat_with_kb(
+            rag_query,
+            lang,
+            debug=SETTINGS.debug_kb,
+            extra_context=opening_context,
+            extra_keywords=extra_keywords,
+            hint_canonical=hint_canonical,
+        )
+    except Exception as e:
+        _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
+        if is_hours_intent:
+            answer = compute_opening_answer(message_body, lang)
+            citations = []
+            debug_info = {"source": "deterministic_opening_hours_fallback"}
+            await _send_whatsapp_message(from_number, answer)
+            return {"status": "ok", "message": "Sent deterministic opening hours answer"}
+        raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
+
+    # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
+    if not citations or contains_apology_or_noinfo(answer):
+        _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
+        block_hours_fallback = (
+            sched_cls.get("has_sched_verbs")
+            or sched_cls.get("availability_request")
+            or sched_cls.get("admin_action_request")
+            or sched_cls.get("staff_contact_request")
+            or sched_cls.get("individual_homework_request")
+            or sched_cls.get("placement_question")
+            or _cites_admin_routing(citations)
+            or _looks_like_leave_notification(rag_query)
+        )
+        if is_hours_intent and not block_hours_fallback:
+            answer = compute_opening_answer(message_body, lang)
+            citations = []
+            debug_info = {"source": "deterministic_opening_hours_fallback"}
+        else:
+            answer = ""
+
+    fee_words = ["tuition", "fee", "price", "cost"]
+    payment_words = ["how to pay", "payment", "pay", "bank transfer", "fps", "account", "method"]
+    if (
+        any(word in rag_query.lower() for word in fee_words)
+        and not any(word in rag_query.lower() for word in payment_words)
+        and not likely_contains_fee(answer)
+    ):
+        _log("Answer does not contain a fee amount for a tuition/fee query, silencing.")
+        answer = ""
+
+    # Save history
+    try:
+        now_ts = time.time()
+        save_message(from_number, "user", message_body, lang, now_ts)
+        save_message(from_number, "bot", answer or "", lang, now_ts + 0.01)
+        prune_history(from_number, keep=6)
+    except Exception as e:
+        _log(f"ERROR saving/pruning DynamoDB history: {e}\n{traceback.format_exc()}")
+
+    # NEW: if we stayed silent, add to daily digest pendings
+    try:
+        if not answer:
+            admin_digest.add_pending(
+                session_id=from_number,
+                message=message_body,
+                lang=lang,
+                flags=sched_cls,
+                ts=now_ts
+            )
+        else:
+            # If we replied non-empty, clear any pendings for this chat (today)
+            admin_digest.resolve_session(from_number)
+    except Exception as e:
+        _log(f"[DIGEST] add/resolve error: {e}")
+
+    _log(f"LLM raw answer: {answer!r}")
+    _log(f"LLM citations: {json.dumps(citations, ensure_ascii=False, indent=2)}")
+    if debug_info:
+        _log(f"LLM debug_info: {json.dumps(debug_info, ensure_ascii=False, indent=2)}")
+    silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
+    is_followup = is_followup_message(message_body)
+    if not answer and silent_reason == "no_citations" and is_followup and history:
+        _log("Allowing context-only answer for followup message due to chat history, but LLM did not produce anything.")
+        # still silent; already added to pendings above
+
+    # Handle markers (enrollment/blooket)
+    answer, marker = extract_and_strip_marker(answer, "[SEND_ENROLLMENT_FORM]")
+    ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"
+    send_form = marker
+    answer, marker_blooket = extract_and_strip_marker(answer, "[SEND_BLOOKET_PDF]")
+    BLOOKET_PDF_URL = "https://drive.google.com/uc?export=download&id=18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M"
+    send_blooket = marker_blooket
+
+    sent = False
+    if send_form:
+        await _send_whatsapp_document(from_number, ENROLLMENT_FORM_URL, "enrollment_form.pdf")
+        sent = True
+    if send_blooket:
+        await _send_whatsapp_document(from_number, BLOOKET_PDF_URL, "blooket_instructions.pdf")
+        sent = True
+
+    if sent and answer:
+        await _send_whatsapp_message(from_number, answer)
+    elif answer:
+        await _send_whatsapp_message(from_number, answer)
+    else:
+        _maybe_schedule_auto_ack_whatsapp(from_number, lang, base_ts=now_ts)
+
+    return {"status": "ok", "message": "Message processed"}
 
 
 # --- Answer marker and guardrail helpers (should be moved to llm/answer_utils.py) ---
@@ -613,202 +875,11 @@ async def whatsapp_webhook_handler(request: Request):
 
                             if message_type == "text":
                                 message_body = message["text"].get("body")
-                                _log(f"Text message from {from_number} (Name: {contact.get('profile',{}).get('name')}): '{message_body}'")
-
-                                if from_number not in SETTINGS.whatsapp_test_numbers:
-                                    _log(f"WARNING: Message from non-whitelisted number {from_number} ignored during testing.")
-                                    return {"status": "ignored", "reason": "not in test numbers"}
+                                contact_name = contact.get('profile', {}).get('name')
                                 
-                                lang = get_language_code(message_body)
-                                _log(f"Detected language: {lang}")
-
-                                # Scheduling precedence for WhatsApp (treat ANY availability/pass-on as admin-handled)
-                                sched_cls = classify_scheduling_context(message_body, lang)
-                                is_scheduling_action = bool(
-                                    (sched_cls.get("has_sched_verbs") or sched_cls.get("availability_request") or sched_cls.get("admin_action_request")
-                                     or sched_cls.get("staff_contact_request") or sched_cls.get("individual_homework_request"))
-                                    and not sched_cls.get("has_policy_intent")
-                                )
-
-                                opening_context = None
-                                hint_canonical = None
-                                is_hours_intent = False
-
-                                # --- extra_keywords logic for WhatsApp webhook ---
-                                extra_keywords: Optional[List[str]] = None
-                                if is_scheduling_action:
-                                    extra_keywords = [
-                                        "AdminSchedulingRouting",
-                                        "NoAnswerMatrix",
-                                        "[NO_ANSWER]",
-                                        "routing rules",
-                                        "admin handled",
-                                    ]
-                                elif sched_cls.get("has_policy_intent"):
-                                    extra_keywords = ["policy", "absence", "make-up", "makeup", "quota", "notice", "doctor’s certificate"]
-                                else:
-                                    no_answer_intents = any([
-                                        sched_cls.get("availability_request"),
-                                        sched_cls.get("admin_action_request"),
-                                        sched_cls.get("staff_contact_request"),
-                                        sched_cls.get("individual_homework_request"),
-                                        (sched_cls.get("placement_question") and not sched_cls.get("has_policy_intent")),
-                                    ])
-                                    if no_answer_intents:
-                                        extra_keywords = [
-                                            "AdminSchedulingRouting",
-                                            "NoAnswerMatrix",
-                                            "[NO_ANSWER]",
-                                            "routing rules",
-                                            "admin handled",
-                                        ]
-
-                                if is_scheduling_action:
-                                    opening_context = summarize_user_date_intent(message_body, lang)
-                                    hint_canonical = None
-                                    _log(f"Scheduling/action detected (WhatsApp). Providing date hints only:\n{opening_context}")
-                                else:
-                                    is_hours_intent, debug_intent = detect_opening_hours_intent(message_body, lang)
-                                    if is_hours_intent:
-                                        intent_debug_local = debug_intent or {}
-                                        has_holiday_marker = bool(intent_debug_local.get("holiday_hits"))
-                                        if is_general_hours_query(message_body, lang):
-                                            opening_context = None
-                                            hint_canonical = "opening_hours"
-                                            _log("Opening hours intent detected as GENERAL. No system context injected; LLM will answer from policy docs.")
-                                        else:
-                                            opening_context = extract_opening_context(message_body, lang)
-                                            hint_canonical = "opening_hours"
-                                            _log(f"Opening hours intent detected as SPECIFIC. Structured context for LLM:\n{opening_context}")
-
-                                # Build history and reformulation
-                                try:
-                                    history = get_recent_history(from_number, limit=6)
-                                    _log(f"Fetched {len(history)} prior messages for session_id={from_number}")
-                                except Exception as e:
-                                    _log(f"ERROR retrieving DynamoDB history: {e}\n{traceback.format_exc()}")
-                                    history = []
-
-                                history_context = build_context_string(history, new_message=message_body, user_role="user", bot_role="bot", include_new=True)
-
-                                rag_query = message_body
-                                if is_followup_message(message_body):
-                                    try:
-                                        rag_query = call_llm_rephrase(history_context, lang)
-                                        _log(f"Reformulated query: {rag_query!r}")
-                                    except Exception as e:
-                                        _log(f"Failed to reformulate query, falling back to user message. Error: {e}")
-                                        rag_query = message_body
-
-                                _log(f"Calling chat_with_kb with rag_query length={len(rag_query)}")
-                                try:
-                                    answer, citations, debug_info = chat_with_kb(
-                                        rag_query,
-                                        lang,
-                                        debug=SETTINGS.debug_kb,
-                                        extra_context=opening_context,
-                                        extra_keywords=extra_keywords,
-                                        hint_canonical=hint_canonical,
-                                    )
-                                except Exception as e:
-                                    _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
-                                    if is_hours_intent:
-                                        answer = compute_opening_answer(message_body, lang)
-                                        citations = []
-                                        debug_info = {"source": "deterministic_opening_hours_fallback"}
-                                        await _send_whatsapp_message(from_number, answer)
-                                        return {"status": "ok", "message": "Sent deterministic opening hours answer"}
-                                    raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
-
-                                # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
-                                if not citations or contains_apology_or_noinfo(answer):
-                                    _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
-                                    block_hours_fallback = (
-                                        sched_cls.get("has_sched_verbs")
-                                        or sched_cls.get("availability_request")
-                                        or sched_cls.get("admin_action_request")
-                                        or sched_cls.get("staff_contact_request")
-                                        or sched_cls.get("individual_homework_request")
-                                        or sched_cls.get("placement_question")
-                                        or _cites_admin_routing(citations)
-                                        or _looks_like_leave_notification(rag_query)
-                                    )
-                                    if is_hours_intent and not block_hours_fallback:
-                                        answer = compute_opening_answer(message_body, lang)
-                                        citations = []
-                                        debug_info = {"source": "deterministic_opening_hours_fallback"}
-                                    else:
-                                        answer = ""
-
-                                fee_words = ["tuition", "fee", "price", "cost"]
-                                payment_words = ["how to pay", "payment", "pay", "bank transfer", "fps", "account", "method"]
-                                if (
-                                    any(word in rag_query.lower() for word in fee_words)
-                                    and not any(word in rag_query.lower() for word in payment_words)
-                                    and not likely_contains_fee(answer)
-                                ):
-                                    _log("Answer does not contain a fee amount for a tuition/fee query, silencing.")
-                                    answer = ""
-
-                                # Save history
-                                try:
-                                    now_ts = time.time()
-                                    save_message(from_number, "user", message_body, lang, now_ts)
-                                    save_message(from_number, "bot", answer or "", lang, now_ts + 0.01)
-                                    prune_history(from_number, keep=6)
-                                except Exception as e:
-                                    _log(f"ERROR saving/pruning DynamoDB history: {e}\n{traceback.format_exc()}")
-
-                                # NEW: if we stayed silent, add to daily digest pendings
-                                try:
-                                    if not answer:
-                                        admin_digest.add_pending(
-                                            session_id=from_number,
-                                            message=message_body,
-                                            lang=lang,
-                                            flags=sched_cls,
-                                            ts=now_ts
-                                        )
-                                    else:
-                                        # If we replied non-empty, clear any pendings for this chat (today)
-                                        admin_digest.resolve_session(from_number)
-                                except Exception as e:
-                                    _log(f"[DIGEST] add/resolve error: {e}")
-
-                                _log(f"LLM raw answer: {answer!r}")
-                                _log(f"LLM citations: {json.dumps(citations, ensure_ascii=False, indent=2)}")
-                                if debug_info:
-                                    _log(f"LLM debug_info: {json.dumps(debug_info, ensure_ascii=False, indent=2)}")
-                                silent_reason = debug_info.get("silence_reason") if isinstance(debug_info, dict) else None
-                                is_followup = is_followup_message(message_body)
-                                if not answer and silent_reason == "no_citations" and is_followup and history:
-                                    _log("Allowing context-only answer for followup message due to chat history, but LLM did not produce anything.")
-                                    # still silent; already added to pendings above
-
-                                # Handle markers (enrollment/blooket)
-                                answer, marker = extract_and_strip_marker(answer, "[SEND_ENROLLMENT_FORM]")
-                                ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"
-                                send_form = marker
-                                answer, marker_blooket = extract_and_strip_marker(answer, "[SEND_BLOOKET_PDF]")
-                                BLOOKET_PDF_URL = "https://drive.google.com/uc?export=download&id=18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M"
-                                send_blooket = marker_blooket
-
-                                sent = False
-                                if send_form:
-                                    await _send_whatsapp_document(from_number, ENROLLMENT_FORM_URL, "enrollment_form.pdf")
-                                    sent = True
-                                if send_blooket:
-                                    await _send_whatsapp_document(from_number, BLOOKET_PDF_URL, "blooket_instructions.pdf")
-                                    sent = True
-
-                                if sent and answer:
-                                    await _send_whatsapp_message(from_number, answer)
-                                elif answer:
-                                    await _send_whatsapp_message(from_number, answer)
-                                else:
-                                    _maybe_schedule_auto_ack_whatsapp(from_number, lang, base_ts=now_ts)
-
-                                return {"status": "ok", "message": "Message processed"}
+                                # Process the message using the core function
+                                result = await _process_whatsapp_message_core(from_number, message_body, contact_name)
+                                return result
                             else:
                                 _log(f"INFO: Received non-text message of type '{message_type}' from {from_number}. Ignoring.")
                                 return {"status": "ignored", "reason": f"non-text message type: {message_type}"}
@@ -819,4 +890,63 @@ async def whatsapp_webhook_handler(request: Request):
         return {"status": "ignored", "reason": "unrecognized payload structure"}
     except Exception as e:
         _log(f"ERROR: Failed to process WhatsApp webhook payload: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to process webhook: {e}")
+
+
+@router.post("/ycloud_webhook")
+async def ycloud_webhook_handler(request: Request):
+    """
+    YCloud webhook handler for incoming WhatsApp messages.
+    Supports YCloud's webhook format (whatsapp.message.received events).
+    """
+    try:
+        payload = await request.json()
+        _log(f"Received YCloud webhook payload:\n{json.dumps(payload, indent=2)}")
+
+        # YCloud webhook format: {"event": "whatsapp.message.received", "data": {...}}
+        event = payload.get("event")
+        if event == "whatsapp.message.received":
+            data = payload.get("data", {})
+            
+            # Extract message details from YCloud format
+            from_number = data.get("from")
+            message = data.get("message", {})
+            message_type = message.get("type")
+            
+            _log(f"YCloud message details: from={from_number}, type={message_type}")
+            
+            if not from_number:
+                _log("WARNING: No 'from' number in YCloud webhook")
+                return {"status": "ignored", "reason": "no from number"}
+            
+            # Cancel pending ack if user sends a new message
+            _cancel_pending_ack(from_number)
+            
+            # Check for admin cooldown
+            if _in_admin_cooldown(from_number):
+                _log(f"[COOL] Admin cooldown active for {from_number}. Bot remains silent.")
+                try:
+                    now_ts = time.time()
+                    body_preview = message.get("text", {}).get("body") if message_type == "text" else f"<{message_type}>"
+                    save_message(from_number, "user", body_preview or "", get_language_code(body_preview or ""), now_ts)
+                    prune_history(from_number, keep=6)
+                except Exception as e:
+                    _log(f"[COOL] Error saving history during cooldown: {e}")
+                return {"status": "cooldown_active", "message": "Bot silenced due to recent admin activity"}
+            
+            if message_type == "text":
+                message_body = message.get("text", {}).get("body")
+                contact_name = data.get("contact", {}).get("name")
+                
+                # Process the message using the core function
+                result = await _process_whatsapp_message_core(from_number, message_body, contact_name)
+                return result
+            else:
+                _log(f"INFO: Received non-text message of type '{message_type}' from {from_number}. Ignoring.")
+                return {"status": "ignored", "reason": f"non-text message type: {message_type}"}
+        
+        _log(f"INFO: YCloud webhook event '{event}' not recognized or not a message event.")
+        return {"status": "ignored", "reason": f"unrecognized event: {event}"}
+    except Exception as e:
+        _log(f"ERROR: Failed to process YCloud webhook payload: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to process webhook: {e}")
