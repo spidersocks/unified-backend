@@ -281,8 +281,8 @@ def _convert_markdown_links_to_raw(text: str) -> str:
     """
     if not text:
         return text
-    # Pattern matches [text](url) and replaces with just url
-    return re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\2', text)
+    # Pattern uses non-greedy matching to handle multiple links and edge cases
+    return re.sub(r'\[([^\]]*)\]\(([^)]+)\)', r'\2', text)
 
 
 def _convert_markdown_bold_to_whatsapp(text: str) -> str:
@@ -292,8 +292,8 @@ def _convert_markdown_bold_to_whatsapp(text: str) -> str:
     """
     if not text:
         return text
-    # Pattern matches **text** and replaces with *text*
-    return re.sub(r'\*\*([^*]+)\*\*', r'*\1*', text)
+    # Pattern uses non-greedy matching to handle bold text that may contain asterisks
+    return re.sub(r'\*\*(.*?)\*\*', r'*\1*', text)
 
 
 def _format_for_mobile(text: str) -> str:
