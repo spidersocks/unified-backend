@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request, Query, Response, Body, Depends
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 from llm.bedrock_kb_client import chat_with_kb
@@ -202,6 +203,27 @@ async def _send_whatsapp_document(to: str, doc_url: str, filename: str = "docume
                 pass
         except Exception as e:
             _log(f"[WA] ERROR: Failed to send WhatsApp document via YCloud: {e}")
+
+
+async def _notify_director_of_reply(user_number: str, reply_text: str):
+    """
+    Send a real-time notification to the admin/director whenever the bot generates a reply.
+    This ensures the admin is aware of bot replies that might otherwise mark a chat as read.
+    """
+    if not SETTINGS.admin_digest_director_number:
+        _log("[CC] No admin_digest_director_number configured. Skipping CC notification.")
+        return
+    if not reply_text or not reply_text.strip():
+        _log("[CC] Empty reply. Skipping CC notification.")
+        return
+    # Format the notification message
+    notification = f"[Bot Reply Log]\nTo: {user_number}\n---\n{reply_text}"
+    _log(f"[CC] Sending real-time notification to director: {SETTINGS.admin_digest_director_number}")
+    try:
+        await _send_whatsapp_message(SETTINGS.admin_digest_director_number, notification)
+    except Exception as e:
+        _log(f"[CC] ERROR sending director notification: {e}")
+
 
 _ACK_TASKS: Dict[str, asyncio.Task] = {}  # session_id/phone -> task
 
@@ -539,7 +561,7 @@ async def get_resource(filename: str):
 
 
 @router.post("/chat")
-def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool = Depends(verify_credentials)):
+async def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool = Depends(verify_credentials)):
     """
     Unified chat endpoint for both web and WhatsApp routing (RAG + rules).
     
@@ -663,7 +685,8 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
 
     # --- Call main LLM through Bedrock ---
     try:
-        answer, citations, debug_info = chat_with_kb(
+        answer, citations, debug_info = await run_in_threadpool(
+            chat_with_kb,
             rag_query,
             lang,
             session_id=session_id,
@@ -774,6 +797,8 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
         if answer:
             wa_answer = _convert_markdown_to_whatsapp(answer)
             replies.append({"message": wa_answer})
+            # Send real-time CC notification to director for AutoResponder replies
+            await _notify_director_of_reply(session_id or "unknown", wa_answer)
         if send_enrollment:
             enrollment_url = _get_pdf_url(request, "enrollment_form.pdf")
             replies.append({"message": f"📄 Enrollment Form\nDownload: {enrollment_url}", "file": enrollment_url})
@@ -1040,8 +1065,12 @@ async def whatsapp_webhook_handler(request: Request):
 
                                 if sent and answer:
                                     await _send_whatsapp_message(from_number, answer)
+                                    # Send real-time CC notification to director
+                                    await _notify_director_of_reply(from_number, answer)
                                 elif answer:
                                     await _send_whatsapp_message(from_number, answer)
+                                    # Send real-time CC notification to director
+                                    await _notify_director_of_reply(from_number, answer)
                                 else:
                                     _maybe_schedule_auto_ack_whatsapp(from_number, lang, base_ts=now_ts)
 
@@ -1304,8 +1333,12 @@ async def ycloud_webhook_handler(request: Request):
                 
                 if sent and answer:
                     await _send_whatsapp_message(from_number, answer)
+                    # Send real-time CC notification to director
+                    await _notify_director_of_reply(from_number, answer)
                 elif answer:
                     await _send_whatsapp_message(from_number, answer)
+                    # Send real-time CC notification to director
+                    await _notify_director_of_reply(from_number, answer)
                 else:
                     _maybe_schedule_auto_ack_whatsapp(from_number, lang, base_ts=now_ts)
                 
