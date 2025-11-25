@@ -42,6 +42,56 @@ def _looks_like_leave_notification(text: str) -> bool:
     return bool(_LEAVE_EN.search(text or ""))
 
 
+# --- Android Bridge session detection and formatting helpers ---
+def _is_mobile_session(session_id: str) -> bool:
+    """
+    Detect if the session is from a mobile device (WhatsApp via Android Bridge).
+    Mobile sessions are phone numbers (numeric strings, possibly with + prefix).
+    Web sessions typically start with "web:" prefix.
+    """
+    if not session_id:
+        return False
+    # Web sessions explicitly marked with "web:" prefix
+    if session_id.startswith("web:"):
+        return False
+    # Phone numbers are numeric (with optional + prefix for international format)
+    cleaned = session_id.lstrip("+")
+    return cleaned.isdigit() and len(cleaned) >= 8
+
+
+def _format_links_for_whatsapp(text: str) -> str:
+    """
+    Convert Markdown links [text](url) to raw URLs for WhatsApp.
+    WhatsApp doesn't support Markdown links, but it does auto-linkify URLs.
+    """
+    if not text:
+        return text
+    # Pattern: [link text](url) -> url
+    return re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\2', text)
+
+
+def _convert_bold_for_whatsapp(text: str) -> str:
+    """
+    Convert Markdown bold **text** to WhatsApp bold *text*.
+    WhatsApp uses single asterisks for bold formatting.
+    """
+    if not text:
+        return text
+    # Pattern: **text** -> *text*
+    return re.sub(r'\*\*([^*]+)\*\*', r'*\1*', text)
+
+
+def _format_for_whatsapp(text: str) -> str:
+    """
+    Apply all WhatsApp-specific formatting transformations.
+    """
+    if not text:
+        return text
+    text = _format_links_for_whatsapp(text)
+    text = _convert_bold_for_whatsapp(text)
+    return text
+
+
 # --- Llama client helper (should be moved to llm/llama_client.py) ---
 def call_llama(prompt: str, max_tokens: int = 60, temperature: float = 0.0, stop: list = None) -> str:
     import boto3
@@ -562,6 +612,12 @@ def chat(req: ChatRequest, request: Request):
     if send_blooket:
         answer += f"\n\nYou can download the Blooket instructions [here]({BLOOKET_PDF_URL})."
         _log("Blooket marker triggered.")
+
+    # --- Android Bridge: Format answer for mobile (WhatsApp) sessions ---
+    is_mobile = _is_mobile_session(session_id)
+    if is_mobile and answer:
+        answer = _format_for_whatsapp(answer)
+        _log(f"Mobile session detected ({session_id}). Applied WhatsApp formatting.")
 
     # --- Final response ---
     answer = answer or ""
