@@ -43,6 +43,9 @@ def _looks_like_leave_notification(text: str) -> bool:
 
 
 # --- Android Bridge session detection and formatting helpers ---
+_MIN_PHONE_NUMBER_LENGTH = 8  # Minimum length for international phone numbers
+
+
 def _is_mobile_session(session_id: str) -> bool:
     """
     Detect if the session is from a mobile device (WhatsApp via Android Bridge).
@@ -56,13 +59,15 @@ def _is_mobile_session(session_id: str) -> bool:
         return False
     # Phone numbers are numeric (with optional + prefix for international format)
     cleaned = session_id.lstrip("+")
-    return cleaned.isdigit() and len(cleaned) >= 8
+    return cleaned.isdigit() and len(cleaned) >= _MIN_PHONE_NUMBER_LENGTH
 
 
 def _format_links_for_whatsapp(text: str) -> str:
     """
     Convert Markdown links [text](url) to raw URLs for WhatsApp.
     WhatsApp doesn't support Markdown links, but it does auto-linkify URLs.
+    Note: This handles standard markdown links; edge cases like escaped brackets
+    or nested brackets are not expected in LLM-generated responses.
     """
     if not text:
         return text
@@ -74,11 +79,12 @@ def _convert_bold_for_whatsapp(text: str) -> str:
     """
     Convert Markdown bold **text** to WhatsApp bold *text*.
     WhatsApp uses single asterisks for bold formatting.
+    Uses non-greedy matching to handle text with single asterisks inside bold.
     """
     if not text:
         return text
-    # Pattern: **text** -> *text*
-    return re.sub(r'\*\*([^*]+)\*\*', r'*\1*', text)
+    # Pattern: **text** -> *text* (non-greedy to handle single asterisks within)
+    return re.sub(r'\*\*(.*?)\*\*', r'*\1*', text)
 
 
 def _format_for_whatsapp(text: str) -> str:
