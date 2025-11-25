@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request, Query, Response, Body, Depends
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
@@ -491,9 +492,6 @@ def verify_credentials(credentials: Optional[HTTPBasicCredentials] = Depends(sec
     return True
 
 
-from fastapi.responses import StreamingResponse
-
-
 @router.get("/resources/{filename}")
 async def get_resource(filename: str):
     """
@@ -520,21 +518,24 @@ async def get_resource(filename: str):
         try:
             response = await client.get(drive_url)
             response.raise_for_status()
-            
-            return StreamingResponse(
-                iter([response.content]),
-                media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{filename}"',
-                    "Cache-Control": "public, max-age=3600",
-                },
-            )
         except httpx.HTTPStatusError as e:
             _log(f"[RESOURCE] ERROR: Failed to fetch {filename} from Google Drive: {e}")
             raise HTTPException(status_code=502, detail=f"Failed to fetch resource from upstream: {e}")
         except Exception as e:
             _log(f"[RESOURCE] ERROR: Unexpected error fetching {filename}: {e}")
             raise HTTPException(status_code=500, detail=f"Internal error fetching resource: {e}")
+        
+        async def content_generator():
+            yield response.content
+        
+        return StreamingResponse(
+            content_generator(),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "public, max-age=3600",
+            },
+        )
 
 
 @router.post("/chat")
