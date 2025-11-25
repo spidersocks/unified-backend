@@ -15,8 +15,8 @@ For a simple “contact / phone / email” request, reply ONLY with phone and em
 Phone: +852 2537 9519 (Call)  
 WhatsApp: +852 5118 2819 (WhatsApp only)  
 Email: info@decoders-ls.com  
-Address: (Provide if asked) — [Add your address line here if available]  
-Map / Directions: (Provide link if asked) — e.g. Google Maps short link
+Address: 1/F, Hollywood Centre, 233 Hollywood Road, Sheung Wan, Hong Kong
+Map / Directions: https://share.google/LSbst50FiX5qk5ceB
 
 Social (only include if parent explicitly asks):
 - Facebook: Little Scholars Creative Workshop  
