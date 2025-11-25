@@ -701,10 +701,10 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
             wa_answer = _convert_markdown_to_whatsapp(answer)
             replies.append({"message": wa_answer})
         if send_enrollment:
-            replies.append({"message": "", "file": ENROLLMENT_FORM_URL})
+            replies.append({"message": "📄 Enrollment Form", "file": ENROLLMENT_FORM_URL})
             _log("Enrollment form sent as file attachment.")
         if send_blooket:
-            replies.append({"message": "", "file": BLOOKET_PDF_URL})
+            replies.append({"message": "📄 Blooket Instructions", "file": BLOOKET_PDF_URL})
             _log("Blooket instructions sent as file attachment.")
         # If no answer and no PDFs, add an empty message reply
         if not replies:
