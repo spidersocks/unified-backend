@@ -351,6 +351,9 @@ PDF_DRIVE_IDS = {
     "blooket_instructions.pdf": "18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M",
 }
 
+# User-Agent header for upstream Google Drive requests to ensure reliability
+GOOGLE_DRIVE_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
 ENROLLMENT_FORM_MARKER = "[SEND_ENROLLMENT_FORM]"
 ENROLLMENT_FORM_DOCS = [
     "/en/policies/enrollment_form.md",
@@ -515,7 +518,7 @@ async def get_resource(filename: str):
     _log(f"[RESOURCE] Proxying request for {filename} from Google Drive")
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": GOOGLE_DRIVE_USER_AGENT,
     }
     
     async with httpx.AsyncClient(follow_redirects=True, timeout=60) as client:
