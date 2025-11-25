@@ -399,6 +399,34 @@ def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, contex
 # Post-generation enforcement
 # =========================
 
+# "You're welcome" patterns for post-generation guardrail
+_YOURE_WELCOME_EN = re.compile(
+    r"^\s*(you'?re\s+welcome|no\s+problem|my\s+pleasure|glad\s+to\s+help|happy\s+to\s+help|anytime)[.!]?\s*$",
+    re.IGNORECASE
+)
+_YOURE_WELCOME_ZH_HK = re.compile(
+    r"^\s*(唔(駛|使|洗)客氣|不(用)?客氣|唔緊要|冇問題|樂意幫忙)[！!。.]?\s*$"
+)
+_YOURE_WELCOME_ZH_CN = re.compile(
+    r"^\s*(不(用)?客气|没问题|不客气|乐意帮忙|随时为您服务)[！!。.]?\s*$"
+)
+
+
+def _is_youre_welcome_response(answer: str, lang: str) -> bool:
+    """
+    Detects if the LLM's answer is a "You're welcome" / "No problem" type response.
+    """
+    a = (answer or "").strip()
+    if not a:
+        return False
+    L = (lang or "en").lower()
+    if L.startswith("zh-hk"):
+        return bool(_YOURE_WELCOME_ZH_HK.match(a))
+    if L.startswith("zh-cn") or L == "zh":
+        return bool(_YOURE_WELCOME_ZH_CN.match(a))
+    return bool(_YOURE_WELCOME_EN.match(a))
+
+
 def _post_generation_override(answer: str, message: str, lang: str) -> Tuple[Optional[str], Optional[str]]:
     """
     Returns (override_answer, reason) when we must override the model's output.
@@ -416,6 +444,10 @@ def _post_generation_override(answer: str, message: str, lang: str) -> Tuple[Opt
     # If the user message itself is clearly politeness-only, allow model output to pass (no override)
     if is_politeness_only(message or "", lang):
         return None, None
+
+    # Guardrail: If bot says "You're welcome" but user did NOT say "Thanks", silence it
+    if _is_youre_welcome_response(answer, lang):
+        return "[NO_ANSWER]", "youre_welcome_without_thanks"
 
     return None, None
 
