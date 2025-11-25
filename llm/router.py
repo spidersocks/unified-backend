@@ -397,6 +397,7 @@ class AutoResponderRequest(BaseModel):
 class AutoResponderReply(BaseModel):
     """Single reply item for AutoResponder response."""
     message: str
+    file: Optional[str] = None
 
 
 class AutoResponderResponse(BaseModel):
@@ -693,18 +694,18 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
     _log(f"Returning response (len={len(answer)}, is_autoresponder={is_autoresponder}).")
 
     if is_autoresponder:
-        # For AutoResponder, send PDFs as separate message bubbles instead of appending links
-        # This improves UX by ensuring links generate previews and aren't buried in text
+        # For AutoResponder, send PDFs as file attachments using the 'file' field
+        # AutoResponder for WA supports a 'file' field in JSON response to send attachments
         replies = []
         if answer:
             wa_answer = _convert_markdown_to_whatsapp(answer)
             replies.append({"message": wa_answer})
         if send_enrollment:
-            replies.append({"message": f"📄 Enrollment Form:\n{ENROLLMENT_FORM_URL}"})
-            _log("Enrollment form sent as separate message bubble.")
+            replies.append({"message": "📄 Enrollment Form", "file": ENROLLMENT_FORM_URL})
+            _log("Enrollment form sent as file attachment.")
         if send_blooket:
-            replies.append({"message": f"📄 Blooket Instructions:\n{BLOOKET_PDF_URL}"})
-            _log("Blooket instructions sent as separate message bubble.")
+            replies.append({"message": "📄 Blooket Instructions", "file": BLOOKET_PDF_URL})
+            _log("Blooket instructions sent as file attachment.")
         # If no answer and no PDFs, add an empty message reply
         if not replies:
             replies.append({"message": ""})
