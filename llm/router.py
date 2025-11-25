@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request, Query, Response, Body, Depends
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
@@ -351,9 +352,6 @@ PDF_DRIVE_IDS = {
     "blooket_instructions.pdf": "18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M",
 }
 
-# User-Agent header for upstream Google Drive requests to ensure reliability
-GOOGLE_DRIVE_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-
 ENROLLMENT_FORM_MARKER = "[SEND_ENROLLMENT_FORM]"
 ENROLLMENT_FORM_DOCS = [
     "/en/policies/enrollment_form.md",
@@ -500,10 +498,9 @@ async def get_resource(filename: str):
     Proxy endpoint for serving PDFs from Google Drive.
     
     This endpoint fetches the PDF from Google Drive (handling redirects and cookies)
-    and returns it to the client with the correct content type and Content-Length header.
+    and streams it back to the client with the correct content type.
     This enables the Android AutoResponder app to attach PDFs correctly,
-    as it may not handle 302 redirects or cookies from Google Drive URLs, and
-    simple mobile downloaders often require the Content-Length header.
+    as it may not handle 302 redirects or cookies from Google Drive URLs.
     
     Supported files:
     - enrollment_form.pdf
@@ -517,13 +514,9 @@ async def get_resource(filename: str):
     
     _log(f"[RESOURCE] Proxying request for {filename} from Google Drive")
     
-    headers = {
-        "User-Agent": GOOGLE_DRIVE_USER_AGENT,
-    }
-    
     async with httpx.AsyncClient(follow_redirects=True, timeout=60) as client:
         try:
-            response = await client.get(drive_url, headers=headers)
+            response = await client.get(drive_url)
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
             _log(f"[RESOURCE] ERROR: Failed to fetch {filename} from Google Drive: {e}")
@@ -532,11 +525,11 @@ async def get_resource(filename: str):
             _log(f"[RESOURCE] ERROR: Unexpected error fetching {filename}: {e}")
             raise HTTPException(status_code=500, detail=f"Internal error fetching resource: {e}")
         
-        # Read full content into memory so FastAPI can calculate Content-Length
-        content = response.content
+        async def content_generator():
+            yield response.content
         
-        return Response(
-            content=content,
+        return StreamingResponse(
+            content_generator(),
             media_type="application/pdf",
             headers={
                 "Content-Disposition": f'attachment; filename="{filename}"',
