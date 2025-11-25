@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request, Query, Response
+from fastapi import APIRouter, HTTPException, Request, Query, Response, Body
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 from llm.bedrock_kb_client import chat_with_kb
@@ -370,21 +370,103 @@ class ChatResponse(BaseModel):
     citations: List[Dict[str, Any]] = []
     debug: Optional[Dict[str, Any]] = None
 
+
+# --- AutoResponder for WA support ---
+class AutoResponderQuery(BaseModel):
+    """Inner query object from AutoResponder for WA app."""
+    message: str
+    sender: Optional[str] = None
+    # Additional fields that may be present
+    groupParticipant: Optional[str] = None
+    isGroup: Optional[bool] = None
+    ruleId: Optional[str] = None
+
+
+class AutoResponderRequest(BaseModel):
+    """
+    Request format from AutoResponder for WA app.
+    Accepts the nested JSON structure: {"query": {"message": "...", "sender": "..."}, ...}
+    """
+    query: AutoResponderQuery
+    appPackageName: Optional[str] = None
+    messengerPackageName: Optional[str] = None
+
+
+class AutoResponderReply(BaseModel):
+    """Single reply item for AutoResponder response."""
+    message: str
+
+
+class AutoResponderResponse(BaseModel):
+    """Response format expected by AutoResponder for WA app."""
+    replies: List[AutoResponderReply]
+
+
+def _convert_markdown_to_whatsapp(text: str) -> str:
+    """
+    Convert Markdown formatting to WhatsApp formatting.
+    - Markdown bold (**text**) -> WhatsApp bold (*text*)
+    - Markdown links [text](url) -> raw URL
+    """
+    if not text:
+        return text
+
+    # Convert Markdown bold **text** to WhatsApp bold *text*
+    # Match ** followed by any content (including single asterisks) until **
+    # Use a more robust pattern that handles edge cases
+    text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text)
+
+    # Convert Markdown links [text](url) to just the URL
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\2', text)
+
+    return text
+
+
 router = APIRouter(tags=["LLM Chat (Bedrock KB)"])
 
-@router.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest, request: Request):
-    """Unified chat endpoint for both web and WhatsApp routing (RAG + rules)."""
-    _log(f"/chat called: message={req.message!r}, language={req.language!r}, session_id={req.session_id!r}, debug={req.debug!r}")
+
+@router.post("/chat")
+def chat(request: Request, body: Dict[str, Any] = Body(default={})):
+    """
+    Unified chat endpoint for both web and WhatsApp routing (RAG + rules).
+    
+    Supports two input formats:
+    1. Standard format: {"message": "...", "language": "...", "session_id": "...", "debug": false}
+    2. AutoResponder format: {"query": {"message": "...", "sender": "..."}, "appPackageName": "...", ...}
+    
+    Returns:
+    - Standard format: {"answer": "...", "citations": [...], "debug": {...}}
+    - AutoResponder format: {"replies": [{"message": "..."}]}
+    """
+    # Detect request format and extract parameters
+    is_autoresponder = False
+    
+    if body and "query" in body and isinstance(body.get("query"), dict):
+        # AutoResponder format detected
+        is_autoresponder = True
+        query_data = body["query"]
+        message = query_data.get("message", "")
+        session_id = query_data.get("sender") or query_data.get("groupParticipant")
+        language = None  # Will be auto-detected
+        debug = False
+        _log(f"/chat called (AutoResponder format): message={message!r}, sender={session_id!r}")
+    else:
+        # Standard ChatRequest format
+        message = body.get("message", "") if body else ""
+        language = body.get("language") if body else None
+        session_id = body.get("session_id") if body else None
+        debug = body.get("debug", False) if body else False
+        _log(f"/chat called: message={message!r}, language={language!r}, session_id={session_id!r}, debug={debug!r}")
+    
     _log(f"Headers: {dict(request.headers)}")
 
     # --- Session and language setup ---
-    session_id = req.session_id or ("web:" + str(hash(request.client.host)))
-    lang = req.language or get_language_code(req.message, accept_language_header=request.headers.get("accept-language"))
+    session_id = session_id or ("web:" + str(hash(request.client.host)))
+    lang = language or get_language_code(message, accept_language_header=request.headers.get("accept-language"))
     _log(f"Detected language: {lang!r}")
 
     # --- Scheduling / Opening-hours detection ---
-    sched_cls = classify_scheduling_context(req.message, lang)
+    sched_cls = classify_scheduling_context(message, lang)
     is_scheduling_action = bool(
         (sched_cls.get("has_sched_verbs")
          or sched_cls.get("availability_request")
@@ -426,21 +508,22 @@ def chat(req: ChatRequest, request: Request):
             ]
 
     if is_scheduling_action:
-        opening_context = summarize_user_date_intent(req.message, lang)
+        opening_context = summarize_user_date_intent(message, lang)
         _log(f"Scheduling/action detected. Providing date hints only:\n{opening_context}")
     else:
-        is_hours_intent, debug_intent = detect_opening_hours_intent(req.message, lang)
+        is_hours_intent, debug_intent = detect_opening_hours_intent(message, lang)
         if is_hours_intent:
             has_holiday_marker = bool((debug_intent or {}).get("holiday_hits"))
-            if has_holiday_marker or not is_general_hours_query(req.message, lang):
-                opening_context = extract_opening_context(req.message, lang)
+            if has_holiday_marker or not is_general_hours_query(message, lang):
+                opening_context = extract_opening_context(message, lang)
                 _log(f"Opening hours intent detected as SPECIFIC. Context:\n{opening_context}")
             hint_canonical = "opening_hours"
         else:
             _log("No specific opening hours intent detected.")
 
     # --- Chat history handling ---
-    use_history = req.session_id is not None and not req.session_id.startswith("web:")
+    # For AutoResponder, always use history if sender is provided
+    use_history = session_id is not None and not session_id.startswith("web:")
     history = []
     if use_history:
         try:
@@ -452,15 +535,15 @@ def chat(req: ChatRequest, request: Request):
         _log("Skipping chat history for this request.")
 
     history_context = build_context_string(
-        history, new_message=req.message, user_role="user", bot_role="bot", include_new=True
+        history, new_message=message, user_role="user", bot_role="bot", include_new=True
     )
 
     # --- Reformulate query if needed ---
-    rag_query = req.message
-    if is_followup_message(req.message):
+    rag_query = message
+    if is_followup_message(message):
         try:
             new_query = call_llm_rephrase(history_context, lang)
-            rag_query = new_query if new_query != "[NO_CONTEXT]" else req.message
+            rag_query = new_query if new_query != "[NO_CONTEXT]" else message
             _log(f"Reformulated query: {rag_query!r}")
         except Exception as e:
             _log(f"Reformulation failed: {e}")
@@ -479,8 +562,12 @@ def chat(req: ChatRequest, request: Request):
     except Exception as e:
         _log(f"ERROR during chat_with_kb: {e}\n{traceback.format_exc()}")
         if is_hours_intent:
+            fallback_answer = compute_opening_answer(message, lang)
+            if is_autoresponder:
+                fallback_answer = _convert_markdown_to_whatsapp(fallback_answer)
+                return {"replies": [{"message": fallback_answer}]}
             return ChatResponse(
-                answer=compute_opening_answer(message_body, lang),
+                answer=fallback_answer,
                 citations=[],
                 debug={"source": "deterministic_opening_hours_fallback"},
             )
@@ -506,7 +593,7 @@ def chat(req: ChatRequest, request: Request):
         ])
 
         if is_hours_intent and not block_hours_fallback:
-            answer = compute_opening_answer(message_body, lang)
+            answer = compute_opening_answer(message, lang)
             citations = []
             debug_info = {"source": "deterministic_opening_hours_fallback"}
         else:
@@ -527,7 +614,7 @@ def chat(req: ChatRequest, request: Request):
     if use_history:
         try:
             now = time.time()
-            save_message(session_id, "user", req.message, lang, now)
+            save_message(session_id, "user", message, lang, now)
             save_message(session_id, "bot", answer or "", lang, now + 0.01)
             prune_history(session_id, keep=6)
             _log(f"Saved/pruned DynamoDB history for session_id={session_id}")
@@ -565,7 +652,13 @@ def chat(req: ChatRequest, request: Request):
 
     # --- Final response ---
     answer = answer or ""
-    _log(f"Returning ChatResponse (len={len(answer)}).")
+    _log(f"Returning response (len={len(answer)}, is_autoresponder={is_autoresponder}).")
+    
+    if is_autoresponder:
+        # Convert Markdown formatting to WhatsApp formatting for AutoResponder
+        wa_answer = _convert_markdown_to_whatsapp(answer)
+        return {"replies": [{"message": wa_answer}]}
+    
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
 
 # WhatsApp handler uses the same guardrails as above.
