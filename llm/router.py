@@ -209,17 +209,20 @@ async def _notify_director_of_reply(user_number: str, reply_text: str):
     """
     Send a real-time notification to the admin/director whenever the bot generates a reply.
     This ensures the admin is aware of bot replies that might otherwise mark a chat as read.
+    Errors are caught to prevent notification failures from blocking user replies.
     """
-    if not SETTINGS.admin_digest_director_number:
-        _log("[CC] No admin_digest_director_number configured. Skipping CC notification.")
-        return
-    if not reply_text or not reply_text.strip():
-        _log("[CC] Empty reply. Skipping CC notification.")
-        return
-    # Format the notification message
-    notification = f"[Bot Reply Log]\nTo: {user_number}\n---\n{reply_text}"
-    _log(f"[CC] Sending real-time notification to director: {SETTINGS.admin_digest_director_number}")
     try:
+        if not SETTINGS.admin_digest_director_number:
+            _log("[CC] No admin_digest_director_number configured. Skipping CC notification.")
+            return
+        if not reply_text or not reply_text.strip():
+            _log("[CC] Empty reply. Skipping CC notification.")
+            return
+        # Truncate very long replies to avoid WhatsApp API message size limits
+        truncated_reply = reply_text[:1500] + "..." if len(reply_text) > 1500 else reply_text
+        # Format the notification message
+        notification = f"[Bot Reply Log]\nTo: {user_number}\n---\n{truncated_reply}"
+        _log(f"[CC] Sending real-time notification to director: {SETTINGS.admin_digest_director_number}")
         await _send_whatsapp_message(SETTINGS.admin_digest_director_number, notification)
     except Exception as e:
         _log(f"[CC] ERROR sending director notification: {e}")
@@ -1065,14 +1068,14 @@ async def whatsapp_webhook_handler(request: Request):
 
                                 if sent and answer:
                                     await _send_whatsapp_message(from_number, answer)
-                                    # Send real-time CC notification to director
-                                    await _notify_director_of_reply(from_number, answer)
                                 elif answer:
                                     await _send_whatsapp_message(from_number, answer)
-                                    # Send real-time CC notification to director
-                                    await _notify_director_of_reply(from_number, answer)
                                 else:
                                     _maybe_schedule_auto_ack_whatsapp(from_number, lang, base_ts=now_ts)
+
+                                # Send real-time CC notification to director (only when there's a reply)
+                                if answer:
+                                    await _notify_director_of_reply(from_number, answer)
 
                                 return {"status": "ok", "message": "Message processed"}
                             else:
@@ -1333,14 +1336,14 @@ async def ycloud_webhook_handler(request: Request):
                 
                 if sent and answer:
                     await _send_whatsapp_message(from_number, answer)
-                    # Send real-time CC notification to director
-                    await _notify_director_of_reply(from_number, answer)
                 elif answer:
                     await _send_whatsapp_message(from_number, answer)
-                    # Send real-time CC notification to director
-                    await _notify_director_of_reply(from_number, answer)
                 else:
                     _maybe_schedule_auto_ack_whatsapp(from_number, lang, base_ts=now_ts)
+                
+                # Send real-time CC notification to director (only when there's a reply)
+                if answer:
+                    await _notify_director_of_reply(from_number, answer)
                 
                 return {"status": "ok", "message": "Message processed"}
             else:
