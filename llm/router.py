@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, Request, Query, Response, Body, Depends
-from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
@@ -498,9 +497,10 @@ async def get_resource(filename: str):
     Proxy endpoint for serving PDFs from Google Drive.
     
     This endpoint fetches the PDF from Google Drive (handling redirects and cookies)
-    and streams it back to the client with the correct content type.
+    and returns it to the client with the correct content type and Content-Length header.
     This enables the Android AutoResponder app to attach PDFs correctly,
-    as it may not handle 302 redirects or cookies from Google Drive URLs.
+    as it may not handle 302 redirects or cookies from Google Drive URLs, and
+    simple mobile downloaders often require the Content-Length header.
     
     Supported files:
     - enrollment_form.pdf
@@ -514,9 +514,13 @@ async def get_resource(filename: str):
     
     _log(f"[RESOURCE] Proxying request for {filename} from Google Drive")
     
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    }
+    
     async with httpx.AsyncClient(follow_redirects=True, timeout=60) as client:
         try:
-            response = await client.get(drive_url)
+            response = await client.get(drive_url, headers=headers)
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
             _log(f"[RESOURCE] ERROR: Failed to fetch {filename} from Google Drive: {e}")
@@ -525,11 +529,11 @@ async def get_resource(filename: str):
             _log(f"[RESOURCE] ERROR: Unexpected error fetching {filename}: {e}")
             raise HTTPException(status_code=500, detail=f"Internal error fetching resource: {e}")
         
-        async def content_generator():
-            yield response.content
+        # Read full content into memory so FastAPI can calculate Content-Length
+        content = response.content
         
-        return StreamingResponse(
-            content_generator(),
+        return Response(
+            content=content,
             media_type="application/pdf",
             headers={
                 "Content-Disposition": f'attachment; filename="{filename}"',
