@@ -705,7 +705,7 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
         if send_blooket:
             replies.append({"message": f"📄 Blooket Instructions:\n{BLOOKET_PDF_URL}"})
             _log("Blooket instructions sent as separate message bubble.")
-        # If no answer and no PDFs, return empty reply list
+        # If no answer and no PDFs, add an empty message reply
         if not replies:
             replies.append({"message": ""})
         return {"replies": replies}
