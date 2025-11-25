@@ -434,11 +434,12 @@ def verify_credentials(credentials: Optional[HTTPBasicCredentials] = Depends(sec
     """
     Verify HTTP Basic Auth credentials for the /chat endpoint.
     
-    If BRIDGE_USERNAME is not set in config, authentication is bypassed (soft fail).
+    If BRIDGE_USERNAME or BRIDGE_PASSWORD is not set in config, authentication is bypassed (soft fail).
     This allows for easy local development while enforcing auth in production.
+    Both username AND password must be configured for authentication to be active.
     """
-    # Soft fail: if no username configured, allow access without auth
-    if not SETTINGS.bridge_username:
+    # Soft fail: if username OR password not configured, allow access without auth
+    if not SETTINGS.bridge_username or not SETTINGS.bridge_password:
         return True
     
     # If credentials are required but not provided, reject
