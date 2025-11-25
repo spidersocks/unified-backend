@@ -263,6 +263,52 @@ def _maybe_schedule_auto_ack_whatsapp(session_id: str, lang: str, base_ts: float
     _log(f"[ACK] Scheduled auto-ack for {session_id} in {delay_secs}s (during_hours={during_hours})")
 
 
+# --- Android Bridge / Mobile formatting helpers ---
+def _is_mobile_session(session_id: str) -> bool:
+    """
+    Returns True if session_id indicates a mobile/WhatsApp session.
+    Web sessions start with "web:" prefix; mobile sessions do not.
+    """
+    if not session_id:
+        return False
+    return not session_id.startswith("web:")
+
+
+def _convert_markdown_links_to_raw(text: str) -> str:
+    """
+    Convert Markdown links [text](url) to raw URLs for WhatsApp.
+    WhatsApp doesn't support Markdown links, so we extract just the URL.
+    """
+    if not text:
+        return text
+    # Pattern matches [text](url) and replaces with just url
+    return re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\2', text)
+
+
+def _convert_markdown_bold_to_whatsapp(text: str) -> str:
+    """
+    Convert Markdown bold **text** to WhatsApp bold *text*.
+    WhatsApp uses single asterisks for bold formatting.
+    """
+    if not text:
+        return text
+    # Pattern matches **text** and replaces with *text*
+    return re.sub(r'\*\*([^*]+)\*\*', r'*\1*', text)
+
+
+def _format_for_mobile(text: str) -> str:
+    """
+    Apply mobile/WhatsApp formatting to text:
+    - Convert Markdown links to raw URLs
+    - Convert Markdown bold to WhatsApp bold
+    """
+    if not text:
+        return text
+    text = _convert_markdown_links_to_raw(text)
+    text = _convert_markdown_bold_to_whatsapp(text)
+    return text
+
+
 # --- Answer marker and guardrail helpers (should be moved to llm/answer_utils.py) ---
 def extract_and_strip_marker(answer: str, marker: str) -> (str, bool):
     pattern = re.compile(rf"\s*{re.escape(marker)}\s*", re.IGNORECASE)
@@ -565,6 +611,13 @@ def chat(req: ChatRequest, request: Request):
 
     # --- Final response ---
     answer = answer or ""
+    
+    # Apply mobile/WhatsApp formatting if session is mobile (Android Bridge)
+    is_mobile = _is_mobile_session(session_id)
+    if is_mobile and answer:
+        answer = _format_for_mobile(answer)
+        _log(f"Applied mobile formatting for session_id={session_id}")
+    
     _log(f"Returning ChatResponse (len={len(answer)}).")
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
 
