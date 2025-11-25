@@ -86,7 +86,7 @@ class Settings:
 
     # --- Daily Admin Digest (5pm roundup) ---
     admin_digest_enabled: bool = os.environ.get("ADMIN_DIGEST_ENABLED", "true").lower() in ("1","true","yes")
-    admin_digest_director_number: str = os.environ.get("ADMIN_DIGEST_DIRECTOR_NUMBER", "+85295505456")
+    admin_digest_director_number: str = os.environ.get("ADMIN_DIGEST_DIRECTOR_NUMBER", "+85251182819")
     admin_digest_hour_local: int = int(os.environ.get("ADMIN_DIGEST_HOUR_LOCAL", "17"))
     admin_digest_minute_local: int = int(os.environ.get("ADMIN_DIGEST_MINUTE_LOCAL", "0"))
     admin_digest_tz: str = os.environ.get("ADMIN_DIGEST_TZ", "Asia/Hong_Kong")
