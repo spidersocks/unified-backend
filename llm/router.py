@@ -696,16 +696,17 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
     if is_autoresponder:
         # For AutoResponder, send PDFs as file attachments using the 'file' field
         # AutoResponder for WA supports a 'file' field in JSON response to send attachments
+        # Also include the raw URL in the message text as a fallback if file attachment fails
         replies = []
         if answer:
             wa_answer = _convert_markdown_to_whatsapp(answer)
             replies.append({"message": wa_answer})
         if send_enrollment:
-            replies.append({"message": "📄 Enrollment Form", "file": ENROLLMENT_FORM_URL})
-            _log("Enrollment form sent as file attachment.")
+            replies.append({"message": f"📄 Enrollment Form\nDownload: {ENROLLMENT_FORM_URL}", "file": ENROLLMENT_FORM_URL})
+            _log("Enrollment form sent as file attachment with URL fallback.")
         if send_blooket:
-            replies.append({"message": "📄 Blooket Instructions", "file": BLOOKET_PDF_URL})
-            _log("Blooket instructions sent as file attachment.")
+            replies.append({"message": f"📄 Blooket Instructions\nDownload: {BLOOKET_PDF_URL}", "file": BLOOKET_PDF_URL})
+            _log("Blooket instructions sent as file attachment with URL fallback.")
         # If no answer and no PDFs, add an empty message reply
         if not replies:
             replies.append({"message": ""})
