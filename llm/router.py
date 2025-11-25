@@ -688,6 +688,29 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
         and _answer_is_short(answer)
     )
 
+    # --- Final response ---
+    answer = answer or ""
+    _log(f"Returning response (len={len(answer)}, is_autoresponder={is_autoresponder}).")
+
+    if is_autoresponder:
+        # For AutoResponder, send PDFs as separate message bubbles instead of appending links
+        # This improves UX by ensuring links generate previews and aren't buried in text
+        replies = []
+        if answer:
+            wa_answer = _convert_markdown_to_whatsapp(answer)
+            replies.append({"message": wa_answer})
+        if send_enrollment:
+            replies.append({"message": f"📄 Enrollment Form:\n{ENROLLMENT_FORM_URL}"})
+            _log("Enrollment form sent as separate message bubble.")
+        if send_blooket:
+            replies.append({"message": f"📄 Blooket Instructions:\n{BLOOKET_PDF_URL}"})
+            _log("Blooket instructions sent as separate message bubble.")
+        # If no answer and no PDFs, return empty reply list
+        if not replies:
+            replies.append({"message": ""})
+        return {"replies": replies}
+
+    # Standard web client: append PDF links as Markdown to the main answer
     if send_enrollment:
         answer += f"\n\nYou can download our enrollment form [here]({ENROLLMENT_FORM_URL})."
         _log("Enrollment form marker triggered.")
@@ -695,15 +718,6 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
         answer += f"\n\nYou can download the Blooket instructions [here]({BLOOKET_PDF_URL})."
         _log("Blooket marker triggered.")
 
-    # --- Final response ---
-    answer = answer or ""
-    _log(f"Returning response (len={len(answer)}, is_autoresponder={is_autoresponder}).")
-    
-    if is_autoresponder:
-        # Convert Markdown formatting to WhatsApp formatting for AutoResponder
-        wa_answer = _convert_markdown_to_whatsapp(answer)
-        return {"replies": [{"message": wa_answer}]}
-    
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
 
 # WhatsApp handler uses the same guardrails as above.
