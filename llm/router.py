@@ -8,7 +8,7 @@ from llm.config import SETTINGS
 from llm.lang import get_language_code
 from llm import tags_index
 from llm.chat_history import save_message, get_recent_history, prune_history, build_context_string
-from llm.intent import detect_opening_hours_intent, is_general_hours_query, classify_scheduling_context
+from llm.intent import detect_opening_hours_intent, is_general_hours_query, classify_scheduling_context, is_reaction_notification
 from llm.opening_hours import compute_opening_answer, extract_opening_context, center_is_open_now, summarize_user_date_intent
 
 import httpx
@@ -711,6 +711,12 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
             debug_info = {"source": "deterministic_opening_hours_fallback"}
         else:
             answer = ""
+
+    if is_reaction_notification(message):
+        _log(f"Ignored reaction notification: {message!r}")
+        if is_autoresponder:
+            return {"replies": []}
+        return ChatResponse(answer="", citations=[], debug={"silenced": "reaction_notification"})
 
     # Fee-related silence test
     fee_words = ["tuition", "fee", "price", "cost"]

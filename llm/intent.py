@@ -225,6 +225,26 @@ def mentions_attendance(message: str, lang: str) -> bool:
         return bool(re.search(r"上课|上学", m))
     return bool(re.search(r"\battend(?:ing)?\s+(?:class|lesson)\b", m, flags=re.IGNORECASE))
 
+_REACTION_PATTERNS = [
+    r"^Reacted\s+.*to\s+[\"“].*[\"”]",  # Reacted 😂 to "..."
+    r"^Reacted\s+.*to\s+.*",            # Generic Reacted ... to ...
+    r"^Liked\s+[\"“].*[\"”]",           # Liked "..."
+    r"^Loved\s+[\"“].*[\"”]",           # Loved "..."
+]
+
+def is_reaction_notification(message: str) -> bool:
+    """
+    Detects if the message is actually a system notification about a reaction.
+    AutoResponder often forwards these as text: 'Reacted 😂 to "Message text"'.
+    """
+    if not message:
+        return False
+    msg = message.strip()
+    for pat in _REACTION_PATTERNS:
+        if re.match(pat, msg, re.IGNORECASE):
+            return True
+    return False
+
 # ============================================================
 # Soft classifiers for scheduling/leave/availability/homework/staff-contact
 # ============================================================
