@@ -93,4 +93,8 @@ class Settings:
     admin_digest_table: str = os.environ.get("ADMIN_DIGEST_TABLE", "AdminDigestPending")
     admin_digest_max_items: int = int(os.environ.get("ADMIN_DIGEST_MAX_ITEMS", "50"))
 
+    # --- Bridge Authentication (HTTP Basic Auth for /chat endpoint) ---
+    bridge_username: str = os.environ.get("BRIDGE_USERNAME", "")
+    bridge_password: str = os.environ.get("BRIDGE_PASSWORD", "")
+
 SETTINGS = Settings()

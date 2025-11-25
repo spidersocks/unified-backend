@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Request, Query, Response, Body
+from fastapi import APIRouter, HTTPException, Request, Query, Response, Body, Depends
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 from llm.bedrock_kb_client import chat_with_kb
@@ -12,6 +13,7 @@ from llm.opening_hours import compute_opening_answer, extract_opening_context, c
 import httpx
 import json
 import re
+import secrets
 import time
 import sys
 import traceback
@@ -424,9 +426,52 @@ def _convert_markdown_to_whatsapp(text: str) -> str:
 
 router = APIRouter(tags=["LLM Chat (Bedrock KB)"])
 
+# HTTP Basic Auth setup for /chat endpoint
+security = HTTPBasic(auto_error=False)
+
+
+def verify_credentials(credentials: Optional[HTTPBasicCredentials] = Depends(security)) -> bool:
+    """
+    Verify HTTP Basic Auth credentials for the /chat endpoint.
+    
+    If BRIDGE_USERNAME or BRIDGE_PASSWORD is not set in config, authentication is bypassed (soft fail).
+    This allows for easy local development while enforcing auth in production.
+    Both username AND password must be configured for authentication to be active.
+    """
+    # Soft fail: if username OR password not configured, allow access without auth
+    if not SETTINGS.bridge_username or not SETTINGS.bridge_password:
+        return True
+    
+    # If credentials are required but not provided, reject
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    
+    # Use secrets.compare_digest for timing-safe comparison
+    correct_username = secrets.compare_digest(
+        credentials.username.encode("utf8"),
+        SETTINGS.bridge_username.encode("utf8"),
+    )
+    correct_password = secrets.compare_digest(
+        credentials.password.encode("utf8"),
+        SETTINGS.bridge_password.encode("utf8"),
+    )
+    
+    if not (correct_username and correct_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    
+    return True
+
 
 @router.post("/chat")
-def chat(request: Request, body: Dict[str, Any] = Body(default={})):
+def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool = Depends(verify_credentials)):
     """
     Unified chat endpoint for both web and WhatsApp routing (RAG + rules).
     
