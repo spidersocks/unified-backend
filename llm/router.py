@@ -412,8 +412,9 @@ def _convert_markdown_to_whatsapp(text: str) -> str:
         return text
 
     # Convert Markdown bold **text** to WhatsApp bold *text*
-    # Use non-greedy match to handle multiple bold sections
-    text = re.sub(r'\*\*([^*]+)\*\*', r'*\1*', text)
+    # Match ** followed by any content (including single asterisks) until **
+    # Use a more robust pattern that handles edge cases
+    text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text)
 
     # Convert Markdown links [text](url) to just the URL
     text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\2', text)
@@ -522,7 +523,7 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={})):
 
     # --- Chat history handling ---
     # For AutoResponder, always use history if sender is provided
-    use_history = (session_id is not None and not session_id.startswith("web:")) or is_autoresponder
+    use_history = session_id is not None and not session_id.startswith("web:")
     history = []
     if use_history:
         try:
