@@ -345,20 +345,40 @@ def likely_contains_fee(answer: str) -> bool:
     return bool(re.search(r"(hk\$|\$)\s*\d+", answer, re.I))
 
 # --- Enrollment/Blooket markers ---
-ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"
+# Mapping of PDF filenames to Google Drive file IDs for the proxy endpoint
+PDF_DRIVE_IDS = {
+    "enrollment_form.pdf": "1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA",
+    "blooket_instructions.pdf": "18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M",
+}
+
 ENROLLMENT_FORM_MARKER = "[SEND_ENROLLMENT_FORM]"
 ENROLLMENT_FORM_DOCS = [
     "/en/policies/enrollment_form.md",
     "/zh-HK/policies/enrollment_form.md",
     "/zh-CN/policies/enrollment_form.md",
 ]
-BLOOKET_PDF_URL = "https://drive.google.com/uc?export=download&id=18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M"
 BLOOKET_MARKER = "[SEND_BLOOKET_PDF]"
 BLOOKET_DOCS = [
     "/en/policies/blooket_instructions.md",
     "/zh-HK/policies/blooket_instructions.md",
     "/zh-CN/policies/blooket_instructions.md",
 ]
+
+
+def _get_base_url(request: Request) -> str:
+    """
+    Construct the base URL from the request, handling HTTPS behind Fly.io proxy.
+    Uses X-Forwarded-Proto header if present, otherwise falls back to request URL scheme.
+    """
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("host", request.url.netloc)
+    return f"{proto}://{host}"
+
+
+def _get_pdf_url(request: Request, filename: str) -> str:
+    """Generate the full URL for a PDF resource served through our proxy endpoint."""
+    base_url = _get_base_url(request)
+    return f"{base_url}/resources/{filename}"
 
 # --- FastAPI schemas ---
 class ChatRequest(BaseModel):
@@ -469,6 +489,52 @@ def verify_credentials(credentials: Optional[HTTPBasicCredentials] = Depends(sec
         )
     
     return True
+
+
+from fastapi.responses import StreamingResponse
+
+
+@router.get("/resources/{filename}")
+async def get_resource(filename: str):
+    """
+    Proxy endpoint for serving PDFs from Google Drive.
+    
+    This endpoint fetches the PDF from Google Drive (handling redirects and cookies)
+    and streams it back to the client with the correct content type.
+    This enables the Android AutoResponder app to attach PDFs correctly,
+    as it may not handle 302 redirects or cookies from Google Drive URLs.
+    
+    Supported files:
+    - enrollment_form.pdf
+    - blooket_instructions.pdf
+    """
+    if filename not in PDF_DRIVE_IDS:
+        raise HTTPException(status_code=404, detail=f"Resource '{filename}' not found")
+    
+    drive_id = PDF_DRIVE_IDS[filename]
+    drive_url = f"https://drive.google.com/uc?export=download&id={drive_id}"
+    
+    _log(f"[RESOURCE] Proxying request for {filename} from Google Drive")
+    
+    async with httpx.AsyncClient(follow_redirects=True, timeout=60) as client:
+        try:
+            response = await client.get(drive_url)
+            response.raise_for_status()
+            
+            return StreamingResponse(
+                iter([response.content]),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Cache-Control": "public, max-age=3600",
+                },
+            )
+        except httpx.HTTPStatusError as e:
+            _log(f"[RESOURCE] ERROR: Failed to fetch {filename} from Google Drive: {e}")
+            raise HTTPException(status_code=502, detail=f"Failed to fetch resource from upstream: {e}")
+        except Exception as e:
+            _log(f"[RESOURCE] ERROR: Unexpected error fetching {filename}: {e}")
+            raise HTTPException(status_code=500, detail=f"Internal error fetching resource: {e}")
 
 
 @router.post("/chat")
@@ -696,16 +762,18 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
     if is_autoresponder:
         # For AutoResponder, send PDFs as file attachments using the 'file' field
         # AutoResponder for WA supports a 'file' field in JSON response to send attachments
-        # Also include the raw URL in the message text as a fallback if file attachment fails
+        # Use our proxy endpoint URL so the Android app can fetch the PDF without redirect issues
         replies = []
         if answer:
             wa_answer = _convert_markdown_to_whatsapp(answer)
             replies.append({"message": wa_answer})
         if send_enrollment:
-            replies.append({"message": f"📄 Enrollment Form\nDownload: {ENROLLMENT_FORM_URL}", "file": ENROLLMENT_FORM_URL})
+            enrollment_url = _get_pdf_url(request, "enrollment_form.pdf")
+            replies.append({"message": f"📄 Enrollment Form\nDownload: {enrollment_url}", "file": enrollment_url})
             _log("Enrollment form sent as file attachment with URL fallback.")
         if send_blooket:
-            replies.append({"message": f"📄 Blooket Instructions\nDownload: {BLOOKET_PDF_URL}", "file": BLOOKET_PDF_URL})
+            blooket_url = _get_pdf_url(request, "blooket_instructions.pdf")
+            replies.append({"message": f"📄 Blooket Instructions\nDownload: {blooket_url}", "file": blooket_url})
             _log("Blooket instructions sent as file attachment with URL fallback.")
         # If no answer and no PDFs, add an empty message reply
         if not replies:
@@ -714,10 +782,12 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
 
     # Standard web client: append PDF links as Markdown to the main answer
     if send_enrollment:
-        answer += f"\n\nYou can download our enrollment form [here]({ENROLLMENT_FORM_URL})."
+        enrollment_url = _get_pdf_url(request, "enrollment_form.pdf")
+        answer += f"\n\nYou can download our enrollment form [here]({enrollment_url})."
         _log("Enrollment form marker triggered.")
     if send_blooket:
-        answer += f"\n\nYou can download the Blooket instructions [here]({BLOOKET_PDF_URL})."
+        blooket_url = _get_pdf_url(request, "blooket_instructions.pdf")
+        answer += f"\n\nYou can download the Blooket instructions [here]({blooket_url})."
         _log("Blooket marker triggered.")
 
     return ChatResponse(answer=answer, citations=citations, debug=(debug_info or None))
@@ -947,18 +1017,18 @@ async def whatsapp_webhook_handler(request: Request):
 
                                 # Handle markers (enrollment/blooket)
                                 answer, marker = extract_and_strip_marker(answer, "[SEND_ENROLLMENT_FORM]")
-                                ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"
                                 send_form = marker
                                 answer, marker_blooket = extract_and_strip_marker(answer, "[SEND_BLOOKET_PDF]")
-                                BLOOKET_PDF_URL = "https://drive.google.com/uc?export=download&id=18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M"
                                 send_blooket = marker_blooket
 
                                 sent = False
                                 if send_form:
-                                    await _send_whatsapp_document(from_number, ENROLLMENT_FORM_URL, "enrollment_form.pdf")
+                                    enrollment_url = _get_pdf_url(request, "enrollment_form.pdf")
+                                    await _send_whatsapp_document(from_number, enrollment_url, "enrollment_form.pdf")
                                     sent = True
                                 if send_blooket:
-                                    await _send_whatsapp_document(from_number, BLOOKET_PDF_URL, "blooket_instructions.pdf")
+                                    blooket_url = _get_pdf_url(request, "blooket_instructions.pdf")
+                                    await _send_whatsapp_document(from_number, blooket_url, "blooket_instructions.pdf")
                                     sent = True
 
                                 if sent and answer:
@@ -1211,18 +1281,18 @@ async def ycloud_webhook_handler(request: Request):
                 
                 # Handle markers (enrollment/blooket)
                 answer, marker = extract_and_strip_marker(answer, "[SEND_ENROLLMENT_FORM]")
-                ENROLLMENT_FORM_URL = "https://drive.google.com/uc?export=download&id=1YTsUsTdf-k8ky-nJIFSZ7LtzzQ7BuzyA"
                 send_form = marker
                 answer, marker_blooket = extract_and_strip_marker(answer, "[SEND_BLOOKET_PDF]")
-                BLOOKET_PDF_URL = "https://drive.google.com/uc?export=download&id=18Ti5H8EoR7rmzzk4KGMGdQZFuqQ4uY4M"
                 send_blooket = marker_blooket
                 
                 sent = False
                 if send_form:
-                    await _send_whatsapp_document(from_number, ENROLLMENT_FORM_URL, "enrollment_form.pdf")
+                    enrollment_url = _get_pdf_url(request, "enrollment_form.pdf")
+                    await _send_whatsapp_document(from_number, enrollment_url, "enrollment_form.pdf")
                     sent = True
                 if send_blooket:
-                    await _send_whatsapp_document(from_number, BLOOKET_PDF_URL, "blooket_instructions.pdf")
+                    blooket_url = _get_pdf_url(request, "blooket_instructions.pdf")
+                    await _send_whatsapp_document(from_number, blooket_url, "blooket_instructions.pdf")
                     sent = True
                 
                 if sent and answer:
