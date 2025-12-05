@@ -1,56 +1,54 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 import boto3
 
 from llm.config import SETTINGS
-from llm.reporting import fetch_messages_for_day, build_text_summary
+from llm.reporting import fetch_messages_for_day, build_text_summary, render_csv
 from llm.router import verify_credentials  # reuse Basic Auth
+from llm.email_utils import send_raw_email_with_csv  # NEW
 
 router = APIRouter(tags=["Admin/Test"])
 
-def _send_email_ses(subject: str, body: str, recipients: List[str]) -> None:
-    if not SETTINGS.aws_region:
-        raise RuntimeError("AWS_REGION not configured")
-    if not SETTINGS.daily_summary_email_from:
-        raise RuntimeError("DAILY_SUMMARY_EMAIL_FROM not configured")
-    if not recipients:
-        raise RuntimeError("No recipients provided")
+def _build_and_send_today_summary() -> dict:
+    messages, day = fetch_messages_for_day(None)
+    subject = f"[LS] Chat Transcript (TEST) for {day.strftime('%Y-%m-%d')} (HKT)"
+    body = build_text_summary(messages, day)
+    if SETTINGS.base_public_url:
+        body += f"\n\nLive report: {SETTINGS.base_public_url}/reports/daily?date={day.strftime('%Y-%m-%d')}"
+    if SETTINGS.bridge_username and SETTINGS.bridge_password:
+        body += f"\n\nAdmin access:\n- Username: {SETTINGS.bridge_username}\n- Password: {SETTINGS.bridge_password}"
 
-    ses = boto3.client("ses", region_name=SETTINGS.aws_region)
-    ses.send_email(
-        Source=SETTINGS.daily_summary_email_from,
-        Destination={"ToAddresses": recipients},
-        Message={
-            "Subject": {"Data": subject, "Charset": "UTF-8"},
-            "Body": {"Text": {"Data": body, "Charset": "UTF-8"}},
-        },
-    )
+    csv_bytes = render_csv(messages)
+    csv_name = f"chat_transcript_{day.strftime('%Y-%m-%d')}.csv"
+
+    recipients = [x.strip() for x in (SETTINGS.daily_summary_email_to or []) if x.strip()]
+    if not recipients and SETTINGS.daily_summary_default_recipient:
+        recipients = [SETTINGS.daily_summary_default_recipient.strip()]
+    if not recipients:
+        recipients = [SETTINGS.daily_summary_email_from.strip()]
+
+    ok = send_raw_email_with_csv(subject, body, csv_bytes, csv_name, recipients)
+    if not ok:
+        raise RuntimeError("SES SendRawEmail failed")
+    return {"ok": True, "sent_to": recipients, "count": len(messages)}
 
 @router.post("/admin/test-email")
 def send_test_email(_auth: bool = Depends(verify_credentials)):
     """
-    Sends a test email with today's transcript (HKT) to DAILY_SUMMARY_EMAIL_TO.
-    Uses SES in SETTINGS.aws_region. Auth via Basic Auth (same as /chat).
+    Sends a test email with today's transcript (HKT) to DAILY_SUMMARY_EMAIL_TO,
+    attaching the CSV to avoid body truncation.
     """
     try:
-        # Today (HKT)
-        messages, day = fetch_messages_for_day(None)
-        subject = f"[LS] Chat Transcript (TEST) for {day.strftime('%Y-%m-%d')} (HKT)"
-        body = build_text_summary(messages, day)
-        # Optional: link to live report if configured
-        if SETTINGS.base_public_url:
-            body += f"\n\nLive report: {SETTINGS.base_public_url}/reports/daily?date={day.strftime('%Y-%m-%d')}"
+        return _build_and_send_today_summary()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send test email: {e}")
 
-        recipients = [x.strip() for x in (SETTINGS.daily_summary_email_to or []) if x.strip()]
-        if not recipients and SETTINGS.daily_summary_default_recipient:
-            recipients = [SETTINGS.daily_summary_default_recipient.strip()]
-        if not recipients:
-            # If nothing set, default to sending to FROM address (self-email)
-            recipients = [SETTINGS.daily_summary_email_from.strip()]
-
-        _send_email_ses(subject, body, recipients)
-        return {"ok": True, "sent_to": recipients, "count": len(messages)}
+# Optional GET convenience for browsers
+@router.get("/admin/test-email")
+def send_test_email_get(_auth: bool = Depends(verify_credentials)):
+    try:
+        return _build_and_send_today_summary()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send test email: {e}")
