@@ -437,11 +437,11 @@ def _convert_markdown_to_whatsapp(text: str) -> str:
 
     # Convert Markdown bold **text** to WhatsApp bold *text*
     # Match ** followed by any content (including single asterisks) until **
-    # Use a more robust pattern that handles edge cases
-    text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"*\1*", text)
 
     # Convert Markdown links [text](url) to just the URL
-    text = re.sub(r'[([^]]+)]\(([^)]+)\)', r'\2', text)
+    # Correctly escaped square brackets and parentheses
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\2", text)
 
     return text
 
