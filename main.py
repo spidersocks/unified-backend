@@ -10,6 +10,7 @@ from pokemon_app.router import router as pokemon_router
 from news_app.router import router as news_router
 from run_calculator_app.router import router as run_calculator_router
 from llm.router import router as llm_router
+from llm.reporting_router import router as reporting_router  # NEW
 
 from pokemon_app.router import load_pokemon_assets
 
@@ -62,6 +63,7 @@ app.include_router(pokemon_router)
 app.include_router(news_router)
 app.include_router(run_calculator_router)
 app.include_router(llm_router)
+app.include_router(reporting_router)  # NEW
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
