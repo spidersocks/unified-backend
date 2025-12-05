@@ -17,6 +17,8 @@ from pokemon_app.router import load_pokemon_assets
 # NEW: start the 5pm admin digest scheduler
 from llm.admin_digest import start_scheduler_background
 from llm.config import SETTINGS
+# NEW: daily email summary
+from llm.daily_summary import start_daily_summary_scheduler_background
 
 app = FastAPI(
     title="Unified Portfolio Backend",
@@ -49,6 +51,13 @@ def startup_event():
             print("[INFO] Admin digest scheduler started.", flush=True)
         except Exception as e:
             print(f"[WARN] Failed to start admin digest scheduler: {e}", flush=True)
+
+    # NEW: Start the daily 08:45 HKT email summary
+    try:
+        start_daily_summary_scheduler_background()
+        print("[INFO] Daily summary scheduler started.", flush=True)
+    except Exception as e:
+        print(f"[WARN] Failed to start daily summary scheduler: {e}", flush=True)
 
 @app.get("/")
 def read_root():

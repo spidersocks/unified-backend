@@ -8,6 +8,10 @@ def _get_whatsapp_test_numbers_from_env() -> List[str]:
     env_var = os.environ.get("WHATSAPP_TEST_NUMBERS", "")
     return [num.strip() for num in env_var.split(",") if num.strip()]
 
+def _parse_email_list(env_key: str) -> List[str]:
+    raw = os.environ.get(env_key, "")
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
 @dataclass
 class Settings:
     # Source (ContentStore)
@@ -97,4 +101,13 @@ class Settings:
     bridge_username: str = os.environ.get("BRIDGE_USERNAME", "")
     bridge_password: str = os.environ.get("BRIDGE_PASSWORD", "")
 
+    # --- Live report + daily email summary ---
+    base_public_url: str = os.environ.get("BASE_PUBLIC_URL", "")
+    daily_summary_enabled: bool = os.environ.get("DAILY_SUMMARY_ENABLED", "true").lower() in ("1","true","yes")
+    daily_summary_hour_local: int = int(os.environ.get("DAILY_SUMMARY_HOUR_LOCAL", "8"))
+    daily_summary_minute_local: int = int(os.environ.get("DAILY_SUMMARY_MINUTE_LOCAL", "45"))
+    daily_summary_email_from: str = os.environ.get("DAILY_SUMMARY_EMAIL_FROM", "")
+    daily_summary_email_to: List[str] = field(default_factory=lambda: _parse_email_list("DAILY_SUMMARY_EMAIL_TO"))
+    daily_summary_default_recipient: str = os.environ.get("DAILY_SUMMARY_DEFAULT_RECIPIENT", "")
+    
 SETTINGS = Settings()
