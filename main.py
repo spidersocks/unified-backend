@@ -20,6 +20,8 @@ from llm.config import SETTINGS
 # NEW: daily email summary
 from llm.daily_summary import start_daily_summary_scheduler_background
 
+from llm.test_email import router as test_email_router
+
 app = FastAPI(
     title="Unified Portfolio Backend",
     description="A single FastAPI service combining multiple portfolio projects.",
@@ -72,7 +74,8 @@ app.include_router(pokemon_router)
 app.include_router(news_router)
 app.include_router(run_calculator_router)
 app.include_router(llm_router)
-app.include_router(reporting_router)  # NEW
+app.include_router(reporting_router)
+app.include_router(test_email_router)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
