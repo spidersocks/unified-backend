@@ -213,6 +213,18 @@ def _ack_text(lang: str, during_hours: bool) -> str:
         return "感谢您的留言。我们的同事会尽快联系您。" if during_hours else "感谢您的留言。我们的同事会在下一个办公时间尽快联系您。"
     return "Thank you for your message. Our staff will contact you ASAP." if during_hours else "Thank you for your message. Our staff will contact you ASAP during next working hours."
 
+def _build_uncertain_offhours_reply(lang: str) -> str:
+    """
+    Localized fallback when the bot cannot confidently answer.
+    Marked with [UNCERTAIN_OFFHOURS] so reporting can highlight it.
+    """
+    L = (lang or "en").lower()
+    if L.startswith("zh-hk"):
+        return "[UNCERTAIN_OFFHOURS] 我們未能喺聊天中夠肯定地回答呢個問題。我哋嘅同事會喺辦公時間跟進您嘅查詢。"
+    if L.startswith("zh-cn") or L == "zh":
+        return "[UNCERTAIN_OFFHOURS] 我们暂时无法在聊天中准确回答这个问题。我们的同事会在工作时间跟进您的查询。"
+    return "[UNCERTAIN_OFFHOURS] We’re not fully sure how to answer that in chat. Our staff will follow up during working hours."
+
 def _cancel_pending_ack(session_id: str):
     task = _ACK_TASKS.pop(session_id, None)
     if task and not task.done():
@@ -437,11 +449,11 @@ def _convert_markdown_to_whatsapp(text: str) -> str:
 
     # Convert Markdown bold **text** to WhatsApp bold *text*
     # Match ** followed by any content (including single asterisks) until **
-    text = re.sub(r"\*\*(.+?)\*\*", r"*\1*", text)
+    # Use a more robust pattern that handles edge cases
+    text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text)
 
     # Convert Markdown links [text](url) to just the URL
-    # Correctly escaped square brackets and parentheses
-    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\2", text)
+    text = re.sub(r'[([^]]+)]\(([^)]+)\)', r'\2', text)
 
     return text
 
@@ -693,7 +705,7 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
 
     # --- Guardrails / Answer suppression ---
     if not citations or contains_apology_or_noinfo(answer):
-        _log("No citations found or noinfo phrase. Silencing output.")
+        _log("No citations found or noinfo phrase. Using off-hours uncertain reply instead of silencing.")
         block_hours_fallback = any([
             sched_cls.get("has_sched_verbs"),
             sched_cls.get("availability_request"),
@@ -710,7 +722,9 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
             citations = []
             debug_info = {"source": "deterministic_opening_hours_fallback"}
         else:
-            answer = ""
+            # NEW: output uncertain off-hours message (instead of silence)
+            answer = _build_uncertain_offhours_reply(lang)
+            citations = []
 
     if is_reaction_notification(message):
         _log(f"Ignored reaction notification: {message!r}")
@@ -726,8 +740,9 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
         and not any(w in rag_query.lower() for w in payment_words)
         and not likely_contains_fee(answer)
     ):
-        _log("Answer does not contain a fee amount for a tuition/fee query. Silencing.")
-        answer = ""
+        _log("Answer does not contain a fee amount for a tuition/fee query. Using off-hours uncertain reply.")
+        answer = _build_uncertain_offhours_reply(lang)
+        citations = []
 
     # --- Save updated chat history ---
     if use_history:
@@ -960,7 +975,7 @@ async def whatsapp_webhook_handler(request: Request):
 
                                 # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
                                 if not citations or contains_apology_or_noinfo(answer):
-                                    _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
+                                    _log("No citations found, or answer is a hedged/noinfo/apology. Using off-hours uncertain reply instead of silencing.")
                                     block_hours_fallback = (
                                         sched_cls.get("has_sched_verbs")
                                         or sched_cls.get("availability_request")
@@ -976,7 +991,8 @@ async def whatsapp_webhook_handler(request: Request):
                                         citations = []
                                         debug_info = {"source": "deterministic_opening_hours_fallback"}
                                     else:
-                                        answer = ""
+                                        answer = _build_uncertain_offhours_reply(lang)
+                                        citations = []
 
                                 fee_words = ["tuition", "fee", "price", "cost"]
                                 payment_words = ["how to pay", "payment", "pay", "bank transfer", "fps", "account", "method"]
@@ -985,8 +1001,9 @@ async def whatsapp_webhook_handler(request: Request):
                                     and not any(word in rag_query.lower() for word in payment_words)
                                     and not likely_contains_fee(answer)
                                 ):
-                                    _log("Answer does not contain a fee amount for a tuition/fee query, silencing.")
-                                    answer = ""
+                                    _log("Fee query without amount; using off-hours uncertain reply.")
+                                    answer = _build_uncertain_offhours_reply(lang)
+                                    citations = []
 
                                 # Save history
                                 try:
@@ -1229,7 +1246,7 @@ async def ycloud_webhook_handler(request: Request):
                 
                 # Answer suppression logic
                 if not citations or contains_apology_or_noinfo(answer):
-                    _log("No citations found, or answer is a hedged/noinfo/apology. Silencing output.")
+                    _log("No citations found, or answer is a hedged/noinfo/apology. Using off-hours uncertain reply instead of silencing.")
                     block_hours_fallback = (
                         sched_cls.get("has_sched_verbs")
                         or sched_cls.get("availability_request")
@@ -1245,7 +1262,8 @@ async def ycloud_webhook_handler(request: Request):
                         citations = []
                         debug_info = {"source": "deterministic_opening_hours_fallback"}
                     else:
-                        answer = ""
+                        answer = _build_uncertain_offhours_reply(lang)
+                        citations = []
                 
                 # Fee detection
                 fee_words = ["tuition", "fee", "price", "cost"]
@@ -1255,8 +1273,9 @@ async def ycloud_webhook_handler(request: Request):
                     and not any(word in rag_query.lower() for word in payment_words)
                     and not likely_contains_fee(answer)
                 ):
-                    _log("Answer does not contain a fee amount for a tuition/fee query, silencing.")
-                    answer = ""
+                    _log("Fee query without amount; using off-hours uncertain reply.")
+                    answer = _build_uncertain_offhours_reply(lang)
+                    citations = []
                 
                 # Save history
                 try:

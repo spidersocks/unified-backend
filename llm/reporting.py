@@ -85,7 +85,7 @@ def render_html(messages: List[Dict], day: datetime) -> str:
     sessions = len(grouped)
 
     parts = [f"<!doctype html><html><head><meta charset='utf-8'><title>{html.escape(title)}</title>",
-             "<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:16px}h2{margin-top:24px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px}th{background:#f6f6f6;text-align:left}code{background:#f2f2f2;padding:1px 4px;border-radius:3px}</style>",
+             "<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:16px}h2{margin-top:24px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px}th{background:#f6f6f6;text-align:left}code{background:#f2f2f2;padding:1px 4px;border-radius:3px}.badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:12px;color:#553c00;background:#ffec99;border:1px solid #f5d06b;margin-left:8px}</style>",
              "</head><body>"]
     parts.append(f"<h1>{html.escape(title)}</h1>")
     parts.append(f"<p>Total messages: <b>{total}</b> &nbsp; Unique sessions: <b>{sessions}</b></p>")
@@ -101,8 +101,12 @@ def render_html(messages: List[Dict], day: datetime) -> str:
             ts = _fmt_hkt(int(m.get("ts", 0)))
             role = html.escape(str(m.get("role", "")))
             lang = html.escape(str(m.get("lang", "")))
-            msg = html.escape(str(m.get("message", "")))
-            parts.append(f"<tr><td>{ts}</td><td>{role}</td><td>{lang}</td><td>{msg}</td></tr>")
+            raw_msg = str(m.get("message", "") or "")
+            is_uncertain = "[UNCERTAIN_OFFHOURS]" in raw_msg
+            msg = html.escape(raw_msg.replace("[UNCERTAIN_OFFHOURS]", "").strip())
+            tr_style = " style='background:#fff8d6'" if is_uncertain and role == "bot" else ""
+            badge = " <span class='badge'>Uncertain (off-hours)</span>" if is_uncertain and role == "bot" else ""
+            parts.append(f"<tr{tr_style}><td>{ts}</td><td>{role}</td><td>{lang}</td><td>{msg}{badge}</td></tr>")
         parts.append("</tbody></table>")
     parts.append("</body></html>")
     return "".join(parts)
