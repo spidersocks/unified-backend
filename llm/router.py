@@ -252,7 +252,7 @@ def _maybe_schedule_auto_ack_whatsapp(session_id: str, lang: str, base_ts: float
     - During working hours (open): wait 30 minutes (1800s).
     - Outside working hours: send immediately (0 delay).
     """
-    # Never schedule an ack if admin cooling is active
+    # Never schedule an ack if admin cooldown engaged
     if _in_admin_cooldown(session_id):
         _log(f"[ACK] Not scheduling ack due to admin cooldown for {session_id}")
         return
@@ -734,7 +734,8 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
         try:
             now = time.time()
             save_message(session_id, "user", message, lang, now)
-            save_message(session_id, "bot", answer or "", lang, now + 0.01)
+            # Use a different integer second to avoid PK/SK collision
+            save_message(session_id, "bot", answer or "", lang, now + 1)
             prune_history(session_id, keep=6)
             _log(f"Saved/pruned DynamoDB history for session_id={session_id}")
         except Exception as e:
@@ -991,7 +992,8 @@ async def whatsapp_webhook_handler(request: Request):
                                 try:
                                     now_ts = time.time()
                                     save_message(from_number, "user", message_body, lang, now_ts)
-                                    save_message(from_number, "bot", answer or "", lang, now_ts + 0.01)
+                                    # Avoid ts collision with user row
+                                    save_message(from_number, "bot", answer or "", lang, now_ts + 1)
                                     prune_history(from_number, keep=6)
                                 except Exception as e:
                                     _log(f"ERROR saving/pruning DynamoDB history: {e}\n{traceback.format_exc()}")
@@ -1261,7 +1263,8 @@ async def ycloud_webhook_handler(request: Request):
                 try:
                     now_ts = time.time()
                     save_message(from_number, "user", message_body, lang, now_ts)
-                    save_message(from_number, "bot", answer or "", lang, now_ts + 0.01)
+                    # Avoid ts collision with user row
+                    save_message(from_number, "bot", answer or "", lang, now_ts + 1)
                     prune_history(from_number, keep=6)
                 except Exception as e:
                     _log(f"ERROR saving/pruning DynamoDB history: {e}\n{traceback.format_exc()}")
