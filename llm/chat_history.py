@@ -40,6 +40,9 @@ def _mem_prune(session_id: str, keep: int):
         _MEM_HISTORY[session_id] = sorted(items, key=lambda x: x["ts"])[-keep:]
 
 def save_message(session_id: str, role: str, message: str, lang: Optional[str] = None, timestamp: Optional[float] = None):
+    """
+    Legacy save without TTL. Kept for compatibility. Prefer save_message_with_ttl for production.
+    """
     ts = int(timestamp or time.time())
     item = {
         "session_id": session_id,
@@ -163,27 +166,35 @@ def clear_history(session_id: str) -> None:
     except Exception:
         _MEM_HISTORY.pop(session_id, None)
 
-# Optional: TTL save helper (uses DynamoDB TTL if configured on 'expire_at')
+# TTL save helper (uses DynamoDB TTL on 'expire_at')
+HALF_YEAR_SECONDS = 180 * 24 * 60 * 60  # ~6 months
+
 def save_message_with_ttl(
     session_id: str,
     role: str,
     message: str,
     lang: Optional[str] = None,
-    ttl_seconds: int = 7 * 24 * 60 * 60,  # default: 7 days
+    timestamp: Optional[float] = None,
+    ttl_seconds: int = HALF_YEAR_SECONDS,
 ):
-    ts = int(time.time())
+    """
+    Save a message with DynamoDB TTL set via 'expire_at'.
+    To activate auto-deletion, enable TTL on the ChatHistory table with 'expire_at' as the TTL attribute.
+    """
+    ts = int(timestamp or time.time())
     item = {
         "session_id": session_id,
         "ts": ts,
         "role": role,
         "message": message,
-        "expire_at": ts + ttl_seconds
+        "expire_at": ts + int(ttl_seconds),
     }
     if lang:
         item["lang"] = lang
     try:
         tbl = _get_table()
         if tbl is None:
+            # In-memory dev fallback: ignore TTL
             _mem_save(item)
             return
         tbl.put_item(Item=item)

@@ -7,7 +7,7 @@ from llm.bedrock_kb_client import chat_with_kb
 from llm.config import SETTINGS
 from llm.lang import get_language_code
 from llm import tags_index
-from llm.chat_history import save_message, get_recent_history, prune_history, build_context_string
+from llm.chat_history import save_message_with_ttl, save_message, get_recent_history, prune_history, build_context_string
 from llm.intent import detect_opening_hours_intent, is_general_hours_query, classify_scheduling_context, is_reaction_notification
 from llm.opening_hours import compute_opening_answer, extract_opening_context, center_is_open_now, summarize_user_date_intent
 
@@ -441,7 +441,7 @@ def _convert_markdown_to_whatsapp(text: str) -> str:
     text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text)
 
     # Convert Markdown links [text](url) to just the URL
-    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\2', text)
+    text = re.sub(r'[([^]]+)]\(([^)]+)\)', r'\2', text)
 
     return text
 
@@ -733,9 +733,9 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
     if use_history:
         try:
             now = time.time()
-            save_message(session_id, "user", message, lang, now)
-            # Use a different integer second to avoid PK/SK collision
-            save_message(session_id, "bot", answer or "", lang, now + 1)
+            # Use TTL-backed saves (6 months by default)
+            save_message_with_ttl(session_id, "user", message, lang, timestamp=now)
+            save_message_with_ttl(session_id, "bot", answer or "", lang, timestamp=now + 1)
             prune_history(session_id, keep=6)
             _log(f"Saved/pruned DynamoDB history for session_id={session_id}")
         except Exception as e:
@@ -991,9 +991,8 @@ async def whatsapp_webhook_handler(request: Request):
                                 # Save history
                                 try:
                                     now_ts = time.time()
-                                    save_message(from_number, "user", message_body, lang, now_ts)
-                                    # Avoid ts collision with user row
-                                    save_message(from_number, "bot", answer or "", lang, now_ts + 1)
+                                    save_message_with_ttl(from_number, "user", message_body, lang, timestamp=now_ts)
+                                    save_message_with_ttl(from_number, "bot", answer or "", lang, timestamp=now_ts + 1)
                                     prune_history(from_number, keep=6)
                                 except Exception as e:
                                     _log(f"ERROR saving/pruning DynamoDB history: {e}\n{traceback.format_exc()}")
@@ -1262,9 +1261,8 @@ async def ycloud_webhook_handler(request: Request):
                 # Save history
                 try:
                     now_ts = time.time()
-                    save_message(from_number, "user", message_body, lang, now_ts)
-                    # Avoid ts collision with user row
-                    save_message(from_number, "bot", answer or "", lang, now_ts + 1)
+                    save_message_with_ttl(from_number, "user", message_body, lang, timestamp=now_ts)
+                    save_message_with_ttl(from_number, "bot", answer or "", lang, timestamp=now_ts + 1)
                     prune_history(from_number, keep=6)
                 except Exception as e:
                     _log(f"ERROR saving/pruning DynamoDB history: {e}\n{traceback.format_exc()}")
