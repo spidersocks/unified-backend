@@ -23,7 +23,7 @@ def _next_run_time(now_hk: datetime) -> datetime:
         candidate = candidate + timedelta(days=1)
     while candidate.weekday() == 6 or is_hk_public_holiday(candidate):
         candidate = candidate + timedelta(days=1)
-      candidate = candidate.replace(hour=target_hour, minute=target_min, second=0, microsecond=0)
+        candidate = candidate.replace(hour=target_hour, minute=target_min, second=0, microsecond=0)
     return candidate
 
 
