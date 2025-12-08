@@ -216,14 +216,14 @@ def _ack_text(lang: str, during_hours: bool) -> str:
 def _build_uncertain_offhours_reply(lang: str) -> str:
     """
     Localized fallback when the bot cannot confidently answer.
-    Marked with [UNCERTAIN_OFFHOURS] so reporting can highlight it.
+    User-facing text omits any internal marker. Use debug/logging to track uncertain replies.
     """
     L = (lang or "en").lower()
     if L.startswith("zh-hk"):
-        return "[UNCERTAIN_OFFHOURS] 我們未能喺聊天中夠肯定地回答呢個問題。我哋嘅同事會喺辦公時間跟進您嘅查詢。"
+        return "我們暫時無法在聊天中準確回答該問題。本中心職員將於辦公時間跟進您的查詢。"
     if L.startswith("zh-cn") or L == "zh":
-        return "[UNCERTAIN_OFFHOURS] 我们暂时无法在聊天中准确回答这个问题。我们的同事会在工作时间跟进您的查询。"
-    return "[UNCERTAIN_OFFHOURS] We’re not fully sure how to answer that in chat. Our staff will follow up during working hours."
+        return "我们暂时无法在聊天中准确回答这个问题。本中心职员将在工作时间跟进您的查询。"
+    return "We’re not fully sure how to answer that in chat. Our staff will follow up during working hours."
 
 def _cancel_pending_ack(session_id: str):
     task = _ACK_TASKS.pop(session_id, None)
@@ -725,6 +725,11 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
             # NEW: output uncertain off-hours message (instead of silence)
             answer = _build_uncertain_offhours_reply(lang)
             citations = []
+            # NEW: flag for reporting/debug
+            if isinstance(debug_info, dict):
+                debug_info["uncertain_offhours"] = True
+            else:
+                debug_info = {"uncertain_offhours": True}
 
     if is_reaction_notification(message):
         _log(f"Ignored reaction notification: {message!r}")
@@ -743,6 +748,11 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
         _log("Answer does not contain a fee amount for a tuition/fee query. Using off-hours uncertain reply.")
         answer = _build_uncertain_offhours_reply(lang)
         citations = []
+        # NEW: flag for reporting/debug
+        if isinstance(debug_info, dict):
+            debug_info["uncertain_offhours"] = True
+        else:
+            debug_info = {"uncertain_offhours": True}
 
     # --- Save updated chat history ---
     if use_history:
@@ -993,6 +1003,11 @@ async def whatsapp_webhook_handler(request: Request):
                                     else:
                                         answer = _build_uncertain_offhours_reply(lang)
                                         citations = []
+                                        # NEW: flag for reporting/debug
+                                        if isinstance(debug_info, dict):
+                                            debug_info["uncertain_offhours"] = True
+                                        else:
+                                            debug_info = {"uncertain_offhours": True}
 
                                 fee_words = ["tuition", "fee", "price", "cost"]
                                 payment_words = ["how to pay", "payment", "pay", "bank transfer", "fps", "account", "method"]
@@ -1004,6 +1019,11 @@ async def whatsapp_webhook_handler(request: Request):
                                     _log("Fee query without amount; using off-hours uncertain reply.")
                                     answer = _build_uncertain_offhours_reply(lang)
                                     citations = []
+                                    # NEW: flag for reporting/debug
+                                    if isinstance(debug_info, dict):
+                                        debug_info["uncertain_offhours"] = True
+                                    else:
+                                        debug_info = {"uncertain_offhours": True}
 
                                 # Save history
                                 try:
@@ -1264,6 +1284,11 @@ async def ycloud_webhook_handler(request: Request):
                     else:
                         answer = _build_uncertain_offhours_reply(lang)
                         citations = []
+                        # NEW: flag for reporting/debug
+                        if isinstance(debug_info, dict):
+                            debug_info["uncertain_offhours"] = True
+                        else:
+                            debug_info = {"uncertain_offhours": True}
                 
                 # Fee detection
                 fee_words = ["tuition", "fee", "price", "cost"]
@@ -1276,6 +1301,11 @@ async def ycloud_webhook_handler(request: Request):
                     _log("Fee query without amount; using off-hours uncertain reply.")
                     answer = _build_uncertain_offhours_reply(lang)
                     citations = []
+                    # NEW: flag for reporting/debug
+                    if isinstance(debug_info, dict):
+                        debug_info["uncertain_offhours"] = True
+                    else:
+                        debug_info = {"uncertain_offhours": True}
                 
                 # Save history
                 try:
