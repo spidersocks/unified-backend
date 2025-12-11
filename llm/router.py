@@ -220,10 +220,13 @@ def _build_uncertain_offhours_reply(lang: str) -> str:
     """
     L = (lang or "en").lower()
     if L.startswith("zh-hk"):
-        return "我們暫時無法在聊天中準確回答該問題。本中心職員將於辦公時間跟進您的查詢。"
+        # Simplified off-hours reply (no “not sure how to answer” line)
+        return "本中心職員將於辦公時間跟進您的查詢。"
     if L.startswith("zh-cn") or L == "zh":
-        return "我们暂时无法在聊天中准确回答这个问题。本中心职员将在工作时间跟进您的查询。"
-    return "We’re not fully sure how to answer that in chat. Our staff will follow up during working hours."
+        # Simplified off-hours reply (no “not sure how to answer” line)
+        return "本中心职员将在工作时间跟进您的查询。"
+    # Simplified off-hours reply for English
+    return "Our staff will follow up during working hours."
 
 def _cancel_pending_ack(session_id: str):
     task = _ACK_TASKS.pop(session_id, None)
