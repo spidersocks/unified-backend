@@ -527,6 +527,36 @@ def _relative_offset(message: str, L: str) -> Optional[int]:
                 return off
     return None
 
+# --- NEW: Numeric DMY parser ('29/12') ---
+def _parse_numeric_dmy(message: str, base: datetime) -> Optional[datetime]:
+    """
+    Parse dates like '29/12' (DMY). Returns next occurrence on/after 'base' in HKT.
+    """
+    m = re.search(r"\b([0-3]?\d)\s*/\s*([01]?\d)\b", message or "")
+    if not m:
+        return None
+    day = int(m.group(1))
+    month = int(m.group(2))
+    # Basic sanity
+    if not (1 <= month <= 12 and 1 <= day <= 31):
+        return None
+    year = base.year
+    try:
+        cand = HK_TZ.localize(datetime(year, month, day, 12, 0))
+    except ValueError:
+        return None
+    # If the candidate is in the past relative to base date, roll to next year
+    if cand.date() < base.date():
+        try:
+            cand = HK_TZ.localize(datetime(year + 1, month, day, 12, 0))
+        except ValueError:
+            return None
+    # Preserve time if present in message
+    t = _parse_time(message or "")
+    if t:
+        cand = cand.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
+    return cand
+
 def _parse_datetime(message: str, now: datetime, L: str) -> Optional[datetime]:
     # 1) Relative offsets first (today/tomorrow/etc.)
     rel = _relative_offset(message or "", L)
@@ -546,6 +576,11 @@ def _parse_datetime(message: str, now: datetime, L: str) -> Optional[datetime]:
             if (dom is not None and cand.day != dom) or (wd is not None and cand.weekday() != wd):
                 continue
             return cand.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0) if t else cand.replace(hour=12, minute=0, second=0, microsecond=0)
+
+    # 2b) Numeric DMY like '29/12' (manual, before dateparser)
+    ndt = _parse_numeric_dmy(message or "", now.astimezone(HK_TZ))
+    if ndt:
+        return ndt
 
     # 3) Only then try dateparser, and only if it looks like an absolute date
     if dateparser and _looks_like_absolute_date(message or ""):
