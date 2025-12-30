@@ -23,7 +23,7 @@ from collections import deque
 
 from llm import admin_digest
 
-def _cites_admin_routing(citations: List[Dict, Any]]) -> bool:
+def _cites_admin_routing(citations: List[Dict[str, Any]]) -> bool:
     if not citations:
         return False
     for c in citations:
@@ -31,7 +31,6 @@ def _cites_admin_routing(citations: List[Dict, Any]]) -> bool:
         if "/faq/admin_scheduling_routing.md" in uri:
             return True
     return False
-
 
 _LEAVE_EN = re.compile(
     r"\b(can'?t|cannot|won'?t)\s+(attend|come|make\s+(?:it|the\s+class|the\s+lesson))\b"
