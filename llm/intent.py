@@ -226,10 +226,10 @@ def mentions_attendance(message: str, lang: str) -> bool:
     return bool(re.search(r"\battend(?:ing)?\s+(?:class|lesson)\b", m, flags=re.IGNORECASE))
 
 _REACTION_PATTERNS = [
-    r"^Reacted\s+.*to\s+[\\"“].*[\\"”]",  # Reacted 😂 to "..."
-    r"^Reacted\s+.*to\s+.*",            # Generic Reacted ... to ...
-    r"^Liked\s+[\\"“].*[\\"”]",           # Liked "..."
-    r"^Loved\s+[\\"“].*[\\"”]",           # Loved "..."
+    r'^Reacted\s+.*to\s+["\'].*["\']',  # Reacted 😂 to "..."
+    r'^Reacted\s+.*to\s+.*',            # Generic Reacted ... to ...
+    r'^Liked\s+["\'].*["\']',           # Liked "..."
+    r'^Loved\s+["\'].*["\']',           # Loved "..."
 ]
 
 def is_reaction_notification(message: str) -> bool:
