@@ -17,7 +17,8 @@ from botocore.config import Config
 from typing import Optional, Tuple, List, Dict, Any
 
 from llm.config import SETTINGS
-from llm.intent import classify_scheduling_context, is_politeness_only
+from llm.intent import classify_scheduling_context, is_politeness_only, is_attachment_like_message
+from llm.opening_hours import _HOLIDAY_KEYWORDS
 
 # =========================
 # AWS Clients
@@ -46,7 +47,7 @@ INSTRUCTIONS = {
         "用精簡要點友善作答。若內容不足或無關，你*必須*只回答 `[NO_ANSWER]`，唔可以加任何其他文字。"
     ),
     "zh-CN": (
-        "用精简要点友善作答。若内容不足或无关，你*必须*仅回答 `[NO_ANSWER]`，不要加任何其他文字。"
+        "用精简要点友善作答。若内容不足或无关，你*必须*仅回答 `[NO_ANSWER]`，不要加任何文字。"
     ),
 }
 
@@ -108,7 +109,7 @@ CRITICAL_SCHEDULING_GUARDRAIL = {
         "2）如家长就特定日期／时间提出预约／改期／取消／请假，而不是询问政策，*仅*回复 [NO_ANSWER]。\n"
         "3）如家长询问『是否有可用时段／时间表／老师档期／开课时间』，或消息提及具体学生姓名、或『完成／之后评估』等，一律*仅*回复 [NO_ANSWER]。\n"
         "4）如消息包含日期／学生，但明确询问政策，请根据内容回答政策，并明确说明不进行任何安排。\n"
-        "5）“不客气”等纯礼貌回复仅用于消息只有致谢时。\n"
+        "5）“不客气”等纯禮貌回复仅用于消息只有致谢时。\n"
         "6）如家长要求『转告／通知／帮我问／跟老师说／提醒』老师或工作人员，*仅*回复 [NO_ANSWER]。\n"
         "7）涉及个别学生的分班／水平／适配性或混龄班组合判断：\n"
         "   - 未明确询问政策 → 仅回复 [NO_ANSWER]。\n"
@@ -203,6 +204,30 @@ SEASONAL_AVAILABILITY_GUARDRAIL = {
     "zh-CN": (
         "季节性或按月份询问（例如暑期／七月／八月课程、夏令营）属于“时段／时间表”查询，*必须*仅回复 [NO_ANSWER]。"
         "不要臆测或说“没有具体信息”，不要提供任何安排或建议。"
+    ),
+}
+
+# NEW: General holiday-greeting guardrail (outside opening-hours flow)
+GEN_HOLIDAY_GREETING_GUARDRAIL = {
+    "en": "Do NOT produce seasonal or holiday greetings (e.g., 'Happy New Year', 'Merry Christmas', 'Happy Mid‑Autumn/Chung Yeung') unless the user's message clearly contains that holiday or an explicit greeting.",
+    "zh-HK": "除非用戶訊息清楚包含該節日或主動祝賀，否則不要主動送上任何節日祝賀（如『聖誕快樂』『新年快樂』『中秋快樂／重陽』等）。",
+    "zh-CN": "除非用户消息明确包含该节日或主动祝贺，否则不要主动发送任何节日祝福（如“圣诞快乐”“新年快乐”“中秋快乐/重阳”等）。",
+}
+
+# Attachment/media clarifying behavior
+ATTACHMENT_CLARIFYING_GUARDRAIL = {
+    "en": (
+        "If the message looks like an attachment/media or a short submission (e.g., video/photo/file with no explicit question), "
+        "ask ONE short clarifying question (one sentence) to understand what help is needed. "
+        "Do NOT produce holiday greetings or marketing."
+    ),
+    "zh-HK": (
+        "如果訊息似乎是附件／媒體或簡短提交（例如影片／相片／文件，且沒有明確提問），請用一句簡短問題澄清對方需要什麼幫助。"
+        "不要主動加入節日祝賀或推廣。"
+    ),
+    "zh-CN": (
+        "如果消息看起来是附件/媒体或简短提交（如视频/照片/文件，且没有明确提问），请用一句简短问题澄清对方需要什么帮助。"
+        "不要主动加入节日祝福或营销。"
     ),
 }
 
@@ -316,6 +341,38 @@ def _silence_reason(answer: str, citation_count: int) -> Optional[str]:
     return None
 
 # =========================
+# Holiday keyword and output detectors (NEW)
+# =========================
+
+def _message_has_holiday_keyword(message: str) -> bool:
+    m = (message or "").lower()
+    for official, kws in _HOLIDAY_KEYWORDS.items():
+        for kw in kws:
+            kw_lc = kw.lower()
+            if (' ' not in kw_lc and re.search(r'[a-zA-Z]', kw_lc)):
+                if re.search(r'\b' + re.escape(kw_lc) + r'\b', m):
+                    return True
+            elif kw_lc in m:
+                return True
+    # Common English greeting intents
+    return bool(re.search(r"\b(happy|merry)\b", m, re.I))
+
+_HOLIDAY_GREETING_OUT_EN = re.compile(r"^\s*(happy\s+\w+|merry\s+\w+)\b", re.IGNORECASE)
+_HOLIDAY_GREETING_OUT_ZH_HK = re.compile(r"^\s*(祝|祝你).*(快樂|愉快)|快樂節日|節日快樂")
+_HOLIDAY_GREETING_OUT_ZH_CN = re.compile(r"^\s*(祝|祝您).*(快乐|愉快)|快乐节日|节日快乐")
+
+def _is_holiday_greeting_output(answer: str, lang: str) -> bool:
+    a = (answer or "").strip()
+    if not a:
+        return False
+    L = (lang or "en").lower()
+    if L.startswith("zh-hk"):
+        return bool(_HOLIDAY_GREETING_OUT_ZH_HK.match(a))
+    if L.startswith("zh-cn") or L == "zh":
+        return bool(_HOLIDAY_GREETING_OUT_ZH_CN.match(a))
+    return bool(_HOLIDAY_GREETING_OUT_EN.match(a))
+
+# =========================
 # Prompt builder
 # =========================
 
@@ -372,6 +429,14 @@ def _build_instructions_for_message(lang: str, user_query: str, instruction_part
     if not cls.get("politeness_only"):
         final_instructions.append("Do NOT use a politeness-only reply.")
 
+    # General holiday greeting guardrail (outside opening-hours flow)
+    if not _message_has_holiday_keyword(user_query or ""):
+        final_instructions.append(GEN_HOLIDAY_GREETING_GUARDRAIL.get(lang, GEN_HOLIDAY_GREETING_GUARDRAIL["en"]))
+
+    # Attachment/media clarifying behavior if detected
+    if is_attachment_like_message(user_query or "", lang):
+        final_instructions.append(ATTACHMENT_CLARIFYING_GUARDRAIL.get(lang, ATTACHMENT_CLARIFYING_GUARDRAIL["en"]))
+
     # Append any extra system instruction parts (persona string, opening-hours guardrails, etc.)
     final_instructions.extend(instruction_parts)
 
@@ -383,15 +448,15 @@ def build_llm_prompt(lang: str, instruction_parts: List[str], query: str, contex
 
     formatted_context = ""
     for i, chunk in enumerate(context_chunks):
-        formatted_context += f"<search_result index=\"{i+1}\">\n{chunk}\n</search_result>\n\n"
+        formatted_context += f"\n{chunk}\n\n\n"
 
     return (
         f"{scaffold['role']}\n\n"
-        f"<instructions>\n{instructions}\n</instructions>\n\n"
+        f"\n{instructions}\n\n\n"
         f"{scaffold['use_results']}\n"
-        f"<search_results>\n{formatted_context.strip()}\n</search_results>\n\n"
+        f"\n{formatted_context.strip()}\n\n\n"
         f"{scaffold['ask']}\n"
-        f"<question>\n{query}\n</question>\n\n"
+        f"\n{query}\n\n\n"
         f"{scaffold['answer_label']}"
     )
 
@@ -411,7 +476,6 @@ _YOURE_WELCOME_ZH_CN = re.compile(
     r"^\s*(不(用)?客气|没问题|不客气|乐意帮忙|随时为您服务)[！!。.]?\s*$"
 )
 
-
 def _is_youre_welcome_response(answer: str, lang: str) -> bool:
     """
     Detects if the LLM's answer is a "You're welcome" / "No problem" type response.
@@ -425,7 +489,6 @@ def _is_youre_welcome_response(answer: str, lang: str) -> bool:
     if L.startswith("zh-cn") or L == "zh":
         return bool(_YOURE_WELCOME_ZH_CN.match(a))
     return bool(_YOURE_WELCOME_EN.match(a))
-
 
 def _post_generation_override(answer: str, message: str, lang: str) -> Tuple[Optional[str], Optional[str]]:
     """
@@ -448,6 +511,10 @@ def _post_generation_override(answer: str, message: str, lang: str) -> Tuple[Opt
     # Guardrail: If bot says "You're welcome" but user did NOT say "Thanks", silence it
     if _is_youre_welcome_response(answer, lang):
         return "[NO_ANSWER]", "youre_welcome_without_thanks"
+
+    # NEW: If bot outputs a holiday greeting but the user did NOT mention a holiday/greeting, silence it
+    if _is_holiday_greeting_output(answer, lang) and not _message_has_holiday_keyword(message or ""):
+        return "[NO_ANSWER]", "holiday_greeting_without_user_holiday"
 
     return None, None
 

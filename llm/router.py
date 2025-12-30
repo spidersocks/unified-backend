@@ -8,7 +8,7 @@ from llm.config import SETTINGS
 from llm.lang import get_language_code
 from llm import tags_index
 from llm.chat_history import save_message_with_ttl, save_message, get_recent_history, prune_history, build_context_string
-from llm.intent import detect_opening_hours_intent, is_general_hours_query, classify_scheduling_context, is_reaction_notification
+from llm.intent import detect_opening_hours_intent, is_general_hours_query, classify_scheduling_context, is_reaction_notification, is_attachment_like_message
 from llm.opening_hours import compute_opening_answer, extract_opening_context, center_is_open_now, summarize_user_date_intent
 
 import httpx
@@ -23,7 +23,7 @@ from collections import deque
 
 from llm import admin_digest
 
-def _cites_admin_routing(citations: List[Dict[str, Any]]) -> bool:
+def _cites_admin_routing(citations: List[Dict, Any]]) -> bool:
     if not citations:
         return False
     for c in citations:
@@ -380,6 +380,28 @@ BLOOKET_DOCS = [
     "/zh-CN/policies/blooket_instructions.md",
 ]
 
+# NEW: Detect short clarifying question (so we don't override it due to no citations)
+def _is_short_clarifying_question(answer: str, lang: str) -> bool:
+    """
+    Detect a short, single-sentence clarifying question (intended for media/attachment-like messages),
+    so we don't replace it with the uncertain off-hours reply due to missing citations.
+    """
+    a = (answer or "").strip()
+    if not a:
+        return False
+    if len(a) > 160 or not a.endswith("?"):
+        return False
+    patterns = [
+        r"\b(could you|can you|would you)\b.*\b(help|clarify|share)\b",
+        r"\bwhat\s+(would|do)\s+you\b.*\bneed\b",
+        r"\bhow\s+can\s+we\b.*\bhelp\b",
+        r"\bplease\b.*\badvise\b",
+        r"請問.*(需要|要不要).*幫助",
+        r"可以說明一下.*(需要|要不要)",
+        r"请问.*(需要|要不要).*帮助",
+        r"可以说明一下.*(需要|要不要)",
+    ]
+    return any(re.search(p, a, re.I) for p in patterns)
 
 def _get_base_url(request: Request) -> str:
     """
@@ -389,7 +411,6 @@ def _get_base_url(request: Request) -> str:
     proto = request.headers.get("x-forwarded-proto", request.url.scheme)
     host = request.headers.get("host", request.url.netloc)
     return f"{proto}://{host}"
-
 
 def _get_pdf_url(request: Request, filename: str) -> str:
     """Generate the full URL for a PDF resource served through our proxy endpoint."""
@@ -407,58 +428,6 @@ class ChatResponse(BaseModel):
     answer: str
     citations: List[Dict[str, Any]] = []
     debug: Optional[Dict[str, Any]] = None
-
-
-# --- AutoResponder for WA support ---
-class AutoResponderQuery(BaseModel):
-    """Inner query object from AutoResponder for WA app."""
-    message: str
-    sender: Optional[str] = None
-    # Additional fields that may be present
-    groupParticipant: Optional[str] = None
-    isGroup: Optional[bool] = None
-    ruleId: Optional[str] = None
-
-
-class AutoResponderRequest(BaseModel):
-    """
-    Request format from AutoResponder for WA app.
-    Accepts the nested JSON structure: {"query": {"message": "...", "sender": "..."}, ...}
-    """
-    query: AutoResponderQuery
-    appPackageName: Optional[str] = None
-    messengerPackageName: Optional[str] = None
-
-
-class AutoResponderReply(BaseModel):
-    """Single reply item for AutoResponder response."""
-    message: str
-    file: Optional[str] = None
-
-
-class AutoResponderResponse(BaseModel):
-    """Response format expected by AutoResponder for WA app."""
-    replies: List[AutoResponderReply]
-
-
-def _convert_markdown_to_whatsapp(text: str) -> str:
-    """
-    Convert Markdown formatting to WhatsApp formatting.
-    - Markdown bold (**text**) -> WhatsApp bold (*text*)
-    - Markdown links [text](url) -> raw URL
-    """
-    if not text:
-        return text
-
-    # Convert Markdown bold **text** to WhatsApp bold *text*
-    # Match ** followed by any content (including single asterisks) until **
-    # Use a more robust pattern that handles edge cases
-    text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text)
-
-    # Convert Markdown links [text](url) to just the URL
-    text = re.sub(r'\[([^]]+)\]\(([^)]+)\)', r'\2', text)
-
-    return text
 
 
 router = APIRouter(tags=["LLM Chat (Bedrock KB)"])
@@ -635,6 +604,15 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
                 "placement suitability",
             ]
 
+    # NEW: Bias retrieval for attachment/media-style messages (no preempt)
+    if is_attachment_like_message(message, lang):
+        ek = list(extra_keywords) if extra_keywords else []
+        for k in ["ShortReplies", "Submission", "Homework", "Assignment", "Video", "Photo", "Document"]:
+            if k not in ek:
+                ek.append(k)
+        extra_keywords = ek
+        _log("Attachment/media-like message detected. Biasing retrieval with ShortReplies/Submission keywords.")
+
     if is_scheduling_action:
         opening_context = summarize_user_date_intent(message, lang)
         _log(f"Scheduling/action detected. Providing date hints only:\n{opening_context}")
@@ -707,7 +685,7 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
         _log(f"LLM debug_info: {json.dumps(debug_info, ensure_ascii=False, indent=2)}")
 
     # --- Guardrails / Answer suppression ---
-    if not citations or contains_apology_or_noinfo(answer):
+    if (not citations or contains_apology_or_noinfo(answer)) and not _is_short_clarifying_question(answer, lang):
         _log("No citations found or noinfo phrase. Using off-hours uncertain reply instead of silencing.")
         block_hours_fallback = any([
             sched_cls.get("has_sched_verbs"),
@@ -725,10 +703,8 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
             citations = []
             debug_info = {"source": "deterministic_opening_hours_fallback"}
         else:
-            # NEW: output uncertain off-hours message (instead of silence)
             answer = _build_uncertain_offhours_reply(lang)
             citations = []
-            # NEW: flag for reporting/debug
             if isinstance(debug_info, dict):
                 debug_info["uncertain_offhours"] = True
             else:
@@ -751,7 +727,6 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
         _log("Answer does not contain a fee amount for a tuition/fee query. Using off-hours uncertain reply.")
         answer = _build_uncertain_offhours_reply(lang)
         citations = []
-        # NEW: flag for reporting/debug
         if isinstance(debug_info, dict):
             debug_info["uncertain_offhours"] = True
         else:
@@ -796,9 +771,6 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
     _log(f"Returning response (len={len(answer)}, is_autoresponder={is_autoresponder}).")
 
     if is_autoresponder:
-        # For AutoResponder, send PDFs as file attachments using the 'file' field
-        # AutoResponder for WA supports a 'file' field in JSON response to send attachments
-        # Use our proxy endpoint URL so the Android app can fetch the PDF without redirect issues
         replies = []
         if answer:
             wa_answer = _convert_markdown_to_whatsapp(answer)
@@ -811,7 +783,6 @@ def chat(request: Request, body: Dict[str, Any] = Body(default={}), _auth: bool 
             blooket_url = _get_pdf_url(request, "blooket_instructions.pdf")
             replies.append({"message": f"📄 Blooket Instructions\nDownload: {blooket_url}", "file": blooket_url})
             _log("Blooket instructions sent as file attachment with URL fallback.")
-        # If no answer and no PDFs, add an empty message reply
         if not replies:
             replies.append({"message": ""})
         return {"replies": replies}
@@ -929,6 +900,15 @@ async def whatsapp_webhook_handler(request: Request):
                                             "admin handled",
                                         ]
 
+                                # NEW: Bias retrieval for attachment/media-style
+                                if is_attachment_like_message(message_body, lang):
+                                    ek = list(extra_keywords) if extra_keywords else []
+                                    for k in ["ShortReplies", "Submission", "Homework", "Assignment", "Video", "Photo", "Document"]:
+                                        if k not in ek:
+                                            ek.append(k)
+                                    extra_keywords = ek
+                                    _log("Attachment/media-like message detected (WhatsApp). Biasing retrieval.")
+
                                 if is_scheduling_action:
                                     opening_context = summarize_user_date_intent(message_body, lang)
                                     hint_canonical = None
@@ -986,8 +966,8 @@ async def whatsapp_webhook_handler(request: Request):
                                         return {"status": "ok", "message": "Sent deterministic opening hours answer"}
                                     raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
 
-                                # Avoid opening-hours fallback for any scheduling/availability/admin/teacher-contact requests
-                                if not citations or contains_apology_or_noinfo(answer):
+                                # Avoid overriding clarifying question
+                                if (not citations or contains_apology_or_noinfo(answer)) and not _is_short_clarifying_question(answer, lang):
                                     _log("No citations found, or answer is a hedged/noinfo/apology. Using off-hours uncertain reply instead of silencing.")
                                     block_hours_fallback = (
                                         sched_cls.get("has_sched_verbs")
@@ -1006,7 +986,6 @@ async def whatsapp_webhook_handler(request: Request):
                                     else:
                                         answer = _build_uncertain_offhours_reply(lang)
                                         citations = []
-                                        # NEW: flag for reporting/debug
                                         if isinstance(debug_info, dict):
                                             debug_info["uncertain_offhours"] = True
                                         else:
@@ -1022,7 +1001,6 @@ async def whatsapp_webhook_handler(request: Request):
                                     _log("Fee query without amount; using off-hours uncertain reply.")
                                     answer = _build_uncertain_offhours_reply(lang)
                                     citations = []
-                                    # NEW: flag for reporting/debug
                                     if isinstance(debug_info, dict):
                                         debug_info["uncertain_offhours"] = True
                                     else:
@@ -1110,32 +1088,10 @@ async def ycloud_webhook_handler(request: Request):
         payload = await request.json()
         _log(f"Received YCloud webhook payload:\n{json.dumps(payload, indent=2)}")
         
-        # TODO: Implement X-YCloud-Signature verification for production
-        # YCloud signs webhook payloads with HMAC-SHA256 using your API key as the secret
-        # To implement:
-        # 1. Get signature from header: signature = request.headers.get("X-YCloud-Signature")
-        # 2. Compute HMAC-SHA256 of request body using ycloud_api_key
-        # 3. Compare computed signature with provided signature
-        # 4. Reject request if signatures don't match
-        # Example:
-        # import hmac
-        # import hashlib
-        # body_bytes = await request.body()
-        # computed_sig = hmac.new(SETTINGS.ycloud_api_key.encode(), body_bytes, hashlib.sha256).hexdigest()
-        # if not hmac.compare_digest(signature or "", computed_sig):
-        #     raise HTTPException(status_code=401, detail="Invalid signature")
-        
-        # YCloud webhook structure: typically has 'type' and 'data' or 'whatsappInboundMessage' fields
         webhook_type = payload.get("type")
         
-        # Support both V2 API format (whatsapp.inbound_message.received with whatsappInboundMessage)
-        # and V1 format (whatsapp.message.received with data) for backward compatibility
         if webhook_type in ("whatsapp.inbound_message.received", "whatsapp.message.received"):
-            # Extract message details from YCloud format
-            # V2 API uses 'whatsappInboundMessage', V1 uses 'data'
             message_data = payload.get("whatsappInboundMessage") or payload.get("data", {})
-            
-            # Ensure message_data is valid before accessing fields
             if not message_data:
                 _log("WARNING: No message data found in YCloud webhook payload")
                 return {"status": "ignored", "reason": "no message data"}
@@ -1148,7 +1104,6 @@ async def ycloud_webhook_handler(request: Request):
             if from_number:
                 _cancel_pending_ack(from_number)
             
-            # Check admin cooldown
             if from_number and _in_admin_cooldown(from_number):
                 _log(f"[COOL] Admin cooldown active for {from_number}. Bot remains silent.")
                 try:
@@ -1160,7 +1115,6 @@ async def ycloud_webhook_handler(request: Request):
                     _log(f"[COOL] Error saving history during cooldown: {e}")
                 return {"status": "cooldown_active", "message": "Bot silenced due to recent admin activity"}
             
-            # Handle text messages
             if message_type == "text":
                 message_body = message_data.get("text", {}).get("body", "")
                 _log(f"Text message from {from_number}: '{message_body}'")
@@ -1168,7 +1122,6 @@ async def ycloud_webhook_handler(request: Request):
                 lang = get_language_code(message_body)
                 _log(f"Detected language: {lang}")
                 
-                # Scheduling classification
                 sched_cls = classify_scheduling_context(message_body, lang)
                 is_scheduling_action = bool(
                     (sched_cls.get("has_sched_verbs") or sched_cls.get("availability_request") or sched_cls.get("admin_action_request")
@@ -1180,7 +1133,6 @@ async def ycloud_webhook_handler(request: Request):
                 hint_canonical = None
                 is_hours_intent = False
                 
-                # extra_keywords logic
                 extra_keywords: Optional[List[str]] = None
                 if is_scheduling_action:
                     extra_keywords = [
@@ -1209,7 +1161,15 @@ async def ycloud_webhook_handler(request: Request):
                             "admin handled",
                         ]
                 
-                # Opening hours detection
+                # NEW: Bias retrieval for attachment/media-style
+                if is_attachment_like_message(message_body, lang):
+                    ek = list(extra_keywords) if extra_keywords else []
+                    for k in ["ShortReplies", "Submission", "Homework", "Assignment", "Video", "Photo", "Document"]:
+                        if k not in ek:
+                            ek.append(k)
+                    extra_keywords = ek
+                    _log("Attachment/media-like message detected (YCloud). Biasing retrieval.")
+                
                 if is_scheduling_action:
                     opening_context = summarize_user_date_intent(message_body, lang)
                     hint_canonical = None
@@ -1228,7 +1188,6 @@ async def ycloud_webhook_handler(request: Request):
                             hint_canonical = "opening_hours"
                             _log(f"Opening hours intent detected as SPECIFIC. Structured context for LLM:\n{opening_context}")
                 
-                # Build history and reformulation
                 try:
                     history = get_recent_history(from_number, limit=6)
                     _log(f"Fetched {len(history)} prior messages for session_id={from_number}")
@@ -1267,8 +1226,8 @@ async def ycloud_webhook_handler(request: Request):
                         return {"status": "ok", "message": "Sent deterministic opening hours answer"}
                     raise HTTPException(status_code=500, detail=f"LLM backend error: {e}")
                 
-                # Answer suppression logic
-                if not citations or contains_apology_or_noinfo(answer):
+                # Preserve clarifying questions
+                if (not citations or contains_apology_or_noinfo(answer)) and not _is_short_clarifying_question(answer, lang):
                     _log("No citations found, or answer is a hedged/noinfo/apology. Using off-hours uncertain reply instead of silencing.")
                     block_hours_fallback = (
                         sched_cls.get("has_sched_verbs")
@@ -1287,13 +1246,11 @@ async def ycloud_webhook_handler(request: Request):
                     else:
                         answer = _build_uncertain_offhours_reply(lang)
                         citations = []
-                        # NEW: flag for reporting/debug
                         if isinstance(debug_info, dict):
                             debug_info["uncertain_offhours"] = True
                         else:
                             debug_info = {"uncertain_offhours": True}
                 
-                # Fee detection
                 fee_words = ["tuition", "fee", "price", "cost"]
                 payment_words = ["how to pay", "payment", "pay", "bank transfer", "fps", "account", "method"]
                 if (
@@ -1304,7 +1261,6 @@ async def ycloud_webhook_handler(request: Request):
                     _log("Fee query without amount; using off-hours uncertain reply.")
                     answer = _build_uncertain_offhours_reply(lang)
                     citations = []
-                    # NEW: flag for reporting/debug
                     if isinstance(debug_info, dict):
                         debug_info["uncertain_offhours"] = True
                     else:
@@ -1368,8 +1324,6 @@ async def ycloud_webhook_handler(request: Request):
                 return {"status": "ignored", "reason": f"non-text message type: {message_type}"}
         
         elif webhook_type == "whatsapp.message.status":
-            # Handle message status updates (detect admin activity)
-            # V2 API might use 'whatsappMessageStatus', V1 uses 'data'
             status_data = payload.get("whatsappMessageStatus") or payload.get("data", {})
             msg_id = status_data.get("id") or status_data.get("messageId")
             recipient_id = status_data.get("to")

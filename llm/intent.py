@@ -226,10 +226,10 @@ def mentions_attendance(message: str, lang: str) -> bool:
     return bool(re.search(r"\battend(?:ing)?\s+(?:class|lesson)\b", m, flags=re.IGNORECASE))
 
 _REACTION_PATTERNS = [
-    r"^Reacted\s+.*to\s+[\"“].*[\"”]",  # Reacted 😂 to "..."
+    r"^Reacted\s+.*to\s+[\\"“].*[\\"”]",  # Reacted 😂 to "..."
     r"^Reacted\s+.*to\s+.*",            # Generic Reacted ... to ...
-    r"^Liked\s+[\"“].*[\"”]",           # Liked "..."
-    r"^Loved\s+[\"“].*[\"”]",           # Loved "..."
+    r"^Liked\s+[\\"“].*[\\"”]",           # Liked "..."
+    r"^Loved\s+[\\"“].*[\\"”]",           # Loved "..."
 ]
 
 def is_reaction_notification(message: str) -> bool:
@@ -243,6 +243,82 @@ def is_reaction_notification(message: str) -> bool:
     for pat in _REACTION_PATTERNS:
         if re.match(pat, msg, re.IGNORECASE):
             return True
+    return False
+
+# ============================================================
+# Attachment / media-style detector (non-preemptive)
+# ============================================================
+
+_ATTACHMENT_EMOJIS = {"📎", "📄", "📃", "📝", "🖼", "🖼️", "📷", "📸", "🎥", "📹", "🎞", "🎬", "🔊", "🎙", "🔉", "🎧", "🔗"}
+_DURATION_PAT = re.compile(r"\(\s*\d{1,2}:\d{2}\s*\)|\b\d{1,2}:\d{2}\b")
+
+_ATTACHMENT_WORDS_EN = [
+    r"\b(video|clip|recording|voice\s+(?:note|message)|audio)\b",
+    r"\b(photo|picture|image|screenshot)\b",
+    r"\b(file|document|pdf|docx|sheet|form)\b",
+    r"\b(homework|assignment|reading|worksheet)\b",
+    r"\b(sent|uploaded|attached|attachment|see\s+attached|here\s+(?:is|are))\b",
+]
+_ATTACHMENT_WORDS_ZH_HK = [
+    r"影片|錄影|錄音|語音|音訊",
+    r"相片|照片|圖片|截圖",
+    r"檔案|文件|附件|連結",
+    r"功課|家課|作業|閱讀作業|工作紙",
+    r"(已)?(送出|上載|上傳)|附上|見附件|喺度|呢度(係|有)",
+]
+_ATTACHMENT_WORDS_ZH_CN = [
+    r"视频|录影|录音|语音|音频",
+    r"相片|照片|图片|截图",
+    r"文件|附件|链接",
+    r"作业|功课|阅读作业|练习|练习纸|工作纸",
+    r"(已)?(发送|上载|上传)|附上|见附件|这里(是|有)",
+]
+
+def is_attachment_like_message(message: str, lang: str) -> bool:
+    """
+    True if the message likely represents a media/file/attachment or short submission,
+    e.g., "🎥 Name (1:10)", "photo attached", "here's the homework".
+    Detector only; use to bias retrieval and prompt guardrails. No preempt.
+    """
+    m = (message or "").strip()
+    if not m:
+        return False
+
+    # Skip if clearly a scheduling/admin/homework-policy action
+    try:
+        cls = classify_scheduling_context(m, lang or "en")
+        if (
+            cls.get("availability_request")
+            or cls.get("has_sched_verbs")
+            or cls.get("admin_action_request")
+            or cls.get("staff_contact_request")
+            or cls.get("individual_homework_request")
+            or cls.get("has_policy_intent")
+        ):
+            return False
+    except Exception:
+        pass
+
+    has_emoji = any(e in m for e in _ATTACHMENT_EMOJIS)
+    has_duration = bool(_DURATION_PAT.search(m))
+
+    L = (lang or "en").lower()
+    pats = list(_ATTACHMENT_WORDS_EN)
+    if L.startswith("zh-hk"):
+        pats += _ATTACHMENT_WORDS_ZH_HK
+    elif L.startswith("zh-cn") or L == "zh":
+        pats += _ATTACHMENT_WORDS_ZH_CN
+
+    has_word = any(re.search(p, m, re.I) for p in pats)
+
+    if has_emoji or has_word or (has_emoji and has_duration):
+        return True
+
+    # Very short messages with a name + (m:ss) also count
+    alpha_tokens = re.findall(r"[A-Za-z\u4e00-\u9fff]+", m)
+    if has_duration and len(alpha_tokens) <= 4:
+        return True
+
     return False
 
 # ============================================================
