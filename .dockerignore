@@ -1,108 +1,31 @@
-# CRITICAL:  Keep fly.toml
+# CRITICAL FIX: Ensure fly.toml is NOT ignored, as it is needed for deployment configuration.
 !fly.toml
 
-# ============================================
-# Git
-# ============================================
-.git
-.git/**
-**/.git
-**/.git/**
-.gitignore
-.gitattributes
-
-# ============================================
-# Python Virtual Environments
-# ============================================
+# Ignore the virtual environment directories (most common cause of large context)
 venv/
 .venv/
-env/
-.env/
-virtualenv/
-.virtualenv/
-ENV/
-env.bak/
-venv.bak/
-**/venv/
-**/.venv/
 
-# ============================================
-# Python Cache & Compiled Files
-# ============================================
+# Ignore Git files
+.git/
+.gitignore
+
+# Ignore Python cache and compiled files
 __pycache__/
-**/__pycache__/
-*. py[cod]
-*$py. class
-*.so
-.Python
-*. egg-info/
-.eggs/
-dist/
-build/
-*.egg
-MANIFEST
+*.pyc
 
-# ============================================
-# IDE & Editors
-# ============================================
-. vscode/
-.idea/
-*.swp
-*.swo
-*~
-. DS_Store
-
-# ============================================
-# Environment & Config
-# ============================================
+# Ignore local environment configuration files
 .envrc
 .env
-.env. local
-.env.*. local
-*. env
+.DS_Store
 
-# ============================================
-# Logs & Temporary Files
-# ============================================
+# Ignore logs and temporary files
 *.log
 tmp/
 temp/
-*.tmp
 
-# ============================================
-# Node (if applicable)
-# ============================================
-node_modules/
-**/node_modules/
-
-# ============================================
-# Application-Specific Large Directories
-# ============================================
-# Dialogflow data (except runtime info)
+# NEW RULE: Ignore the data folder contents, but keep the runtime info JSON
+# Use the wildcard form so the negation below can re-include the single file.
 dialogflow_app/data/*
 !dialogflow_app/data/little_scholars_info.json
 
-# Content files
 content/*
-
-# ============================================
-# Testing & Coverage
-# ============================================
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# ============================================
-# Documentation
-# ============================================
-docs/_build/
-*. md
-! README.md
-
-# ============================================
-# Docker
-# ============================================
-. dockerignore
-Dockerfile
-docker-compose. yml
