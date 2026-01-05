@@ -104,6 +104,24 @@ def call_llm_rephrase(history_context: str, lang: str) -> str:
 def _log(msg):
     print(f"[LLM ROUTER] {msg}", file=sys.stderr, flush=True)
 
+def _convert_markdown_to_whatsapp(text:  str) -> str:
+    """
+    Convert Markdown formatting to WhatsApp formatting.
+    - Markdown bold (**text**) -> WhatsApp bold (*text*)
+    - Markdown links [text](url) -> raw URL
+    """
+    if not text:
+        return text
+
+    # Convert Markdown bold **text** to WhatsApp bold *text*
+    # Match ** followed by any content (including single asterisks) until **
+    # Use a more robust pattern that handles edge cases
+    text = re.sub(r'\*\*(. +?)\*\*', r'*\1*', text)
+
+    # Convert Markdown links [text](url) to just the URL
+    text = re.sub(r'\[([^]]+)\]\(([^)]+)\)', r'\2', text)
+
+    return text
 
 # --- WhatsApp helpers ---
 _BOT_MSG_IDS: Dict[str, float] = {}
