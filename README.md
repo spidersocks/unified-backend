@@ -18,6 +18,10 @@ This backend currently supports the following applications:
 4.  **Little Scholars WhatsApp AI Assistant**
     *   Provides parents at Little Scholars (Hong Kong) with fast, multilingual answers over WhatsApp about courses, class hours, policies, tuition, assignments, and admissions, using retrieval-augmented generation powered by Amazon Bedrock and a Markdown knowledge base.
 
+5.  **Sean's Plaza visitor counter** (`/plaza`)
+    *   `POST /plaza/visit` increments and returns `{ "count": N }` (starts at 900).
+    *   `GET /plaza/visitors` returns the current count without incrementing.
+
 ## Structure
 
 The project is structured to allow multiple, independent services to run efficiently within a unified FastAPI application, optimizing deployment and resource usage.

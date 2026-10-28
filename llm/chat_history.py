@@ -4,6 +4,15 @@ from typing import List, Dict, Optional
 import boto3
 from boto3.dynamodb.conditions import Key
 
+
+def _log(msg: str) -> None:
+    print(f"[CHAT_HISTORY] {msg}", flush=True)
+
+
+def _sid_tail(session_id: str) -> str:
+    s = str(session_id or "")
+    return s[-6:] if len(s) > 6 else s
+
 # Optional in-memory fallback if DynamoDB is unavailable (local dev or credentials issue)
 _USE_DDB = os.environ.get("USE_DYNAMODB_HISTORY", "true").lower() in ("1", "true", "yes")
 CHAT_HISTORY_TABLE = os.environ.get("CHAT_HISTORY_TABLE", "ChatHistory")
@@ -15,12 +24,23 @@ HISTORY_RECENT_WINDOW_SECS = int(os.environ.get("HISTORY_RECENT_WINDOW_SECS", "8
 # Lazy init to avoid import-time failures
 _dynamodb = None
 _table = None
+_TABLE_INIT_LOGGED = False
 
 def _get_table():
-    global _dynamodb, _table
+    global _dynamodb, _table, _TABLE_INIT_LOGGED
+    if not _TABLE_INIT_LOGGED:
+        _TABLE_INIT_LOGGED = True
+        _log(
+            f"Init config: use_ddb={_USE_DDB}, table={CHAT_HISTORY_TABLE}, region={region}"
+        )
     if _table is None and _USE_DDB:
-        _dynamodb = boto3.resource("dynamodb", region_name=region)
-        _table = _dynamodb.Table(CHAT_HISTORY_TABLE)
+        try:
+            _dynamodb = boto3.resource("dynamodb", region_name=region)
+            _table = _dynamodb.Table(CHAT_HISTORY_TABLE)
+            _log("DynamoDB table handle initialized.")
+        except Exception as e:
+            _log(f"ERROR initializing DynamoDB table handle: {type(e).__name__}: {e}")
+            _table = None
     return _table
 
 # Simple in-memory fallback store
@@ -69,16 +89,23 @@ def save_message(session_id: str, role: str, message: str, lang: Optional[str] =
     try:
         tbl = _get_table()
         if tbl is None:
+            _log(f"Fallback to in-memory save_message (table unavailable). sid=*{_sid_tail(session_id)}")
             _mem_save(item)
             return
         tbl.put_item(Item=item)
-    except Exception:
+        _log(f"DDB write OK save_message. sid=*{_sid_tail(session_id)} role={role} ts={ts}")
+    except Exception as e:
+        _log(
+            f"ERROR save_message put_item failed; fallback to memory. sid=*{_sid_tail(session_id)} "
+            f"role={role} ts={ts} err={type(e).__name__}: {e}"
+        )
         _mem_save(item)
 
 def get_recent_history(session_id: str, limit: int = 6, oldest_first: bool = False) -> List[Dict]:
     try:
         tbl = _get_table()
         if tbl is None:
+            _log(f"Fallback to in-memory get_recent_history (table unavailable). sid=*{_sid_tail(session_id)}")
             return _mem_get_recent(session_id, limit, oldest_first)
         resp = tbl.query(
             KeyConditionExpression=Key("session_id").eq(session_id),
@@ -86,9 +113,14 @@ def get_recent_history(session_id: str, limit: int = 6, oldest_first: bool = Fal
             Limit=limit
         )
         items = resp.get("Items", [])
+        _log(f"DDB query OK get_recent_history. sid=*{_sid_tail(session_id)} count={len(items)}")
         # Ensure return oldest->newest
         return list(sorted(items, key=lambda x: x["ts"]))
-    except Exception:
+    except Exception as e:
+        _log(
+            f"ERROR get_recent_history query failed; fallback to memory. sid=*{_sid_tail(session_id)} "
+            f"err={type(e).__name__}: {e}"
+        )
         return _mem_get_recent(session_id, limit, oldest_first)
 
 def prune_history(session_id: str, keep: int = 6, keep_recent_window_secs: Optional[int] = HISTORY_RECENT_WINDOW_SECS):
@@ -102,6 +134,7 @@ def prune_history(session_id: str, keep: int = 6, keep_recent_window_secs: Optio
         tbl = _get_table()
         now_ts = int(time.time())
         if tbl is None:
+            _log(f"Fallback to in-memory prune_history (table unavailable). sid=*{_sid_tail(session_id)}")
             _mem_prune(session_id, keep, keep_recent_window_secs)
             return
 
@@ -145,8 +178,15 @@ def prune_history(session_id: str, keep: int = 6, keep_recent_window_secs: Optio
         with tbl.batch_writer() as batch:
             for item in to_delete:
                 batch.delete_item(Key={"session_id": session_id, "ts": int(item["ts"])})
-    except Exception:
+        _log(
+            f"DDB prune OK. sid=*{_sid_tail(session_id)} deleted={len(to_delete)} total_before={len(items)}"
+        )
+    except Exception as e:
         # Fallback to in-memory pruning logic
+        _log(
+            f"ERROR prune_history failed; fallback to memory. sid=*{_sid_tail(session_id)} "
+            f"err={type(e).__name__}: {e}"
+        )
         _mem_prune(session_id, keep, keep_recent_window_secs)
 
 def build_context_string(
@@ -180,6 +220,7 @@ def clear_history(session_id: str) -> None:
     try:
         tbl = _get_table()
         if tbl is None:
+            _log(f"Fallback to in-memory clear_history (table unavailable). sid=*{_sid_tail(session_id)}")
             _MEM_HISTORY.pop(session_id, None)
             return
         # Fetch all and delete
@@ -201,7 +242,12 @@ def clear_history(session_id: str) -> None:
             last_evaluated_key = resp.get("LastEvaluatedKey")
             if not last_evaluated_key:
                 break
-    except Exception:
+        _log(f"DDB clear_history OK. sid=*{_sid_tail(session_id)}")
+    except Exception as e:
+        _log(
+            f"ERROR clear_history failed; fallback to in-memory clear. sid=*{_sid_tail(session_id)} "
+            f"err={type(e).__name__}: {e}"
+        )
         _MEM_HISTORY.pop(session_id, None)
 
 # TTL save helper (uses DynamoDB TTL on 'expire_at')
@@ -233,8 +279,16 @@ def save_message_with_ttl(
         tbl = _get_table()
         if tbl is None:
             # In-memory dev fallback: ignore TTL
+            _log(f"Fallback to in-memory save_message_with_ttl (table unavailable). sid=*{_sid_tail(session_id)}")
             _mem_save(item)
             return
         tbl.put_item(Item=item)
-    except Exception:
+        _log(
+            f"DDB write OK save_message_with_ttl. sid=*{_sid_tail(session_id)} role={role} ts={ts} ttl={item['expire_at']}"
+        )
+    except Exception as e:
+        _log(
+            f"ERROR save_message_with_ttl put_item failed; fallback to memory. sid=*{_sid_tail(session_id)} "
+            f"role={role} ts={ts} err={type(e).__name__}: {e}"
+        )
         _mem_save(item)

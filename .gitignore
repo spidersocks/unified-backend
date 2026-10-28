@@ -39,5 +39,8 @@ htmlcov/
 *.sqlite
 *.sqlite3
 
+# Runtime visitor counter (plaza)
+data/
+
 # Metadata files
 content/**/*.metadata.json
