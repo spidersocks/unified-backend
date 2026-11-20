@@ -89,17 +89,18 @@ def _normalize_catalog(data: dict[str, Any], *, stamp: bool = False) -> dict[str
             seg_ids.add(sid.lower())
             segments.append({"id": sid, "label": label, "durationSec": duration})
 
-        normalized.append(
-            {
-                "id": rid,
-                "name": name,
-                "title": title,
-                "routineId": str(routine.get("routineId") or rid).strip() or rid,
-                "space": str(routine.get("space") or "").strip(),
-                "intent": str(routine.get("intent") or "").strip(),
-                "segments": segments,
-            }
-        )
+        existing_updated = routine.get("updatedAt")
+        item = {
+            "id": rid,
+            "name": name,
+            "title": title,
+            "routineId": str(routine.get("routineId") or rid).strip() or rid,
+            "space": str(routine.get("space") or "").strip(),
+            "intent": str(routine.get("intent") or "").strip(),
+            "segments": segments,
+            "updatedAt": str(existing_updated) if existing_updated else _utc_now(),
+        }
+        normalized.append(item)
 
     out = {
         "schemaVersion": int(cleaned.get("schemaVersion") or 1),
@@ -168,6 +169,7 @@ def upsert_routine(routine: dict[str, Any]) -> dict[str, Any]:
     with _LOCK:
         catalog = _read_or_seed()
         incoming = _normalize_catalog({"schemaVersion": 1, "routines": [routine]})["routines"][0]
+        incoming["updatedAt"] = _utc_now()
         routines = catalog["routines"]
         idx = next((i for i, r in enumerate(routines) if r["id"].lower() == incoming["id"].lower()), None)
 
