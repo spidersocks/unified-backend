@@ -7,7 +7,7 @@
       "title": "Demo Smoke",
       "routineId": "DEMO",
       "space": "Anywhere",
-      "intent": "Short segments to verify OBS Browser Source + auto-advance.",
+      "description": "Short segments to verify OBS Browser Source + auto-advance.",
       "segments": [
         { "id": "demo-s1", "label": "Settle in", "durationSec": 5 },
         { "id": "demo-s2", "label": "Reach overhead", "durationSec": 5 },
@@ -21,7 +21,7 @@
       "title": "Floor Unwind",
       "routineId": "R1",
       "space": "Floor mat",
-      "intent": "Gentle floor mobility to downshift before sleep.",
+      "description": "Gentle floor mobility to downshift before sleep.",
       "segments": [
         { "id": "r1-s1", "label": "Settle & breathe", "durationSec": 45 },
         { "id": "r1-s2", "label": "Knee rocks", "durationSec": 60 },
@@ -39,7 +39,7 @@
       "title": "From-Bed Stretch",
       "routineId": "R2",
       "space": "Bedside",
-      "intent": "Low-effort stretches you can do sitting or standing by the bed.",
+      "description": "Low-effort stretches you can do sitting or standing by the bed.",
       "segments": [
         { "id": "r2-s1", "label": "Seated neck rolls", "durationSec": 40 },
         { "id": "r2-s2", "label": "Shoulder shrugs", "durationSec": 40 },
@@ -58,7 +58,7 @@
       "title": "Small-Space Strength",
       "routineId": "R3",
       "space": "Hotel footprint",
-      "intent": "Quiet standing strength in a hotel-room footprint.",
+      "description": "Quiet standing strength in a hotel-room footprint.",
       "segments": [
         { "id": "r3-s1", "label": "March in place", "durationSec": 50 },
         { "id": "r3-s2", "label": "Bodyweight squats", "durationSec": 70 },
@@ -76,7 +76,7 @@
       "title": "Hip & Back Release",
       "routineId": "R4",
       "space": "Floor mat",
-      "intent": "Target hips and low back after a desk day.",
+      "description": "Target hips and low back after a desk day.",
       "segments": [
         { "id": "r4-s1", "label": "World's greatest stretch L", "durationSec": 50 },
         { "id": "r4-s2", "label": "World's greatest stretch R", "durationSec": 50 },
@@ -95,7 +95,7 @@
       "title": "Wind-Down Circuit",
       "routineId": "R5",
       "space": "Open floor",
-      "intent": "Short mixed circuit that ends in stillness.",
+      "description": "Short mixed circuit that ends in stillness.",
       "segments": [
         { "id": "r5-s1", "label": "Box breath ×4", "durationSec": 64 },
         { "id": "r5-s2", "label": "Arm circles", "durationSec": 40 },

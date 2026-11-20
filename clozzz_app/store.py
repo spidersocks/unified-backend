@@ -90,13 +90,17 @@ def _normalize_catalog(data: dict[str, Any], *, stamp: bool = False) -> dict[str
             segments.append({"id": sid, "label": label, "durationSec": duration})
 
         existing_updated = routine.get("updatedAt")
+        # Prefer `description`; accept legacy `intent` on read.
+        description = str(
+            routine.get("description") or routine.get("intent") or ""
+        ).strip()
         item = {
             "id": rid,
             "name": name,
             "title": title,
             "routineId": str(routine.get("routineId") or rid).strip() or rid,
             "space": str(routine.get("space") or "").strip(),
-            "intent": str(routine.get("intent") or "").strip(),
+            "description": description,
             "segments": segments,
             "updatedAt": str(existing_updated) if existing_updated else _utc_now(),
         }
