@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "routines": [
+    {
+      "id": "demo",
+      "name": "demo-smoke",
+      "title": "Demo Smoke",
+      "routineId": "DEMO",
+      "space": "Anywhere",
+      "intent": "Short segments to verify OBS Browser Source + auto-advance.",
+      "segments": [
+        { "id": "demo-s1", "label": "Settle in", "durationSec": 5 },
+        { "id": "demo-s2", "label": "Reach overhead", "durationSec": 5 },
+        { "id": "demo-s3", "label": "Soft fold", "durationSec": 5 },
+        { "id": "demo-s4", "label": "Done soon", "durationSec": 4 }
+      ]
+    },
+    {
+      "id": "r1",
+      "name": "r1-floor-unwind",
+      "title": "Floor Unwind",
+      "routineId": "R1",
+      "space": "Floor mat",
+      "intent": "Gentle floor mobility to downshift before sleep.",
+      "segments": [
+        { "id": "r1-s1", "label": "Settle & breathe", "durationSec": 45 },
+        { "id": "r1-s2", "label": "Knee rocks", "durationSec": 60 },
+        { "id": "r1-s3", "label": "Cat–cow", "durationSec": 75 },
+        { "id": "r1-s4", "label": "Child's pose", "durationSec": 60 },
+        { "id": "r1-s5", "label": "Supine twist L", "durationSec": 45 },
+        { "id": "r1-s6", "label": "Supine twist R", "durationSec": 45 },
+        { "id": "r1-s7", "label": "Legs up wall", "durationSec": 90 },
+        { "id": "r1-s8", "label": "Final stillness", "durationSec": 60 }
+      ]
+    },
+    {
+      "id": "r2",
+      "name": "r2-from-bed-stretch",
+      "title": "From-Bed Stretch",
+      "routineId": "R2",
+      "space": "Bedside",
+      "intent": "Low-effort stretches you can do sitting or standing by the bed.",
+      "segments": [
+        { "id": "r2-s1", "label": "Seated neck rolls", "durationSec": 40 },
+        { "id": "r2-s2", "label": "Shoulder shrugs", "durationSec": 40 },
+        { "id": "r2-s3", "label": "Chest opener", "durationSec": 50 },
+        { "id": "r2-s4", "label": "Forward fold", "durationSec": 55 },
+        { "id": "r2-s5", "label": "Standing side bend L", "durationSec": 35 },
+        { "id": "r2-s6", "label": "Standing side bend R", "durationSec": 35 },
+        { "id": "r2-s7", "label": "Calf stretch L", "durationSec": 40 },
+        { "id": "r2-s8", "label": "Calf stretch R", "durationSec": 40 },
+        { "id": "r2-s9", "label": "Bedside stillness", "durationSec": 50 }
+      ]
+    },
+    {
+      "id": "r3",
+      "name": "r3-small-space-strength",
+      "title": "Small-Space Strength",
+      "routineId": "R3",
+      "space": "Hotel footprint",
+      "intent": "Quiet standing strength in a hotel-room footprint.",
+      "segments": [
+        { "id": "r3-s1", "label": "March in place", "durationSec": 50 },
+        { "id": "r3-s2", "label": "Bodyweight squats", "durationSec": 70 },
+        { "id": "r3-s3", "label": "Wall push-ups", "durationSec": 60 },
+        { "id": "r3-s4", "label": "Glute bridge", "durationSec": 65 },
+        { "id": "r3-s5", "label": "Standing calf raises", "durationSec": 45 },
+        { "id": "r3-s6", "label": "Dead bug (slow)", "durationSec": 70 },
+        { "id": "r3-s7", "label": "Cool-down walk", "durationSec": 40 },
+        { "id": "r3-s8", "label": "Breath reset", "durationSec": 50 }
+      ]
+    },
+    {
+      "id": "r4",
+      "name": "r4-hip-back-release",
+      "title": "Hip & Back Release",
+      "routineId": "R4",
+      "space": "Floor mat",
+      "intent": "Target hips and low back after a desk day.",
+      "segments": [
+        { "id": "r4-s1", "label": "World's greatest stretch L", "durationSec": 50 },
+        { "id": "r4-s2", "label": "World's greatest stretch R", "durationSec": 50 },
+        { "id": "r4-s3", "label": "90/90 hip switch", "durationSec": 80 },
+        { "id": "r4-s4", "label": "Pigeon L", "durationSec": 55 },
+        { "id": "r4-s5", "label": "Pigeon R", "durationSec": 55 },
+        { "id": "r4-s6", "label": "Thread the needle L", "durationSec": 40 },
+        { "id": "r4-s7", "label": "Thread the needle R", "durationSec": 40 },
+        { "id": "r4-s8", "label": "Happy baby", "durationSec": 60 },
+        { "id": "r4-s9", "label": "Savasana", "durationSec": 45 }
+      ]
+    },
+    {
+      "id": "r5",
+      "name": "r5-wind-down-circuit",
+      "title": "Wind-Down Circuit",
+      "routineId": "R5",
+      "space": "Open floor",
+      "intent": "Short mixed circuit that ends in stillness.",
+      "segments": [
+        { "id": "r5-s1", "label": "Box breath ×4", "durationSec": 64 },
+        { "id": "r5-s2", "label": "Arm circles", "durationSec": 40 },
+        { "id": "r5-s3", "label": "Slow lunges L/R", "durationSec": 80 },
+        { "id": "r5-s4", "label": "Plank hold", "durationSec": 35 },
+        { "id": "r5-s5", "label": "Down dog → fold", "durationSec": 55 },
+        { "id": "r5-s6", "label": "Seated forward fold", "durationSec": 50 },
+        { "id": "r5-s7", "label": "Neck + jaw release", "durationSec": 45 },
+        { "id": "r5-s8", "label": "Lights-out stillness", "durationSec": 70 }
+      ]
+    }
+  ]
+}
