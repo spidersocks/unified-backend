@@ -73,6 +73,20 @@ def main() -> None:
     after = live.apply_command(key, "start")
     assert after["status"] == "running"
 
+    # Skip from held idle (frozen intro) before Start ticks countdown
+    live.apply_command(key, "restart")
+    run = live._RUNS[key.lower()]
+    run["introCountdownEnabled"] = True
+    run["introCountdownSec"] = 120
+    run["introConsumed"] = False
+    run["countdownDurationSec"] = 120
+    held_skip = live.apply_command(key, "skip_countdown")
+    assert held_skip["status"] == "idle"
+    assert held_skip["introConsumed"] is True
+    assert held_skip["chromeVisible"] is True
+    started_after_hold = live.apply_command(key, "start")
+    assert started_after_hold["status"] == "running"
+
     # Stream-ended graphic after finish
     live.apply_command(key, "restart")
     run = live._RUNS[key.lower()]

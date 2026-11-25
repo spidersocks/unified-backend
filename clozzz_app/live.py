@@ -355,7 +355,13 @@ def apply_command(
             return _public(run)
 
         if command == "skip_countdown":
-            if status != "countdown":
+            # Ticking countdown, or held idle before Start (intro armed).
+            intro_held = (
+                status == "idle"
+                and run.get("introCountdownEnabled")
+                and not run.get("introConsumed")
+            )
+            if status != "countdown" and not intro_held:
                 return _public(run)
             _finish_countdown(run)
             _bump(run)
