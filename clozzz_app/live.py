@@ -15,7 +15,22 @@ _LOCK = threading.RLock()
 # routineId(lower) -> LiveRun dict
 _RUNS: dict[str, dict[str, Any]] = {}
 
-COMMANDS = frozenset({"start", "pause", "resume", "skip", "back", "restart"})
+DEFAULT_COUNTDOWN_SEC = 180
+
+COMMANDS = frozenset(
+    {
+        "start",
+        "pause",
+        "resume",
+        "skip",
+        "back",
+        "restart",
+        "start_countdown",
+        "skip_countdown",
+        "hide_chrome",
+        "show_chrome",
+    }
+)
 
 
 def _now_ms() -> int:
@@ -71,6 +86,10 @@ def _new_idle(routine: dict[str, Any]) -> dict[str, Any]:
         "segments": segments,
         "currentLabel": first["label"],
         "segmentCount": len(segments),
+        "chromeVisible": True,
+        "countdownDurationSec": DEFAULT_COUNTDOWN_SEC,
+        "countdownStartedAtMs": None,
+        "countdownPausedRemainingMs": None,
     }
 
 
@@ -85,11 +104,41 @@ def _public(run: dict[str, Any]) -> dict[str, Any]:
     else:
         out["currentLabel"] = ""
     out["segmentCount"] = len(segs)
+    out.setdefault("chromeVisible", True)
+    out.setdefault("countdownDurationSec", DEFAULT_COUNTDOWN_SEC)
     return out
 
 
+def _finish_countdown(run: dict[str, Any]) -> None:
+    """Countdown ended or skipped → armed idle overlay (chrome on)."""
+    segments: list[dict[str, Any]] = run["segments"]
+    first = segments[0]
+    run["status"] = "idle"
+    run["segmentIndex"] = 0
+    run["segmentDurationSec"] = first["durationSec"]
+    run["segmentStartedAtMs"] = None
+    run["pausedRemainingMs"] = first["durationSec"] * 1000
+    run["countdownStartedAtMs"] = None
+    run["countdownPausedRemainingMs"] = None
+    run["chromeVisible"] = True
+
+
+def _advance_countdown_if_needed(run: dict[str, Any]) -> None:
+    if run["status"] != "countdown":
+        return
+    started = run.get("countdownStartedAtMs")
+    if started is None:
+        return
+    now = _now_ms()
+    duration_ms = int(run.get("countdownDurationSec") or DEFAULT_COUNTDOWN_SEC) * 1000
+    if now >= int(started) + duration_ms:
+        _finish_countdown(run)
+        run["updatedAt"] = _now_ms()
+
+
 def _advance_if_needed(run: dict[str, Any]) -> None:
-    """Lazy server-side segment advance while running."""
+    """Lazy server-side segment / countdown advance."""
+    _advance_countdown_if_needed(run)
     if run["status"] != "running":
         return
     segments: list[dict[str, Any]] = run["segments"]
@@ -113,7 +162,6 @@ def _advance_if_needed(run: dict[str, Any]) -> None:
         if now < end_at:
             run["segmentDurationSec"] = segments[idx]["durationSec"]
             break
-        # Segment finished — spill overflow into next segments.
         overflow = now - end_at
         if idx + 1 >= len(segments):
             run["status"] = "done"
@@ -125,11 +173,9 @@ def _advance_if_needed(run: dict[str, Any]) -> None:
         idx += 1
         run["segmentIndex"] = idx
         run["segmentDurationSec"] = segments[idx]["durationSec"]
-        # Start next as if it began when previous ended; consume overflow.
         next_dur = int(segments[idx]["durationSec"]) * 1000
         run["segmentStartedAtMs"] = now - min(overflow, next_dur - 1)
         if overflow >= next_dur:
-            # Loop will advance again.
             continue
         break
     run["updatedAt"] = _now_ms()
@@ -152,7 +198,6 @@ def get_or_arm(key: str) -> dict[str, Any]:
             run = _new_idle(routine)
             _RUNS[rid.lower()] = run
             return _public(run)
-        # If catalog identity drifted but same key, keep run; refresh labels only when idle restart.
         _advance_if_needed(existing)
         return _public(existing)
 
@@ -170,7 +215,11 @@ def get_run(key: str) -> dict[str, Any] | None:
         return _public(existing)
 
 
-def apply_command(key: str, command: str) -> dict[str, Any]:
+def apply_command(
+    key: str,
+    command: str,
+    duration_sec: int | None = None,
+) -> dict[str, Any]:
     command = (command or "").strip().lower()
     if command not in COMMANDS:
         raise ValueError(f"Unknown command “{command}”")
@@ -196,9 +245,57 @@ def apply_command(key: str, command: str) -> dict[str, Any]:
         now = _now_ms()
         status = run["status"]
 
+        if command == "hide_chrome":
+            run["chromeVisible"] = False
+            _bump(run)
+            return _public(run)
+
+        if command == "show_chrome":
+            run["chromeVisible"] = True
+            _bump(run)
+            return _public(run)
+
+        if command == "start_countdown":
+            dur = int(duration_sec) if duration_sec is not None else DEFAULT_COUNTDOWN_SEC
+            if dur < 5:
+                dur = 5
+            if dur > 60 * 60:
+                dur = 60 * 60
+            # Leave routine timers alone; enter countdown from any phase except mid-run keep segments
+            run["status"] = "countdown"
+            run["countdownDurationSec"] = dur
+            run["countdownStartedAtMs"] = now
+            run["countdownPausedRemainingMs"] = None
+            run["segmentStartedAtMs"] = None
+            # Keep segment snapshot; chrome hidden under countdown graphic
+            run["chromeVisible"] = False
+            _bump(run)
+            return _public(run)
+
+        if command == "skip_countdown":
+            if status != "countdown":
+                return _public(run)
+            _finish_countdown(run)
+            _bump(run)
+            return _public(run)
+
         if command == "restart":
             run = _new_idle(routine)
             _RUNS[rid.lower()] = run
+            return _public(run)
+
+        # Routine controls ignore countdown — ask to skip first via skip_countdown
+        if status == "countdown" and command in {
+            "start",
+            "pause",
+            "resume",
+            "skip",
+            "back",
+        }:
+            if command == "skip":
+                _finish_countdown(run)
+                _bump(run)
+                return _public(run)
             return _public(run)
 
         if command == "start":
@@ -207,13 +304,13 @@ def apply_command(key: str, command: str) -> dict[str, Any]:
                 _RUNS[rid.lower()] = run
                 status = "idle"
             if status == "paused":
-                # treat start as resume
                 remaining = int(run.get("pausedRemainingMs") or 0)
                 run["status"] = "running"
                 run["segmentStartedAtMs"] = now - (
                     int(run["segmentDurationSec"]) * 1000 - remaining
                 )
                 run["pausedRemainingMs"] = None
+                run["chromeVisible"] = True
                 _bump(run)
                 return _public(run)
             if status == "idle":
@@ -225,9 +322,9 @@ def apply_command(key: str, command: str) -> dict[str, Any]:
                 run["status"] = "running"
                 run["segmentStartedAtMs"] = now
                 run["pausedRemainingMs"] = None
+                run["chromeVisible"] = True
                 _bump(run)
                 return _public(run)
-            # already running — idempotent
             return _public(run)
 
         if command == "resume":
@@ -274,14 +371,12 @@ def apply_command(key: str, command: str) -> dict[str, Any]:
                 run["segmentStartedAtMs"] = None
                 run["pausedRemainingMs"] = segments[idx]["durationSec"] * 1000
                 if status == "idle":
-                    # stay idle but on next segment (armed on later exercise)
                     run["status"] = "idle"
             _bump(run)
             return _public(run)
 
         if command == "back":
             if status == "done":
-                # Go to last segment paused/idle
                 idx = len(segments) - 1
                 run["segmentIndex"] = idx
                 run["segmentDurationSec"] = segments[idx]["durationSec"]
@@ -292,7 +387,6 @@ def apply_command(key: str, command: str) -> dict[str, Any]:
                 return _public(run)
             idx = int(run["segmentIndex"])
             if idx <= 0:
-                # Restart current segment
                 run["segmentIndex"] = 0
                 run["segmentDurationSec"] = segments[0]["durationSec"]
                 if status == "running":

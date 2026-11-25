@@ -42,6 +42,21 @@ def main() -> None:
 
     live.apply_command(key, "restart")
     assert live._RUNS[key.lower()]["status"] == "idle"
+
+    cd = live.apply_command(key, "start_countdown", duration_sec=60)
+    assert cd["status"] == "countdown"
+    assert cd["countdownDurationSec"] == 60
+    assert cd["chromeVisible"] is False
+
+    skipped = live.apply_command(key, "skip_countdown")
+    assert skipped["status"] == "idle"
+    assert skipped["chromeVisible"] is True
+
+    live.apply_command(key, "hide_chrome")
+    assert live._RUNS[key.lower()]["chromeVisible"] is False
+    live.apply_command(key, "show_chrome")
+    assert live._RUNS[key.lower()]["chromeVisible"] is True
+
     print("ok", key)
 
 
