@@ -1,19 +1,41 @@
-"""HTTP API for Clozzz routine catalog."""
+"""HTTP API for Clozzz routine catalog + live remote control."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from . import store
+from . import live, store
 
 router = APIRouter(prefix="/clozzz", tags=["Clozzz"])
 
 
 class OrderBody(BaseModel):
     ids: list[str] = Field(min_length=1)
+
+
+class LiveCommandBody(BaseModel):
+    command: str = Field(min_length=1)
+
+
+def _require_live_token(
+    x_clozzz_live_token: str | None,
+    authorization: str | None,
+) -> None:
+    expected = live.expected_live_token()
+    if expected is None:
+        return
+    provided = (x_clozzz_live_token or "").strip()
+    if not provided and authorization:
+        auth = authorization.strip()
+        if auth.lower().startswith("bearer "):
+            provided = auth[7:].strip()
+        else:
+            provided = auth
+    if not provided or provided != expected:
+        raise HTTPException(status_code=401, detail="Invalid or missing live token")
 
 
 @router.get("/routines")
@@ -71,3 +93,30 @@ def remove_routine(key: str) -> dict[str, Any]:
 @router.post("/routines/seed")
 def seed_routines() -> dict[str, Any]:
     return store.reset_to_seed()
+
+
+@router.get("/live/{key}")
+def get_live(key: str) -> dict[str, Any]:
+    """Arm idle run if missing; return server-authoritative snapshot."""
+    try:
+        return live.get_or_arm(key)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=f"Unknown routine “{key}”") from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.post("/live/{key}/command")
+def post_live_command(
+    key: str,
+    body: LiveCommandBody,
+    x_clozzz_live_token: str | None = Header(default=None, alias="X-Clozzz-Live-Token"),
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _require_live_token(x_clozzz_live_token, authorization)
+    try:
+        return live.apply_command(key, body.command)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=f"Unknown routine “{key}”") from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
