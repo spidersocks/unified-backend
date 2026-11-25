@@ -120,6 +120,30 @@ def _new_idle(routine: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _sync_flags_from_routine(run: dict[str, Any], routine: dict[str, Any]) -> None:
+    """
+    Keep intro/end flags aligned with the routine catalog.
+
+    In-memory runs outlive editor toggles; without this, OBS never sees a
+    newly enabled pre-stream countdown until Restart (or process restart).
+    """
+    flags = _routine_flags(routine)
+    run["introCountdownEnabled"] = flags["introCountdownEnabled"]
+    run["introCountdownSec"] = flags["introCountdownSec"]
+    run["streamEndedEnabled"] = flags["streamEndedEnabled"]
+    run["streamEndedSec"] = flags["streamEndedSec"]
+    run["streamEndedMessage"] = flags["streamEndedMessage"]
+    run["streamEndedDurationSec"] = flags["streamEndedSec"]
+    # Held idle: keep the frozen clock duration matching the editor value.
+    if (
+        run.get("status") == "idle"
+        and flags["introCountdownEnabled"]
+        and not run.get("introConsumed")
+        and run.get("countdownStartedAtMs") is None
+    ):
+        run["countdownDurationSec"] = flags["introCountdownSec"]
+
+
 def _public(run: dict[str, Any]) -> dict[str, Any]:
     """Copy with fresh serverNowMs for client clock skew handling."""
     out = deepcopy(run)
@@ -286,6 +310,7 @@ def get_or_arm(key: str) -> dict[str, Any]:
             _RUNS[rid.lower()] = run
             return _public(run)
         _advance_if_needed(existing)
+        _sync_flags_from_routine(existing, routine)
         return _public(existing)
 
 
@@ -299,6 +324,7 @@ def get_run(key: str) -> dict[str, Any] | None:
         if existing is None:
             return None
         _advance_if_needed(existing)
+        _sync_flags_from_routine(existing, routine)
         return _public(existing)
 
 
@@ -324,6 +350,7 @@ def apply_command(
             _RUNS[rid.lower()] = run
         else:
             _advance_if_needed(run)
+            _sync_flags_from_routine(run, routine)
 
         segments: list[dict[str, Any]] = run["segments"]
         if not segments:
@@ -356,9 +383,11 @@ def apply_command(
 
         if command == "skip_countdown":
             # Ticking countdown, or held idle before Start (intro armed).
+            # Prefer catalog flags so an editor toggle is honored immediately.
+            flags = _routine_flags(routine)
             intro_held = (
                 status == "idle"
-                and run.get("introCountdownEnabled")
+                and flags["introCountdownEnabled"]
                 and not run.get("introConsumed")
             )
             if status != "countdown" and not intro_held:
@@ -429,8 +458,10 @@ def apply_command(
                 return _public(run)
             if status == "idle":
                 # Routine-level intro: first Start runs pre-stream countdown.
-                if run.get("introCountdownEnabled") and not run.get("introConsumed"):
-                    dur = int(run.get("introCountdownSec") or DEFAULT_COUNTDOWN_SEC)
+                # Read flags from catalog (not a possibly-stale in-memory run).
+                flags = _routine_flags(routine)
+                if flags["introCountdownEnabled"] and not run.get("introConsumed"):
+                    dur = int(flags["introCountdownSec"] or DEFAULT_COUNTDOWN_SEC)
                     _enter_countdown(run, dur, now=now)
                     _bump(run)
                     return _public(run)
