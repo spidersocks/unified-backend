@@ -15,8 +15,8 @@ _LOCK = threading.RLock()
 # routineId(lower) -> LiveRun dict
 _RUNS: dict[str, dict[str, Any]] = {}
 
-DEFAULT_COUNTDOWN_SEC = 180
-DEFAULT_STREAM_ENDED_SEC = 45
+DEFAULT_COUNTDOWN_SEC = 1800  # 30 min — matches new-routine editor defaults
+DEFAULT_STREAM_ENDED_SEC = 1800
 
 COMMANDS = frozenset(
     {
@@ -73,12 +73,12 @@ def _routine_flags(routine: dict[str, Any]) -> dict[str, Any]:
         intro_sec = int(routine.get("introCountdownSec") or DEFAULT_COUNTDOWN_SEC)
     except (TypeError, ValueError):
         intro_sec = DEFAULT_COUNTDOWN_SEC
-    intro_sec = max(5, min(60 * 60, intro_sec))
+    intro_sec = max(1, min(60 * 60, intro_sec))
     try:
         ended_sec = int(routine.get("streamEndedSec") or DEFAULT_STREAM_ENDED_SEC)
     except (TypeError, ValueError):
         ended_sec = DEFAULT_STREAM_ENDED_SEC
-    ended_sec = max(5, min(60 * 60, ended_sec))
+    ended_sec = max(1, min(60 * 60, ended_sec))
     return {
         "introCountdownEnabled": bool(routine.get("introCountdownEnabled", False)),
         "introCountdownSec": intro_sec,
@@ -346,8 +346,8 @@ def apply_command(
             flags = _routine_flags(routine)
             default_dur = flags["introCountdownSec"]
             dur = int(duration_sec) if duration_sec is not None else default_dur
-            if dur < 5:
-                dur = 5
+            if dur < 1:
+                dur = 1
             if dur > 60 * 60:
                 dur = 60 * 60
             _enter_countdown(run, dur, now=now)

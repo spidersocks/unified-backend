@@ -95,19 +95,20 @@ def _normalize_catalog(data: dict[str, Any], *, stamp: bool = False) -> dict[str
             routine.get("description") or routine.get("intent") or ""
         ).strip()
 
+        # Existing routines keep stored flags; missing → off (new drafts set ON in the editor).
         intro_enabled = bool(routine.get("introCountdownEnabled", False))
         try:
-            intro_sec = int(routine.get("introCountdownSec", 180))
+            intro_sec = int(routine.get("introCountdownSec", 1800))
         except (TypeError, ValueError):
-            intro_sec = 180
-        intro_sec = max(5, min(60 * 60, intro_sec))
+            intro_sec = 1800
+        intro_sec = max(1, min(60 * 60, intro_sec))
 
         ended_enabled = bool(routine.get("streamEndedEnabled", False))
         try:
-            ended_sec = int(routine.get("streamEndedSec", 45))
+            ended_sec = int(routine.get("streamEndedSec", 1800))
         except (TypeError, ValueError):
-            ended_sec = 45
-        ended_sec = max(5, min(60 * 60, ended_sec))
+            ended_sec = 1800
+        ended_sec = max(1, min(60 * 60, ended_sec))
         ended_message = str(routine.get("streamEndedMessage") or "").strip()
 
         item = {

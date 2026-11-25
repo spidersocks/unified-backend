@@ -18,7 +18,7 @@ class OrderBody(BaseModel):
 
 class LiveCommandBody(BaseModel):
     command: str = Field(min_length=1)
-    durationSec: int | None = Field(default=None, ge=5, le=3600)
+    durationSec: int | None = Field(default=None, ge=1, le=3600)
 
 
 def _require_live_token(
