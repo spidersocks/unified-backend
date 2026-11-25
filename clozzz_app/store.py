@@ -94,6 +94,22 @@ def _normalize_catalog(data: dict[str, Any], *, stamp: bool = False) -> dict[str
         description = str(
             routine.get("description") or routine.get("intent") or ""
         ).strip()
+
+        intro_enabled = bool(routine.get("introCountdownEnabled", False))
+        try:
+            intro_sec = int(routine.get("introCountdownSec", 180))
+        except (TypeError, ValueError):
+            intro_sec = 180
+        intro_sec = max(5, min(60 * 60, intro_sec))
+
+        ended_enabled = bool(routine.get("streamEndedEnabled", False))
+        try:
+            ended_sec = int(routine.get("streamEndedSec", 45))
+        except (TypeError, ValueError):
+            ended_sec = 45
+        ended_sec = max(5, min(60 * 60, ended_sec))
+        ended_message = str(routine.get("streamEndedMessage") or "").strip()
+
         item = {
             "id": rid,
             "name": name,
@@ -101,6 +117,11 @@ def _normalize_catalog(data: dict[str, Any], *, stamp: bool = False) -> dict[str
             "routineId": str(routine.get("routineId") or rid).strip() or rid,
             "space": str(routine.get("space") or "").strip(),
             "description": description,
+            "introCountdownEnabled": intro_enabled,
+            "introCountdownSec": intro_sec,
+            "streamEndedEnabled": ended_enabled,
+            "streamEndedSec": ended_sec,
+            "streamEndedMessage": ended_message,
             "segments": segments,
             "updatedAt": str(existing_updated) if existing_updated else _utc_now(),
         }

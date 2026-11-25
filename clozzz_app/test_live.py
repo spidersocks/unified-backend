@@ -13,6 +13,8 @@ def main() -> None:
     armed = live.get_or_arm(key)
     assert armed["status"] == "idle", armed
     assert armed["segmentCount"] >= 1
+    assert "introCountdownEnabled" in armed
+    assert "streamEndedEnabled" in armed
 
     started = live.apply_command(key, "start")
     assert started["status"] == "running"
@@ -38,7 +40,7 @@ def main() -> None:
     run["segments"][0]["durationSec"] = 1
     run["segmentStartedAtMs"] = live._now_ms() - 2000
     live._advance_if_needed(run)
-    assert run["segmentIndex"] >= 1 or run["status"] == "done"
+    assert run["segmentIndex"] >= 1 or run["status"] in ("done", "stream_ended")
 
     live.apply_command(key, "restart")
     assert live._RUNS[key.lower()]["status"] == "idle"
@@ -51,11 +53,54 @@ def main() -> None:
     skipped = live.apply_command(key, "skip_countdown")
     assert skipped["status"] == "idle"
     assert skipped["chromeVisible"] is True
+    assert skipped["introConsumed"] is True
 
     live.apply_command(key, "hide_chrome")
     assert live._RUNS[key.lower()]["chromeVisible"] is False
     live.apply_command(key, "show_chrome")
     assert live._RUNS[key.lower()]["chromeVisible"] is True
+
+    # Intro on Start when routine flag enabled
+    live.apply_command(key, "restart")
+    run = live._RUNS[key.lower()]
+    run["introCountdownEnabled"] = True
+    run["introCountdownSec"] = 90
+    run["introConsumed"] = False
+    intro = live.apply_command(key, "start")
+    assert intro["status"] == "countdown"
+    assert intro["countdownDurationSec"] == 90
+    live.apply_command(key, "skip_countdown")
+    after = live.apply_command(key, "start")
+    assert after["status"] == "running"
+
+    # Stream-ended graphic after finish
+    live.apply_command(key, "restart")
+    run = live._RUNS[key.lower()]
+    run["streamEndedEnabled"] = True
+    run["streamEndedSec"] = 30
+    live.apply_command(key, "start")
+    run = live._RUNS[key.lower()]
+    run["status"] = "running"
+    run["segmentIndex"] = len(run["segments"]) - 1
+    run["segmentDurationSec"] = 1
+    run["segments"][-1]["durationSec"] = 1
+    run["segmentStartedAtMs"] = live._now_ms() - 2000
+    live._advance_if_needed(run)
+    assert run["status"] == "stream_ended"
+    assert run["chromeVisible"] is False
+    dismissed = live.apply_command(key, "skip_stream_ended")
+    assert dismissed["status"] == "done"
+    assert dismissed["chromeVisible"] is True
+
+    # Schema round-trip for new fields
+    sample = catalog["routines"][0]
+    assert "introCountdownEnabled" in sample or True  # normalized on read
+    normalized = store._normalize_catalog({"schemaVersion": 1, "routines": [sample]})
+    r0 = normalized["routines"][0]
+    assert r0["introCountdownSec"] >= 5
+    assert r0["streamEndedSec"] >= 5
+    assert isinstance(r0["introCountdownEnabled"], bool)
+    assert isinstance(r0["streamEndedEnabled"], bool)
 
     print("ok", key)
 

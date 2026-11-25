@@ -16,6 +16,7 @@ _LOCK = threading.RLock()
 _RUNS: dict[str, dict[str, Any]] = {}
 
 DEFAULT_COUNTDOWN_SEC = 180
+DEFAULT_STREAM_ENDED_SEC = 45
 
 COMMANDS = frozenset(
     {
@@ -27,6 +28,7 @@ COMMANDS = frozenset(
         "restart",
         "start_countdown",
         "skip_countdown",
+        "skip_stream_ended",
         "hide_chrome",
         "show_chrome",
     }
@@ -66,12 +68,33 @@ def _segments_snapshot(routine: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def _routine_flags(routine: dict[str, Any]) -> dict[str, Any]:
+    try:
+        intro_sec = int(routine.get("introCountdownSec") or DEFAULT_COUNTDOWN_SEC)
+    except (TypeError, ValueError):
+        intro_sec = DEFAULT_COUNTDOWN_SEC
+    intro_sec = max(5, min(60 * 60, intro_sec))
+    try:
+        ended_sec = int(routine.get("streamEndedSec") or DEFAULT_STREAM_ENDED_SEC)
+    except (TypeError, ValueError):
+        ended_sec = DEFAULT_STREAM_ENDED_SEC
+    ended_sec = max(5, min(60 * 60, ended_sec))
+    return {
+        "introCountdownEnabled": bool(routine.get("introCountdownEnabled", False)),
+        "introCountdownSec": intro_sec,
+        "streamEndedEnabled": bool(routine.get("streamEndedEnabled", False)),
+        "streamEndedSec": ended_sec,
+        "streamEndedMessage": str(routine.get("streamEndedMessage") or "").strip(),
+    }
+
+
 def _new_idle(routine: dict[str, Any]) -> dict[str, Any]:
     segments = _segments_snapshot(routine)
     if not segments:
         raise ValueError("routine has no segments")
     first = segments[0]
     now = _now_ms()
+    flags = _routine_flags(routine)
     return {
         "routineId": routine["id"],
         "title": routine.get("title") or routine.get("name") or routine["id"],
@@ -87,9 +110,13 @@ def _new_idle(routine: dict[str, Any]) -> dict[str, Any]:
         "currentLabel": first["label"],
         "segmentCount": len(segments),
         "chromeVisible": True,
-        "countdownDurationSec": DEFAULT_COUNTDOWN_SEC,
+        "countdownDurationSec": flags["introCountdownSec"],
         "countdownStartedAtMs": None,
         "countdownPausedRemainingMs": None,
+        "introConsumed": False,
+        "streamEndedStartedAtMs": None,
+        "streamEndedDurationSec": flags["streamEndedSec"],
+        **flags,
     }
 
 
@@ -106,7 +133,26 @@ def _public(run: dict[str, Any]) -> dict[str, Any]:
     out["segmentCount"] = len(segs)
     out.setdefault("chromeVisible", True)
     out.setdefault("countdownDurationSec", DEFAULT_COUNTDOWN_SEC)
+    out.setdefault("introCountdownEnabled", False)
+    out.setdefault("introCountdownSec", DEFAULT_COUNTDOWN_SEC)
+    out.setdefault("introConsumed", False)
+    out.setdefault("streamEndedEnabled", False)
+    out.setdefault("streamEndedSec", DEFAULT_STREAM_ENDED_SEC)
+    out.setdefault("streamEndedDurationSec", DEFAULT_STREAM_ENDED_SEC)
+    out.setdefault("streamEndedMessage", "")
     return out
+
+
+def _enter_countdown(run: dict[str, Any], dur: int, *, now: int | None = None) -> None:
+    if now is None:
+        now = _now_ms()
+    run["status"] = "countdown"
+    run["countdownDurationSec"] = dur
+    run["countdownStartedAtMs"] = now
+    run["countdownPausedRemainingMs"] = None
+    run["segmentStartedAtMs"] = None
+    run["chromeVisible"] = False
+    run["streamEndedStartedAtMs"] = None
 
 
 def _finish_countdown(run: dict[str, Any]) -> None:
@@ -120,7 +166,38 @@ def _finish_countdown(run: dict[str, Any]) -> None:
     run["pausedRemainingMs"] = first["durationSec"] * 1000
     run["countdownStartedAtMs"] = None
     run["countdownPausedRemainingMs"] = None
+    run["introConsumed"] = True
     run["chromeVisible"] = True
+
+
+def _enter_stream_ended(run: dict[str, Any], *, now: int | None = None) -> None:
+    if now is None:
+        now = _now_ms()
+    dur = int(run.get("streamEndedSec") or DEFAULT_STREAM_ENDED_SEC)
+    run["status"] = "stream_ended"
+    run["streamEndedDurationSec"] = dur
+    run["streamEndedStartedAtMs"] = now
+    run["segmentStartedAtMs"] = None
+    run["pausedRemainingMs"] = 0
+    run["chromeVisible"] = False
+
+
+def _finish_stream_ended(run: dict[str, Any]) -> None:
+    run["status"] = "done"
+    run["streamEndedStartedAtMs"] = None
+    run["segmentStartedAtMs"] = None
+    run["pausedRemainingMs"] = 0
+    run["chromeVisible"] = True
+
+
+def _mark_done(run: dict[str, Any], *, now: int | None = None) -> None:
+    if run.get("streamEndedEnabled"):
+        _enter_stream_ended(run, now=now)
+    else:
+        run["status"] = "done"
+        run["segmentStartedAtMs"] = None
+        run["pausedRemainingMs"] = 0
+        run["streamEndedStartedAtMs"] = None
 
 
 def _advance_countdown_if_needed(run: dict[str, Any]) -> None:
@@ -136,23 +213,35 @@ def _advance_countdown_if_needed(run: dict[str, Any]) -> None:
         run["updatedAt"] = _now_ms()
 
 
+def _advance_stream_ended_if_needed(run: dict[str, Any]) -> None:
+    if run["status"] != "stream_ended":
+        return
+    started = run.get("streamEndedStartedAtMs")
+    if started is None:
+        return
+    now = _now_ms()
+    duration_ms = int(run.get("streamEndedDurationSec") or DEFAULT_STREAM_ENDED_SEC) * 1000
+    if now >= int(started) + duration_ms:
+        _finish_stream_ended(run)
+        run["updatedAt"] = _now_ms()
+
+
 def _advance_if_needed(run: dict[str, Any]) -> None:
-    """Lazy server-side segment / countdown advance."""
+    """Lazy server-side segment / countdown / stream-ended advance."""
     _advance_countdown_if_needed(run)
+    _advance_stream_ended_if_needed(run)
     if run["status"] != "running":
         return
     segments: list[dict[str, Any]] = run["segments"]
     if not segments:
-        run["status"] = "done"
+        _mark_done(run)
         return
 
     now = _now_ms()
     while run["status"] == "running":
         idx = int(run["segmentIndex"])
         if idx < 0 or idx >= len(segments):
-            run["status"] = "done"
-            run["segmentStartedAtMs"] = None
-            run["pausedRemainingMs"] = 0
+            _mark_done(run, now=now)
             break
         started = run.get("segmentStartedAtMs")
         if started is None:
@@ -164,11 +253,9 @@ def _advance_if_needed(run: dict[str, Any]) -> None:
             break
         overflow = now - end_at
         if idx + 1 >= len(segments):
-            run["status"] = "done"
             run["segmentIndex"] = idx
             run["segmentDurationSec"] = segments[idx]["durationSec"]
-            run["segmentStartedAtMs"] = None
-            run["pausedRemainingMs"] = 0
+            _mark_done(run, now=now)
             break
         idx += 1
         run["segmentIndex"] = idx
@@ -256,19 +343,14 @@ def apply_command(
             return _public(run)
 
         if command == "start_countdown":
-            dur = int(duration_sec) if duration_sec is not None else DEFAULT_COUNTDOWN_SEC
+            flags = _routine_flags(routine)
+            default_dur = flags["introCountdownSec"]
+            dur = int(duration_sec) if duration_sec is not None else default_dur
             if dur < 5:
                 dur = 5
             if dur > 60 * 60:
                 dur = 60 * 60
-            # Leave routine timers alone; enter countdown from any phase except mid-run keep segments
-            run["status"] = "countdown"
-            run["countdownDurationSec"] = dur
-            run["countdownStartedAtMs"] = now
-            run["countdownPausedRemainingMs"] = None
-            run["segmentStartedAtMs"] = None
-            # Keep segment snapshot; chrome hidden under countdown graphic
-            run["chromeVisible"] = False
+            _enter_countdown(run, dur, now=now)
             _bump(run)
             return _public(run)
 
@@ -276,6 +358,13 @@ def apply_command(
             if status != "countdown":
                 return _public(run)
             _finish_countdown(run)
+            _bump(run)
+            return _public(run)
+
+        if command == "skip_stream_ended":
+            if status != "stream_ended":
+                return _public(run)
+            _finish_stream_ended(run)
             _bump(run)
             return _public(run)
 
@@ -298,6 +387,25 @@ def apply_command(
                 return _public(run)
             return _public(run)
 
+        if status == "stream_ended" and command in {
+            "start",
+            "pause",
+            "resume",
+            "skip",
+            "back",
+        }:
+            if command in ("skip", "start"):
+                _finish_stream_ended(run)
+                if command == "start":
+                    # Fall through to start from done → restart path below
+                    status = "done"
+                    run["status"] = "done"
+                else:
+                    _bump(run)
+                    return _public(run)
+            else:
+                return _public(run)
+
         if command == "start":
             if status == "done":
                 run = _new_idle(routine)
@@ -314,6 +422,12 @@ def apply_command(
                 _bump(run)
                 return _public(run)
             if status == "idle":
+                # Routine-level intro: first Start runs pre-stream countdown.
+                if run.get("introCountdownEnabled") and not run.get("introConsumed"):
+                    dur = int(run.get("introCountdownSec") or DEFAULT_COUNTDOWN_SEC)
+                    _enter_countdown(run, dur, now=now)
+                    _bump(run)
+                    return _public(run)
                 idx = int(run["segmentIndex"])
                 if idx < 0 or idx >= len(segments):
                     idx = 0
@@ -355,9 +469,8 @@ def apply_command(
                 return _public(run)
             idx = int(run["segmentIndex"])
             if idx + 1 >= len(segments):
-                run["status"] = "done"
-                run["segmentStartedAtMs"] = None
-                run["pausedRemainingMs"] = 0
+                run["segmentIndex"] = idx
+                _mark_done(run, now=now)
                 _bump(run)
                 return _public(run)
             idx += 1
