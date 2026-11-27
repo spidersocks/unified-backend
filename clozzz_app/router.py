@@ -19,6 +19,8 @@ class OrderBody(BaseModel):
 class LiveCommandBody(BaseModel):
     command: str = Field(min_length=1)
     durationSec: int | None = Field(default=None, ge=1, le=3600)
+    cueVolume: float | None = Field(default=None, ge=0, le=1)
+    cueMuted: bool | None = None
 
 
 class ChannelBody(BaseModel):
@@ -197,7 +199,13 @@ def post_live_command(
 ) -> dict[str, Any]:
     _require_live_token(x_clozzz_live_token, authorization)
     try:
-        snap = live.apply_command(key, body.command, duration_sec=body.durationSec)
+        snap = live.apply_command(
+            key,
+            body.command,
+            duration_sec=body.durationSec,
+            cue_volume=body.cueVolume,
+            cue_muted=body.cueMuted,
+        )
         # Keep open display glued to whatever the controller is driving.
         try:
             studio.set_channel(key)

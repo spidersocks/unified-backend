@@ -33,8 +33,11 @@ COMMANDS = frozenset(
         "skip_stream_ended",
         "hide_chrome",
         "show_chrome",
+        "set_cue_audio",
     }
 )
+
+DEFAULT_CUE_VOLUME = 0.75
 
 
 def _now_ms() -> int:
@@ -117,8 +120,25 @@ def _new_idle(routine: dict[str, Any]) -> dict[str, Any]:
         "introConsumed": False,
         "streamEndedStartedAtMs": None,
         "streamEndedDurationSec": flags["streamEndedSec"],
+        "cueVolume": DEFAULT_CUE_VOLUME,
+        "cueMuted": False,
         **flags,
     }
+
+
+def _replace_idle(routine: dict[str, Any], prev: dict[str, Any] | None) -> dict[str, Any]:
+    """Fresh idle run that keeps revision monotonic + cue audio prefs."""
+    old_rev = int((prev or {}).get("revision") or 0)
+    run = _new_idle(routine)
+    run["revision"] = old_rev + 1
+    if prev is not None:
+        try:
+            vol = float(prev.get("cueVolume", DEFAULT_CUE_VOLUME))
+        except (TypeError, ValueError):
+            vol = DEFAULT_CUE_VOLUME
+        run["cueVolume"] = max(0.0, min(1.0, vol))
+        run["cueMuted"] = bool(prev.get("cueMuted", False))
+    return run
 
 
 def _sync_flags_from_routine(run: dict[str, Any], routine: dict[str, Any]) -> None:
@@ -167,6 +187,8 @@ def _public(run: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("streamEndedSec", STREAM_ENDED_SOFT_CAP_SEC)
     out.setdefault("streamEndedDurationSec", STREAM_ENDED_SOFT_CAP_SEC)
     out.setdefault("streamEndedMessage", "")
+    out.setdefault("cueVolume", DEFAULT_CUE_VOLUME)
+    out.setdefault("cueMuted", False)
     return out
 
 
@@ -339,6 +361,8 @@ def apply_command(
     key: str,
     command: str,
     duration_sec: int | None = None,
+    cue_volume: float | None = None,
+    cue_muted: bool | None = None,
 ) -> dict[str, Any]:
     command = (command or "").strip().lower()
     if command not in COMMANDS:
@@ -365,6 +389,18 @@ def apply_command(
 
         now = _now_ms()
         status = run["status"]
+
+        if command == "set_cue_audio":
+            if cue_volume is not None:
+                try:
+                    vol = float(cue_volume)
+                except (TypeError, ValueError) as e:
+                    raise ValueError("cueVolume must be a number") from e
+                run["cueVolume"] = max(0.0, min(1.0, vol))
+            if cue_muted is not None:
+                run["cueMuted"] = bool(cue_muted)
+            _bump(run)
+            return _public(run)
 
         if command == "hide_chrome":
             run["chromeVisible"] = False
@@ -411,7 +447,7 @@ def apply_command(
             return _public(run)
 
         if command == "restart":
-            run = _new_idle(routine)
+            run = _replace_idle(routine, run)
             _RUNS[rid.lower()] = run
             return _public(run)
 
@@ -450,7 +486,7 @@ def apply_command(
 
         if command == "start":
             if status == "done":
-                run = _new_idle(routine)
+                run = _replace_idle(routine, run)
                 _RUNS[rid.lower()] = run
                 status = "idle"
             if status == "paused":

@@ -62,8 +62,13 @@ def main() -> None:
         live._advance_if_needed(run)
         assert run["segmentIndex"] >= 1 or run["status"] in ("done", "stream_ended")
 
-        live.apply_command(key, "restart")
-        assert live._RUNS[key.lower()]["status"] == "idle"
+        before_rev = live._RUNS[key.lower()]["revision"]
+        restarted = live.apply_command(key, "restart")
+        assert restarted["status"] == "idle"
+        assert restarted["revision"] > before_rev, (
+            f"restart must keep revision monotonic ({before_rev} → {restarted['revision']})"
+        )
+        assert restarted["introConsumed"] is False
 
         cd = live.apply_command(key, "start_countdown", duration_sec=60)
         assert cd["status"] == "countdown"
@@ -179,6 +184,16 @@ def main() -> None:
         assert synced["introCountdownSec"] == 600, synced
         assert synced["countdownDurationSec"] == 600, synced
         assert synced["status"] == "idle"
+
+        # Cue audio prefs via remote command; survive restart
+        cued = live.apply_command(
+            key, "set_cue_audio", cue_volume=0.4, cue_muted=True
+        )
+        assert cued["cueVolume"] == 0.4
+        assert cued["cueMuted"] is True
+        after_audio = live.apply_command(key, "restart")
+        assert after_audio["cueVolume"] == 0.4
+        assert after_audio["cueMuted"] is True
     finally:
         # Restore original routine JSON so local store stays clean
         store.upsert_routine(original)
