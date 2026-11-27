@@ -180,7 +180,7 @@ def _enter_countdown(run: dict[str, Any], dur: int, *, now: int | None = None) -
 
 
 def _finish_countdown(run: dict[str, Any]) -> None:
-    """Countdown ended or skipped → armed idle overlay (chrome on)."""
+    """Countdown ended or skipped → logo-only idle until Start."""
     segments: list[dict[str, Any]] = run["segments"]
     first = segments[0]
     run["status"] = "idle"
@@ -191,7 +191,8 @@ def _finish_countdown(run: dict[str, Any]) -> None:
     run["countdownStartedAtMs"] = None
     run["countdownPausedRemainingMs"] = None
     run["introConsumed"] = True
-    run["chromeVisible"] = True
+    # Hide exercise+timer until Start — logo-only after countdown/skip.
+    run["chromeVisible"] = False
 
 
 def _enter_stream_ended(run: dict[str, Any], *, now: int | None = None) -> None:
