@@ -143,6 +143,15 @@ def _normalize_catalog(data: dict[str, Any], *, stamp: bool = False) -> dict[str
             break_sec = 10
         break_sec = max(1, min(5 * 60, break_sec))
 
+        # Missing → timer cues on; music off (editor new drafts set music on).
+        if "timerSoundsEnabled" in routine:
+            timer_sounds_enabled = bool(routine.get("timerSoundsEnabled"))
+        else:
+            timer_sounds_enabled = True
+        music_enabled = bool(routine.get("musicEnabled", False))
+        scope_raw = str(routine.get("musicScope") or "routine").strip().lower()
+        music_scope = "session" if scope_raw == "session" else "routine"
+
         space = _normalize_space(routine.get("space"))
 
         item = {
@@ -160,6 +169,9 @@ def _normalize_catalog(data: dict[str, Any], *, stamp: bool = False) -> dict[str
             "streamEndedMessage": ended_message,
             "breaksEnabled": breaks_enabled,
             "breakSec": break_sec,
+            "timerSoundsEnabled": timer_sounds_enabled,
+            "musicEnabled": music_enabled,
+            "musicScope": music_scope,
             "segments": segments,
             "updatedAt": str(existing_updated) if existing_updated else _utc_now(),
         }

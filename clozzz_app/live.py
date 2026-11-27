@@ -88,6 +88,13 @@ def _routine_flags(routine: dict[str, Any]) -> dict[str, Any]:
     except (TypeError, ValueError):
         break_sec = DEFAULT_BREAK_SEC
     break_sec = max(1, min(5 * 60, break_sec))
+    if "timerSoundsEnabled" in routine:
+        timer_sounds = bool(routine.get("timerSoundsEnabled"))
+    else:
+        timer_sounds = True
+    music_enabled = bool(routine.get("musicEnabled", False))
+    scope_raw = str(routine.get("musicScope") or "routine").strip().lower()
+    music_scope = "session" if scope_raw == "session" else "routine"
     return {
         "introCountdownEnabled": bool(routine.get("introCountdownEnabled", False)),
         "introCountdownSec": intro_sec,
@@ -97,6 +104,9 @@ def _routine_flags(routine: dict[str, Any]) -> dict[str, Any]:
         "streamEndedMessage": str(routine.get("streamEndedMessage") or "").strip(),
         "breaksEnabled": bool(routine.get("breaksEnabled", False)),
         "breakSec": break_sec,
+        "timerSoundsEnabled": timer_sounds,
+        "musicEnabled": music_enabled,
+        "musicScope": music_scope,
     }
 
 
@@ -169,6 +179,9 @@ def _sync_flags_from_routine(run: dict[str, Any], routine: dict[str, Any]) -> No
     run["streamEndedDurationSec"] = flags["streamEndedSec"]
     run["breaksEnabled"] = flags["breaksEnabled"]
     run["breakSec"] = flags["breakSec"]
+    run["timerSoundsEnabled"] = flags["timerSoundsEnabled"]
+    run["musicEnabled"] = flags["musicEnabled"]
+    run["musicScope"] = flags["musicScope"]
     # Held idle: keep the frozen clock duration matching the editor value.
     if (
         run.get("status") == "idle"
@@ -210,6 +223,9 @@ def _public(run: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("breakPausedRemainingMs", None)
     out.setdefault("cueVolume", DEFAULT_CUE_VOLUME)
     out.setdefault("cueMuted", False)
+    out.setdefault("timerSoundsEnabled", True)
+    out.setdefault("musicEnabled", False)
+    out.setdefault("musicScope", "routine")
     return out
 
 

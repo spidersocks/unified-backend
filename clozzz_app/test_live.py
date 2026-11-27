@@ -246,6 +246,37 @@ def main() -> None:
         )
         assert normalized2["routines"][0]["breaksEnabled"] is True
         assert normalized2["routines"][0]["breakSec"] == 10
+
+        # Sound prefs: persist + sync onto live snapshot
+        _set_routine_flags(
+            key,
+            timerSoundsEnabled=False,
+            musicEnabled=True,
+            musicScope="session",
+        )
+        sound_rt = store.find_routine(store.get_catalog(), key)
+        assert sound_rt["timerSoundsEnabled"] is False
+        assert sound_rt["musicEnabled"] is True
+        assert sound_rt["musicScope"] == "session"
+        live.apply_command(key, "restart")
+        sound_live = live.get_or_arm(key)
+        assert sound_live["timerSoundsEnabled"] is False
+        assert sound_live["musicEnabled"] is True
+        assert sound_live["musicScope"] == "session"
+        # Missing timerSoundsEnabled → default True; music off
+        sample3 = store.get_catalog()["routines"][0]
+        bare = {
+            k: v
+            for k, v in sample3.items()
+            if k
+            not in ("timerSoundsEnabled", "musicEnabled", "musicScope")
+        }
+        normalized3 = store._normalize_catalog(
+            {"schemaVersion": 1, "routines": [bare]}
+        )
+        assert normalized3["routines"][0]["timerSoundsEnabled"] is True
+        assert normalized3["routines"][0]["musicEnabled"] is False
+        assert normalized3["routines"][0]["musicScope"] == "routine"
     finally:
         # Restore original routine JSON so local store stays clean
         store.upsert_routine(original)

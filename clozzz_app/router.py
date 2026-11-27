@@ -174,6 +174,22 @@ def get_studio_display() -> dict[str, Any]:
             "name": routine.get("name"),
             "introCountdownEnabled": bool(routine.get("introCountdownEnabled")),
             "introCountdownSec": routine.get("introCountdownSec"),
+            "introCountdownMessage": str(routine.get("introCountdownMessage") or "").strip(),
+            "streamEndedEnabled": bool(routine.get("streamEndedEnabled")),
+            "streamEndedMessage": str(routine.get("streamEndedMessage") or "").strip(),
+            "breaksEnabled": bool(routine.get("breaksEnabled")),
+            "breakSec": routine.get("breakSec"),
+            "timerSoundsEnabled": (
+                True
+                if "timerSoundsEnabled" not in routine
+                else bool(routine.get("timerSoundsEnabled"))
+            ),
+            "musicEnabled": bool(routine.get("musicEnabled")),
+            "musicScope": (
+                "session"
+                if str(routine.get("musicScope") or "").strip().lower() == "session"
+                else "routine"
+            ),
             "segments": routine.get("segments") or [],
         },
     }
