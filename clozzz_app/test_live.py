@@ -72,7 +72,7 @@ def main() -> None:
 
         skipped = live.apply_command(key, "skip_countdown")
         assert skipped["status"] == "idle"
-        assert skipped["chromeVisible"] is True
+        assert skipped["chromeVisible"] is False
         assert skipped["introConsumed"] is True
 
         live.apply_command(key, "hide_chrome")
@@ -106,9 +106,10 @@ def main() -> None:
         held_skip = live.apply_command(key, "skip_countdown")
         assert held_skip["status"] == "idle"
         assert held_skip["introConsumed"] is True
-        assert held_skip["chromeVisible"] is True
+        assert held_skip["chromeVisible"] is False
         started_after_hold = live.apply_command(key, "start")
         assert started_after_hold["status"] == "running"
+        assert started_after_hold["chromeVisible"] is True
 
         # Stream-ended graphic after finish
         live.apply_command(key, "restart")
