@@ -136,6 +136,13 @@ def _normalize_catalog(data: dict[str, Any], *, stamp: bool = False) -> dict[str
         ended_sec = 3600
         ended_message = str(routine.get("streamEndedMessage") or "").strip()
 
+        breaks_enabled = bool(routine.get("breaksEnabled", False))
+        try:
+            break_sec = int(routine.get("breakSec", 10))
+        except (TypeError, ValueError):
+            break_sec = 10
+        break_sec = max(1, min(5 * 60, break_sec))
+
         space = _normalize_space(routine.get("space"))
 
         item = {
@@ -151,6 +158,8 @@ def _normalize_catalog(data: dict[str, Any], *, stamp: bool = False) -> dict[str
             "streamEndedEnabled": ended_enabled,
             "streamEndedSec": ended_sec,
             "streamEndedMessage": ended_message,
+            "breaksEnabled": breaks_enabled,
+            "breakSec": break_sec,
             "segments": segments,
             "updatedAt": str(existing_updated) if existing_updated else _utc_now(),
         }

@@ -19,6 +19,7 @@ DEFAULT_COUNTDOWN_SEC = 1800  # 30 min — matches new-routine editor defaults
 # Soft cap for stream-ended count-up (~1h); dismissible anytime via remote.
 STREAM_ENDED_SOFT_CAP_SEC = 3600
 DEFAULT_STREAM_ENDED_SEC = STREAM_ENDED_SOFT_CAP_SEC
+DEFAULT_BREAK_SEC = 10  # customary rest between exercises
 
 COMMANDS = frozenset(
     {
@@ -82,6 +83,11 @@ def _routine_flags(routine: dict[str, Any]) -> dict[str, Any]:
     intro_sec = max(60, min(60 * 60, intro_sec))
     # Stream ended runs indefinitely from the editor's POV; soft-cap ~1h internally.
     ended_sec = STREAM_ENDED_SOFT_CAP_SEC
+    try:
+        break_sec = int(routine.get("breakSec") or DEFAULT_BREAK_SEC)
+    except (TypeError, ValueError):
+        break_sec = DEFAULT_BREAK_SEC
+    break_sec = max(1, min(5 * 60, break_sec))
     return {
         "introCountdownEnabled": bool(routine.get("introCountdownEnabled", False)),
         "introCountdownSec": intro_sec,
@@ -89,6 +95,8 @@ def _routine_flags(routine: dict[str, Any]) -> dict[str, Any]:
         "streamEndedEnabled": bool(routine.get("streamEndedEnabled", False)),
         "streamEndedSec": ended_sec,
         "streamEndedMessage": str(routine.get("streamEndedMessage") or "").strip(),
+        "breaksEnabled": bool(routine.get("breaksEnabled", False)),
+        "breakSec": break_sec,
     }
 
 
@@ -120,6 +128,9 @@ def _new_idle(routine: dict[str, Any]) -> dict[str, Any]:
         "introConsumed": False,
         "streamEndedStartedAtMs": None,
         "streamEndedDurationSec": flags["streamEndedSec"],
+        "breakDurationSec": flags["breakSec"],
+        "breakStartedAtMs": None,
+        "breakPausedRemainingMs": None,
         "cueVolume": DEFAULT_CUE_VOLUME,
         "cueMuted": False,
         **flags,
@@ -156,6 +167,8 @@ def _sync_flags_from_routine(run: dict[str, Any], routine: dict[str, Any]) -> No
     run["streamEndedSec"] = flags["streamEndedSec"]
     run["streamEndedMessage"] = flags["streamEndedMessage"]
     run["streamEndedDurationSec"] = flags["streamEndedSec"]
+    run["breaksEnabled"] = flags["breaksEnabled"]
+    run["breakSec"] = flags["breakSec"]
     # Held idle: keep the frozen clock duration matching the editor value.
     if (
         run.get("status") == "idle"
@@ -164,6 +177,9 @@ def _sync_flags_from_routine(run: dict[str, Any], routine: dict[str, Any]) -> No
         and run.get("countdownStartedAtMs") is None
     ):
         run["countdownDurationSec"] = flags["introCountdownSec"]
+    # Not mid-break: keep catalog duration for the next break insert.
+    if run.get("status") != "break":
+        run["breakDurationSec"] = flags["breakSec"]
 
 
 def _public(run: dict[str, Any]) -> dict[str, Any]:
@@ -187,6 +203,11 @@ def _public(run: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("streamEndedSec", STREAM_ENDED_SOFT_CAP_SEC)
     out.setdefault("streamEndedDurationSec", STREAM_ENDED_SOFT_CAP_SEC)
     out.setdefault("streamEndedMessage", "")
+    out.setdefault("breaksEnabled", False)
+    out.setdefault("breakSec", DEFAULT_BREAK_SEC)
+    out.setdefault("breakDurationSec", DEFAULT_BREAK_SEC)
+    out.setdefault("breakStartedAtMs", None)
+    out.setdefault("breakPausedRemainingMs", None)
     out.setdefault("cueVolume", DEFAULT_CUE_VOLUME)
     out.setdefault("cueMuted", False)
     return out
@@ -249,6 +270,62 @@ def _mark_done(run: dict[str, Any], *, now: int | None = None) -> None:
         run["segmentStartedAtMs"] = None
         run["pausedRemainingMs"] = 0
         run["streamEndedStartedAtMs"] = None
+    run["breakStartedAtMs"] = None
+    run["breakPausedRemainingMs"] = None
+
+
+def _enter_break(
+    run: dict[str, Any],
+    next_idx: int,
+    *,
+    now: int | None = None,
+    overflow_ms: int = 0,
+) -> None:
+    """Rest between exercises. segmentIndex points at the upcoming exercise."""
+    if now is None:
+        now = _now_ms()
+    segments: list[dict[str, Any]] = run["segments"]
+    nxt = segments[next_idx]
+    try:
+        dur = int(run.get("breakSec") or DEFAULT_BREAK_SEC)
+    except (TypeError, ValueError):
+        dur = DEFAULT_BREAK_SEC
+    dur = max(1, min(5 * 60, dur))
+    duration_ms = dur * 1000
+    run["status"] = "break"
+    run["segmentIndex"] = next_idx
+    run["segmentDurationSec"] = nxt["durationSec"]
+    run["segmentStartedAtMs"] = None
+    run["pausedRemainingMs"] = None
+    run["breakDurationSec"] = dur
+    run["breakPausedRemainingMs"] = None
+    run["chromeVisible"] = True
+    if overflow_ms >= duration_ms:
+        # Break already elapsed — start the next exercise immediately.
+        run["breakStartedAtMs"] = None
+        run["status"] = "running"
+        run["segmentStartedAtMs"] = now - min(
+            overflow_ms - duration_ms, int(nxt["durationSec"]) * 1000 - 1
+        )
+    else:
+        run["breakStartedAtMs"] = now - max(0, overflow_ms)
+
+
+def _finish_break(run: dict[str, Any], *, now: int | None = None) -> None:
+    if now is None:
+        now = _now_ms()
+    segments: list[dict[str, Any]] = run["segments"]
+    idx = int(run.get("segmentIndex") or 0)
+    if idx < 0 or idx >= len(segments):
+        _mark_done(run, now=now)
+        return
+    run["status"] = "running"
+    run["segmentDurationSec"] = segments[idx]["durationSec"]
+    run["segmentStartedAtMs"] = now
+    run["pausedRemainingMs"] = None
+    run["breakStartedAtMs"] = None
+    run["breakPausedRemainingMs"] = None
+    run["chromeVisible"] = True
 
 
 def _advance_countdown_if_needed(run: dict[str, Any]) -> None:
@@ -279,10 +356,35 @@ def _advance_stream_ended_if_needed(run: dict[str, Any]) -> None:
         run["updatedAt"] = _now_ms()
 
 
+def _advance_break_if_needed(run: dict[str, Any]) -> None:
+    if run["status"] != "break":
+        return
+    # Held (paused) break — wait for resume.
+    if run.get("breakStartedAtMs") is None:
+        return
+    now = _now_ms()
+    duration_ms = int(run.get("breakDurationSec") or DEFAULT_BREAK_SEC) * 1000
+    end_at = int(run["breakStartedAtMs"]) + duration_ms
+    if now < end_at:
+        return
+    overflow = now - end_at
+    _finish_break(run, now=now)
+    # Carry leftover overflow into the newly started exercise.
+    if overflow > 0 and run["status"] == "running":
+        started = int(run["segmentStartedAtMs"] or now)
+        run["segmentStartedAtMs"] = started - overflow
+        # Re-enter segment advance in case the exercise also expired.
+    run["updatedAt"] = _now_ms()
+
+
 def _advance_if_needed(run: dict[str, Any]) -> None:
-    """Lazy server-side segment / countdown / stream-ended advance."""
+    """Lazy server-side segment / break / countdown / stream-ended advance."""
     _advance_countdown_if_needed(run)
     _advance_stream_ended_if_needed(run)
+    # Break may finish into running; then segment loop may continue.
+    _advance_break_if_needed(run)
+    if run["status"] == "break":
+        return
     if run["status"] != "running":
         return
     segments: list[dict[str, Any]] = run["segments"]
@@ -291,6 +393,7 @@ def _advance_if_needed(run: dict[str, Any]) -> None:
         return
 
     now = _now_ms()
+    breaks_on = bool(run.get("breaksEnabled"))
     while run["status"] == "running":
         idx = int(run["segmentIndex"])
         if idx < 0 or idx >= len(segments):
@@ -310,10 +413,17 @@ def _advance_if_needed(run: dict[str, Any]) -> None:
             run["segmentDurationSec"] = segments[idx]["durationSec"]
             _mark_done(run, now=now)
             break
-        idx += 1
-        run["segmentIndex"] = idx
-        run["segmentDurationSec"] = segments[idx]["durationSec"]
-        next_dur = int(segments[idx]["durationSec"]) * 1000
+        next_idx = idx + 1
+        if breaks_on:
+            _enter_break(run, next_idx, now=now, overflow_ms=overflow)
+            # If overflow ate the whole break and started the next exercise,
+            # keep looping when that exercise also expired.
+            if run["status"] == "running":
+                continue
+            break
+        run["segmentIndex"] = next_idx
+        run["segmentDurationSec"] = segments[next_idx]["durationSec"]
+        next_dur = int(segments[next_idx]["durationSec"]) * 1000
         run["segmentStartedAtMs"] = now - min(overflow, next_dur - 1)
         if overflow >= next_dur:
             continue
@@ -499,6 +609,11 @@ def apply_command(
                 run["chromeVisible"] = True
                 _bump(run)
                 return _public(run)
+            if status == "break":
+                # Start during a held/ticking break → begin the upcoming exercise.
+                _finish_break(run, now=now)
+                _bump(run)
+                return _public(run)
             if status == "idle":
                 # Routine-level intro: first Start runs pre-stream countdown.
                 # Read flags from catalog (not a possibly-stale in-memory run).
@@ -522,6 +637,16 @@ def apply_command(
             return _public(run)
 
         if command == "resume":
+            if status == "break" and run.get("breakStartedAtMs") is None:
+                remaining = int(
+                    run.get("breakPausedRemainingMs")
+                    or int(run.get("breakDurationSec") or DEFAULT_BREAK_SEC) * 1000
+                )
+                dur = int(run.get("breakDurationSec") or DEFAULT_BREAK_SEC) * 1000
+                run["breakStartedAtMs"] = now - (dur - remaining)
+                run["breakPausedRemainingMs"] = None
+                _bump(run)
+                return _public(run)
             if status != "paused":
                 return _public(run)
             remaining = int(run.get("pausedRemainingMs") or 0)
@@ -533,6 +658,14 @@ def apply_command(
             return _public(run)
 
         if command == "pause":
+            if status == "break" and run.get("breakStartedAtMs") is not None:
+                started = int(run["breakStartedAtMs"])
+                dur = int(run.get("breakDurationSec") or DEFAULT_BREAK_SEC) * 1000
+                remaining = max(0, dur - (now - started))
+                run["breakStartedAtMs"] = None
+                run["breakPausedRemainingMs"] = remaining
+                _bump(run)
+                return _public(run)
             if status != "running":
                 return _public(run)
             started = int(run.get("segmentStartedAtMs") or now)
@@ -547,22 +680,35 @@ def apply_command(
         if command == "skip":
             if status == "done":
                 return _public(run)
+            # Skip during break → start the upcoming exercise now.
+            if status == "break":
+                _finish_break(run, now=now)
+                _bump(run)
+                return _public(run)
             idx = int(run["segmentIndex"])
             if idx + 1 >= len(segments):
                 run["segmentIndex"] = idx
                 _mark_done(run, now=now)
                 _bump(run)
                 return _public(run)
-            idx += 1
-            run["segmentIndex"] = idx
-            run["segmentDurationSec"] = segments[idx]["durationSec"]
+            next_idx = idx + 1
+            flags = _routine_flags(routine)
+            # From a live exercise: customary break before the next one.
+            if status == "running" and flags["breaksEnabled"]:
+                _enter_break(run, next_idx, now=now, overflow_ms=0)
+                _bump(run)
+                return _public(run)
+            run["segmentIndex"] = next_idx
+            run["segmentDurationSec"] = segments[next_idx]["durationSec"]
+            run["breakStartedAtMs"] = None
+            run["breakPausedRemainingMs"] = None
             if status == "running":
                 run["segmentStartedAtMs"] = now
                 run["pausedRemainingMs"] = None
             elif status in ("idle", "paused"):
                 run["status"] = "paused" if status == "paused" else "idle"
                 run["segmentStartedAtMs"] = None
-                run["pausedRemainingMs"] = segments[idx]["durationSec"] * 1000
+                run["pausedRemainingMs"] = segments[next_idx]["durationSec"] * 1000
                 if status == "idle":
                     run["status"] = "idle"
             _bump(run)
@@ -576,9 +722,24 @@ def apply_command(
                 run["status"] = "paused"
                 run["segmentStartedAtMs"] = None
                 run["pausedRemainingMs"] = segments[idx]["durationSec"] * 1000
+                run["breakStartedAtMs"] = None
+                run["breakPausedRemainingMs"] = None
                 _bump(run)
                 return _public(run)
+            # Break sits before upcoming exercise at segmentIndex — back restarts
+            # the previous exercise (or restarts exercise 0).
             idx = int(run["segmentIndex"])
+            if status == "break":
+                prev = max(0, idx - 1)
+                run["segmentIndex"] = prev
+                run["segmentDurationSec"] = segments[prev]["durationSec"]
+                run["status"] = "running"
+                run["segmentStartedAtMs"] = now
+                run["pausedRemainingMs"] = None
+                run["breakStartedAtMs"] = None
+                run["breakPausedRemainingMs"] = None
+                _bump(run)
+                return _public(run)
             if idx <= 0:
                 run["segmentIndex"] = 0
                 run["segmentDurationSec"] = segments[0]["durationSec"]
