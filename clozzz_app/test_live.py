@@ -111,13 +111,13 @@ def main() -> None:
         assert started_after_hold["status"] == "running"
         assert started_after_hold["chromeVisible"] is True
 
-        # Stream-ended graphic after finish
+        # Stream-ended graphic after finish (indefinite / soft-cap; remote dismiss)
         live.apply_command(key, "restart")
         _set_routine_flags(
             key,
             introCountdownEnabled=False,
             streamEndedEnabled=True,
-            streamEndedSec=30,
+            streamEndedMessage="Thanks for joining",
         )
         live.apply_command(key, "start")
         run = live._RUNS[key.lower()]
@@ -129,6 +129,8 @@ def main() -> None:
         live._advance_if_needed(run)
         assert run["status"] == "stream_ended"
         assert run["chromeVisible"] is False
+        assert run["streamEndedDurationSec"] == live.STREAM_ENDED_SOFT_CAP_SEC
+        assert run["streamEndedMessage"] == "Thanks for joining"
         dismissed = live.apply_command(key, "skip_stream_ended")
         assert dismissed["status"] == "done"
         assert dismissed["chromeVisible"] is True
@@ -137,10 +139,27 @@ def main() -> None:
         sample = store.get_catalog()["routines"][0]
         normalized = store._normalize_catalog({"schemaVersion": 1, "routines": [sample]})
         r0 = normalized["routines"][0]
-        assert r0["introCountdownSec"] >= 5
-        assert r0["streamEndedSec"] >= 5
+        assert r0["introCountdownSec"] >= 60
+        assert r0["streamEndedSec"] == 3600
+        assert isinstance(r0["space"], list)
+        assert "introCountdownMessage" in r0
         assert isinstance(r0["introCountdownEnabled"], bool)
         assert isinstance(r0["streamEndedEnabled"], bool)
+
+        # Space migrate + intro message persist
+        _set_routine_flags(
+            key,
+            space=["Floor mat", "Bed"],
+            introCountdownMessage="Starting soon",
+            introCountdownEnabled=True,
+            introCountdownSec=120,
+        )
+        flagged = store.find_routine(store.get_catalog(), key)
+        assert flagged["space"] == ["Floor mat", "Bed"]
+        assert flagged["introCountdownMessage"] == "Starting soon"
+        live.apply_command(key, "restart")
+        armed_msg = live.get_or_arm(key)
+        assert armed_msg["introCountdownMessage"] == "Starting soon"
 
         # Stale in-memory flags must re-sync from the catalog on get_or_arm
         live.apply_command(key, "restart")

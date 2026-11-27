@@ -6,7 +6,9 @@
       "name": "demo-smoke",
       "title": "Demo Smoke",
       "routineId": "DEMO",
-      "space": "Anywhere",
+      "space": [
+        "Others"
+      ],
       "description": "Short segments to verify OBS Browser Source + auto-advance.",
       "segments": [
         {
@@ -33,15 +35,18 @@
       "introCountdownEnabled": true,
       "introCountdownSec": 1800,
       "streamEndedEnabled": true,
-      "streamEndedSec": 1800,
-      "streamEndedMessage": ""
+      "streamEndedSec": 3600,
+      "streamEndedMessage": "",
+      "introCountdownMessage": ""
     },
     {
       "id": "r1",
       "name": "r1-floor-unwind",
       "title": "Floor Unwind",
       "routineId": "R1",
-      "space": "Floor mat",
+      "space": [
+        "Floor mat"
+      ],
       "description": "Gentle floor mobility to downshift before sleep.",
       "segments": [
         {
@@ -88,15 +93,18 @@
       "introCountdownEnabled": true,
       "introCountdownSec": 1800,
       "streamEndedEnabled": true,
-      "streamEndedSec": 1800,
-      "streamEndedMessage": ""
+      "streamEndedSec": 3600,
+      "streamEndedMessage": "",
+      "introCountdownMessage": ""
     },
     {
       "id": "r2",
       "name": "r2-from-bed-stretch",
       "title": "From-Bed Stretch",
       "routineId": "R2",
-      "space": "Bedside",
+      "space": [
+        "Bed"
+      ],
       "description": "Low-effort stretches you can do sitting or standing by the bed.",
       "segments": [
         {
@@ -148,15 +156,18 @@
       "introCountdownEnabled": true,
       "introCountdownSec": 1800,
       "streamEndedEnabled": true,
-      "streamEndedSec": 1800,
-      "streamEndedMessage": ""
+      "streamEndedSec": 3600,
+      "streamEndedMessage": "",
+      "introCountdownMessage": ""
     },
     {
       "id": "r3",
       "name": "r3-small-space-strength",
       "title": "Small-Space Strength",
       "routineId": "R3",
-      "space": "Hotel footprint",
+      "space": [
+        "Others"
+      ],
       "description": "Quiet standing strength in a hotel-room footprint.",
       "segments": [
         {
@@ -203,15 +214,18 @@
       "introCountdownEnabled": true,
       "introCountdownSec": 1800,
       "streamEndedEnabled": true,
-      "streamEndedSec": 1800,
-      "streamEndedMessage": ""
+      "streamEndedSec": 3600,
+      "streamEndedMessage": "",
+      "introCountdownMessage": ""
     },
     {
       "id": "r4",
       "name": "r4-hip-back-release",
       "title": "Hip & Back Release",
       "routineId": "R4",
-      "space": "Floor mat",
+      "space": [
+        "Floor mat"
+      ],
       "description": "Target hips and low back after a desk day.",
       "segments": [
         {
@@ -263,15 +277,18 @@
       "introCountdownEnabled": true,
       "introCountdownSec": 1800,
       "streamEndedEnabled": true,
-      "streamEndedSec": 1800,
-      "streamEndedMessage": ""
+      "streamEndedSec": 3600,
+      "streamEndedMessage": "",
+      "introCountdownMessage": ""
     },
     {
       "id": "r5",
       "name": "r5-wind-down-circuit",
       "title": "Wind-Down Circuit",
       "routineId": "R5",
-      "space": "Open floor",
+      "space": [
+        "Others"
+      ],
       "description": "Short mixed circuit that ends in stillness.",
       "segments": [
         {
@@ -318,8 +335,9 @@
       "introCountdownEnabled": true,
       "introCountdownSec": 1800,
       "streamEndedEnabled": true,
-      "streamEndedSec": 1800,
-      "streamEndedMessage": ""
+      "streamEndedSec": 3600,
+      "streamEndedMessage": "",
+      "introCountdownMessage": ""
     }
   ]
 }

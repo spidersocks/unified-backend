@@ -16,7 +16,9 @@ _LOCK = threading.RLock()
 _RUNS: dict[str, dict[str, Any]] = {}
 
 DEFAULT_COUNTDOWN_SEC = 1800  # 30 min — matches new-routine editor defaults
-DEFAULT_STREAM_ENDED_SEC = 1800
+# Soft cap for stream-ended count-up (~1h); dismissible anytime via remote.
+STREAM_ENDED_SOFT_CAP_SEC = 3600
+DEFAULT_STREAM_ENDED_SEC = STREAM_ENDED_SOFT_CAP_SEC
 
 COMMANDS = frozenset(
     {
@@ -73,15 +75,14 @@ def _routine_flags(routine: dict[str, Any]) -> dict[str, Any]:
         intro_sec = int(routine.get("introCountdownSec") or DEFAULT_COUNTDOWN_SEC)
     except (TypeError, ValueError):
         intro_sec = DEFAULT_COUNTDOWN_SEC
-    intro_sec = max(1, min(60 * 60, intro_sec))
-    try:
-        ended_sec = int(routine.get("streamEndedSec") or DEFAULT_STREAM_ENDED_SEC)
-    except (TypeError, ValueError):
-        ended_sec = DEFAULT_STREAM_ENDED_SEC
-    ended_sec = max(1, min(60 * 60, ended_sec))
+    # Pre-stream countdown floor ≥1 minute
+    intro_sec = max(60, min(60 * 60, intro_sec))
+    # Stream ended runs indefinitely from the editor's POV; soft-cap ~1h internally.
+    ended_sec = STREAM_ENDED_SOFT_CAP_SEC
     return {
         "introCountdownEnabled": bool(routine.get("introCountdownEnabled", False)),
         "introCountdownSec": intro_sec,
+        "introCountdownMessage": str(routine.get("introCountdownMessage") or "").strip(),
         "streamEndedEnabled": bool(routine.get("streamEndedEnabled", False)),
         "streamEndedSec": ended_sec,
         "streamEndedMessage": str(routine.get("streamEndedMessage") or "").strip(),
@@ -130,6 +131,7 @@ def _sync_flags_from_routine(run: dict[str, Any], routine: dict[str, Any]) -> No
     flags = _routine_flags(routine)
     run["introCountdownEnabled"] = flags["introCountdownEnabled"]
     run["introCountdownSec"] = flags["introCountdownSec"]
+    run["introCountdownMessage"] = flags["introCountdownMessage"]
     run["streamEndedEnabled"] = flags["streamEndedEnabled"]
     run["streamEndedSec"] = flags["streamEndedSec"]
     run["streamEndedMessage"] = flags["streamEndedMessage"]
@@ -159,10 +161,11 @@ def _public(run: dict[str, Any]) -> dict[str, Any]:
     out.setdefault("countdownDurationSec", DEFAULT_COUNTDOWN_SEC)
     out.setdefault("introCountdownEnabled", False)
     out.setdefault("introCountdownSec", DEFAULT_COUNTDOWN_SEC)
+    out.setdefault("introCountdownMessage", "")
     out.setdefault("introConsumed", False)
     out.setdefault("streamEndedEnabled", False)
-    out.setdefault("streamEndedSec", DEFAULT_STREAM_ENDED_SEC)
-    out.setdefault("streamEndedDurationSec", DEFAULT_STREAM_ENDED_SEC)
+    out.setdefault("streamEndedSec", STREAM_ENDED_SOFT_CAP_SEC)
+    out.setdefault("streamEndedDurationSec", STREAM_ENDED_SOFT_CAP_SEC)
     out.setdefault("streamEndedMessage", "")
     return out
 
@@ -198,8 +201,9 @@ def _finish_countdown(run: dict[str, Any]) -> None:
 def _enter_stream_ended(run: dict[str, Any], *, now: int | None = None) -> None:
     if now is None:
         now = _now_ms()
-    dur = int(run.get("streamEndedSec") or DEFAULT_STREAM_ENDED_SEC)
+    dur = STREAM_ENDED_SOFT_CAP_SEC
     run["status"] = "stream_ended"
+    run["streamEndedSec"] = dur
     run["streamEndedDurationSec"] = dur
     run["streamEndedStartedAtMs"] = now
     run["segmentStartedAtMs"] = None
@@ -245,7 +249,9 @@ def _advance_stream_ended_if_needed(run: dict[str, Any]) -> None:
     if started is None:
         return
     now = _now_ms()
-    duration_ms = int(run.get("streamEndedDurationSec") or DEFAULT_STREAM_ENDED_SEC) * 1000
+    duration_ms = int(
+        run.get("streamEndedDurationSec") or STREAM_ENDED_SOFT_CAP_SEC
+    ) * 1000
     if now >= int(started) + duration_ms:
         _finish_stream_ended(run)
         run["updatedAt"] = _now_ms()

@@ -38,6 +38,32 @@ def _strip_cue(obj: Any) -> Any:
     return obj
 
 
+SPACE_OPTIONS = ("Floor mat", "Bed", "Others")
+
+
+def _normalize_space(raw: Any) -> list[str]:
+    """Bounded multi-select; migrate legacy free-text strings."""
+    allowed = set(SPACE_OPTIONS)
+    if isinstance(raw, list):
+        out: list[str] = []
+        for item in raw:
+            s = str(item or "").strip()
+            if s in allowed and s not in out:
+                out.append(s)
+        return out
+    text = str(raw or "").strip()
+    if not text:
+        return []
+    if text in allowed:
+        return [text]
+    lower = text.lower()
+    if "floor" in lower or "mat" in lower:
+        return ["Floor mat"]
+    if "bed" in lower:
+        return ["Bed"]
+    return ["Others"]
+
+
 def _normalize_catalog(data: dict[str, Any], *, stamp: bool = False) -> dict[str, Any]:
     cleaned = _strip_cue(data)
     routines = cleaned.get("routines")
@@ -101,25 +127,27 @@ def _normalize_catalog(data: dict[str, Any], *, stamp: bool = False) -> dict[str
             intro_sec = int(routine.get("introCountdownSec", 1800))
         except (TypeError, ValueError):
             intro_sec = 1800
-        intro_sec = max(1, min(60 * 60, intro_sec))
+        # Pre-stream countdown floor ≥1 minute
+        intro_sec = max(60, min(60 * 60, intro_sec))
+        intro_message = str(routine.get("introCountdownMessage") or "").strip()
 
         ended_enabled = bool(routine.get("streamEndedEnabled", False))
-        try:
-            ended_sec = int(routine.get("streamEndedSec", 1800))
-        except (TypeError, ValueError):
-            ended_sec = 1800
-        ended_sec = max(1, min(60 * 60, ended_sec))
+        # Duration is not required from the editor; soft-cap ~1h for live auto-finish.
+        ended_sec = 3600
         ended_message = str(routine.get("streamEndedMessage") or "").strip()
+
+        space = _normalize_space(routine.get("space"))
 
         item = {
             "id": rid,
             "name": name,
             "title": title,
             "routineId": str(routine.get("routineId") or rid).strip() or rid,
-            "space": str(routine.get("space") or "").strip(),
+            "space": space,
             "description": description,
             "introCountdownEnabled": intro_enabled,
             "introCountdownSec": intro_sec,
+            "introCountdownMessage": intro_message,
             "streamEndedEnabled": ended_enabled,
             "streamEndedSec": ended_sec,
             "streamEndedMessage": ended_message,
