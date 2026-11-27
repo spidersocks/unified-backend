@@ -76,13 +76,57 @@ def _ensure_loaded() -> None:
     _STATE["updatedAt"] = disk.get("updatedAt")
 
 
-def get_channel() -> dict[str, Any]:
+def _snapshot() -> dict[str, Any]:
+    return {
+        "activeRoutineId": _STATE.get("activeRoutineId"),
+        "updatedAt": _STATE.get("updatedAt"),
+    }
+
+
+def _clear_locked() -> dict[str, Any]:
+    """Clear active channel while holding _LOCK."""
+    _STATE["activeRoutineId"] = None
+    _STATE["updatedAt"] = _utc_now()
+    out = _snapshot()
+    _write_disk(out)
+    return dict(out)
+
+
+def prune_missing_channel() -> dict[str, Any]:
+    """
+    If the active channel points at a deleted/missing catalog routine,
+    clear it and persist. Call on every read path so ghosts cannot linger.
+    """
     with _LOCK:
         _ensure_loaded()
-        return {
-            "activeRoutineId": _STATE.get("activeRoutineId"),
-            "updatedAt": _STATE.get("updatedAt"),
-        }
+        rid = _STATE.get("activeRoutineId")
+        if not rid:
+            return _snapshot()
+        catalog = store.get_catalog()
+        if store.find_routine(catalog, rid):
+            return _snapshot()
+        print(
+            f"[CLOZZZ] Pruning studio channel — routine “{rid}” missing from catalog",
+            flush=True,
+        )
+        return _clear_locked()
+
+
+def clear_if_routine(routine_key: str) -> dict[str, Any]:
+    """Clear the channel when the given routine id/name is deleted."""
+    with _LOCK:
+        _ensure_loaded()
+        rid = _STATE.get("activeRoutineId")
+        if not rid:
+            return _snapshot()
+        key = str(routine_key).strip().lower()
+        if rid.lower() == key:
+            return _clear_locked()
+        return _snapshot()
+
+
+def get_channel() -> dict[str, Any]:
+    return prune_missing_channel()
 
 
 def set_channel(routine_key: str | None) -> dict[str, Any]:
@@ -93,14 +137,7 @@ def set_channel(routine_key: str | None) -> dict[str, Any]:
     with _LOCK:
         _ensure_loaded()
         if routine_key is None or str(routine_key).strip() == "":
-            _STATE["activeRoutineId"] = None
-            _STATE["updatedAt"] = _utc_now()
-            out = {
-                "activeRoutineId": None,
-                "updatedAt": _STATE["updatedAt"],
-            }
-            _write_disk(out)
-            return dict(out)
+            return _clear_locked()
 
         catalog = store.get_catalog()
         routine = store.find_routine(catalog, str(routine_key).strip())
@@ -109,17 +146,14 @@ def set_channel(routine_key: str | None) -> dict[str, Any]:
 
         _STATE["activeRoutineId"] = routine["id"]
         _STATE["updatedAt"] = _utc_now()
-        out = {
-            "activeRoutineId": routine["id"],
-            "updatedAt": _STATE["updatedAt"],
-        }
+        out = _snapshot()
         _write_disk(out)
         return dict(out)
 
 
 def resolve_active_routine() -> dict[str, Any] | None:
     """Catalog routine for the current channel, or None if unset/missing."""
-    channel = get_channel()
+    channel = prune_missing_channel()
     rid = channel.get("activeRoutineId")
     if not rid:
         return None

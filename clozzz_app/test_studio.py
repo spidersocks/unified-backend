@@ -34,6 +34,16 @@ def main() -> None:
     reloaded = studio.get_channel()
     assert reloaded["activeRoutineId"] == other, reloaded
 
+    # Ghost channel (deleted routine id) must prune on read
+    studio._STATE["activeRoutineId"] = "__deleted_ghost__"
+    studio._STATE["updatedAt"] = "2026-01-01T00:00:00Z"
+    pruned = studio.get_channel()
+    assert pruned["activeRoutineId"] is None, pruned
+
+    studio.set_channel(key)
+    cleared = studio.clear_if_routine(key)
+    assert cleared["activeRoutineId"] is None, cleared
+
     studio.set_channel(None)
     print("ok: studio channel")
 

@@ -62,9 +62,11 @@ def get_routine(key: str) -> dict[str, Any]:
 @router.put("/routines")
 def put_catalog(body: dict[str, Any]) -> dict[str, Any]:
     try:
-        return store.save_catalog(body)
+        catalog = store.save_catalog(body)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    studio.prune_missing_channel()
+    return catalog
 
 
 @router.put("/routines/order")
@@ -92,9 +94,15 @@ def put_routine(key: str, body: dict[str, Any]) -> dict[str, Any]:
 @router.delete("/routines/{key}")
 def remove_routine(key: str) -> dict[str, Any]:
     try:
-        return store.delete_routine(key)
+        catalog = store.delete_routine(key)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=f"Unknown routine “{key}”") from e
+    # Drop studio channel if it pointed at the deleted routine.
+    try:
+        studio.clear_if_routine(key)
+    except Exception:
+        studio.prune_missing_channel()
+    return catalog
 
 
 @router.post("/routines/seed")
@@ -129,8 +137,9 @@ def get_studio_display() -> dict[str, Any]:
     """
     One-poll payload for the open OBS display:
     active channel + live-run snapshot (armed idle when a channel is set).
+    Never returns a deleted/missing routine id — prunes studio instead.
     """
-    channel = studio.get_channel()
+    channel = studio.prune_missing_channel()
     rid = channel.get("activeRoutineId")
     if not rid:
         return {
@@ -142,8 +151,9 @@ def get_studio_display() -> dict[str, Any]:
     catalog = store.get_catalog()
     routine = store.find_routine(catalog, rid)
     if not routine:
+        channel = studio.prune_missing_channel()
         return {
-            "activeRoutineId": rid,
+            "activeRoutineId": None,
             "updatedAt": channel.get("updatedAt"),
             "live": None,
             "routine": None,
